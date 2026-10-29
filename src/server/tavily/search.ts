@@ -1,13 +1,11 @@
 import type { Evidence, Store } from "@/contract";
-import { serverEnv } from "@/lib/env";
 import { newId } from "@/lib/ids";
-import { fetchJson } from "../http/fetch-json";
 import { tavilyFixture } from "./fixtures";
 import { buildTavilyBody, TAVILY_SEARCH_URL, tavilyParams, type TavilyRequest } from "./request";
-import { tavilyModeFor } from "./mode";
 import { callTavily } from "./call";
 import { cacheKey, softGet, softPut } from "./cache";
-import type { TavilyOptions, TavilyRuntime } from "./runtime";
+import { resolveRuntime, type TavilyOptions, type TavilyRuntime } from "./runtime";
+import { isSampleSearch } from "./scope";
 import { SEARCH_CREDITS } from "./budget";
 import { TavilyResponse, type TavilyResult } from "./schema";
 
@@ -84,38 +82,23 @@ export function evidenceFor(
 }
 
 /**
- * Event listings this week near a store's corner. Goes through fetchJson (retry, timeout, record
- * and replay, fixture fallback). The Bearer key only leaves the server on a live call and never
- * enters the body, the recording key, the evidence or an error message.
+ * Event listings this week near a store's corner, from one search. It goes through `searchStore`, so a live run is
+ * cached, in scope (the demo workspace's sample stores) and reserved against the global credit ledger; a run outside
+ * that scope throws TavilyBudgetError (`tavily_budget`) and the caller uses this week's saved events. The Bearer key
+ * only leaves the server on a live call and never enters the body, the recording key, the evidence or an error message.
+ * The edition build uses `eventChain` (search, page read and triage); this is the plain search.
  */
 export async function eventsThisWeek(store: Store, opts: TavilyOptions = {}): Promise<EventsThisWeek> {
-  const env = opts.env ?? serverEnv();
-  const { run } = tavilyModeFor(env);
-  const clock = opts.clock ?? (() => new Date());
-  const body = buildTavilyBody(store, opts.city, clock());
-  const headers = run === "live" && env.TAVILY_API_KEY ? { authorization: `Bearer ${env.TAVILY_API_KEY}` } : undefined;
-
-  const { data, mode } = await fetchJson<TavilyResponse>({
-    provider: "tavily",
-    method: "POST",
-    url: TAVILY_SEARCH_URL,
-    headers,
-    body,
-    mode: run,
-    schema: TavilyResponse,
-    fixture: () => tavilyFixture(store.id, body.query),
-    timeoutMs: 15_000,
-    recorder: opts.recorder,
-    fetchImpl: opts.fetchImpl,
-    sleep: opts.sleep,
-    random: opts.random,
-  });
-
-  const events = toEvents(data.results);
-  const evidence = evidenceFor(store, body, data.results, events, mode, clock());
-  return { events, evidence };
+  const rt = await resolveRuntime(opts);
+  const search = await searchStore(store, rt, opts.city);
+  if (!search) {
+    // Read-only run and nothing saved: an honest empty result, never a spend.
+    const body = buildTavilyBody(store, opts.city, rt.clock());
+    return { events: [], evidence: evidenceFor(store, body, [], [], "cache", rt.clock()) };
+  }
+  const events = toEvents(search.data.results);
+  return { events, evidence: evidenceFor(store, search.body, search.data.results, events, search.mode, rt.clock()) };
 }
-
 
 export interface StoreSearch {
   data: TavilyResponse;
@@ -127,7 +110,8 @@ export interface StoreSearch {
 /**
  * The chain's search step: one basic search per store, saved for 7 days under a hash of the normalised
  * query and time range. Returns null on a miss when the runtime is read-only (`cacheOnly`: regenerate,
- * page loads). May throw TavilyBudgetError (live, workspace's day spent).
+ * page loads). May throw TavilyBudgetError: out of scope (not the demo workspace's sample store), or the global
+ * total or today's slice is spent.
  */
 export async function searchStore(store: Store, rt: TavilyRuntime, city?: string): Promise<StoreSearch | null> {
   const body = buildTavilyBody(store, city, rt.clock());
@@ -145,6 +129,7 @@ export async function searchStore(store: Store, rt: TavilyRuntime, city?: string
     schema: TavilyResponse,
     fixture: () => tavilyFixture(store.id, body.query),
     credits: SEARCH_CREDITS,
+    liveOk: rt.liveAllowed && isSampleSearch(store, city, rt.clock()),
     timeoutMs: 15_000,
   });
   if (mode === "live") await softPut(rt.cache, key, data);

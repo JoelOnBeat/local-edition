@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { importStoresRoute } from "@/server/handlers/job-batch";
 import { readJobRuns } from "@/server/handlers/proof-ledger";
-import { signBody as hmacHex } from "@/server/jobs/hmac";
+import { signRequest } from "@/server/jobs/hmac";
 import { ensureDemoWorkspace } from "@/server/session";
 import type { Repo } from "@/server/store";
 import { fakePorts, freshApp, req } from "../e/helpers";
@@ -22,7 +22,7 @@ describe("POST /api/stores/import (signed job path)", () => {
   const csv = "name,address,lat,lon\nSunset Park,5th Ave & 44th St,40.6456,-74.0107\nRed Hook,Van Brunt St & Visitation Pl,40.6773,-74.0107\n";
   async function importCsv(body: string, o: { ts?: number; secret?: string; headers?: Record<string, string> } = {}) {
     const ts = String(o.ts ?? nextTs());
-    const signature = await hmacHex(o.secret ?? SECRET, `${ts}.${body}`);
+    const signature = await signRequest(o.secret ?? SECRET, { method: "POST", path: "/api/stores/import", ts, jobId: "job-import-1" }, body);
     return importStoresRoute(req("/api/stores/import", { method: "POST", headers: { "content-type": "text/csv", "x-le-timestamp": ts, "x-le-signature": signature, "x-le-job-id": "job-import-1", ...o.headers }, body }));
   }
 
@@ -41,7 +41,7 @@ describe("POST /api/stores/import (signed job path)", () => {
   it("wrong secret 401; a body changed after signing 401; bad csv 400", async () => {
     expect((await importCsv(csv, { secret: "wrong-secret-wrong-secret-wrong-secret-1234" })).status).toBe(401);
     const ts = String(nowSec());
-    const signature = await hmacHex(SECRET, `${ts}.${csv}`);
+    const signature = await signRequest(SECRET, { method: "POST", path: "/api/stores/import", ts }, csv);
     const tampered = await importStoresRoute(req("/api/stores/import", { method: "POST", headers: { "x-le-timestamp": ts, "x-le-signature": signature }, body: csv.replace("Sunset Park", "Elsewhere") }));
     expect(tampered.status).toBe(401);
     expect((await importCsv("name,address,lat,lon\nX,Y,999,0\n")).status).toBe(400);

@@ -28,8 +28,16 @@ tokens/min, shared. Tavily: ONE free key, 1,000 credits/month, shared for develo
 normalised query + time_range; 7-day TTL); Tavily is called only by a build (the Monday job, a
 head-office "build", or setup), never on page load and never by regenerate (it reuses the week's
 cached events); one search per store per week plus one batched extract of at most 1 URL per store;
-brand-voice crawl at most once per chain; a per-workspace cap of 10 Tavily credits per day with a
-clear "using this week's saved events" fallback; tests use recordings only.
+brand-voice crawl at most once per chain and address (a failed crawl is remembered for 24 hours); ONE global ledger
+(TavilyBudgetDO; the repo cache with a best-effort lock where it is not bound): a hard total of 80 credits through 15 Dec and a daily slice of
+6, reserved before every live call and read by `/api/limits`; live search only for the demo workspace's unmodified sample stores and chain setup, everything
+else cache-only with code `tavily_budget` and the clear "using this week's saved events" fallback; tests use recordings only.
+
+Per-visitor limits (Fix-A, 29 Oct): Token Factory spend is admitted per request against a $0.40 workspace sub-budget, a $0.80 per-network daily cap and a
+$1.50 floor of the $5 cap that visitors cannot use (`src/server/spend-budget.ts`); IPv6 clients are limited by their /64; the app creates at most 60 new
+workspaces an hour. All of these read the client address from `cf-connecting-ip`, so that header MUST survive the Pages-to-Worker service-binding hop:
+`edge/pages/public/_worker.js` sets it again on the forwarded request (pinned by `tests/fix-a/pages-worker.test.ts`). Verify it once against the deployed
+hop before judging: if it is lost, every visitor shares the "unknown" bucket and onboarding answers 429 to everyone after ten workspaces.
 
 Spend: one 8-store run is about $0.09 on Token Factory (pessimistic $0.20). The $1 first-sign-up
 trial covers development; the two $25 promo credits may take days to arrive. Serve judges

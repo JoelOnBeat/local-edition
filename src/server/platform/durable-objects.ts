@@ -2,11 +2,12 @@ import { DurableObject } from "cloudflare:workers";
 import type { SpendTicket } from "../http/spend";
 import { BuildLockCore } from "./lock-core";
 import { SpendLedgerCore } from "./spend-core";
-import type { BuildLockStub, SpendMeterStub } from "./stubs";
+import { TavilyBudgetCore } from "./tavily-budget-core";
+import type { BuildLockStub, SpendMeterStub, TavilyBudgetStub, TavilyReserveResult, TavilyUsage } from "./stubs";
 
 /**
- * The Durable Object classes bound in wrangler.jsonc (SpendMeterDO as SPEND_METER, one global instance;
- * BuildLockDO as BUILD_LOCK, one instance per workspace). Only worker/index.ts imports this file, because
+ * The Durable Object classes bound in wrangler.jsonc (SpendMeterDO as SPEND_METER and TavilyBudgetDO as
+ * TAVILY_BUDGET, one global instance each; BuildLockDO as BUILD_LOCK, one instance per workspace). Only worker/index.ts imports this file, because
  * `cloudflare:workers` exists nowhere else; the logic lives in the cores so tests run it without workerd.
  */
 export class SpendMeterDO extends DurableObject implements SpendMeterStub {
@@ -19,6 +20,13 @@ export class SpendMeterDO extends DurableObject implements SpendMeterStub {
 
 export class BuildLockDO extends DurableObject implements BuildLockStub {
   private readonly core = new BuildLockCore(this.ctx.storage);
-  acquire(ttlSeconds: number): Promise<string | null> { return this.core.acquire(ttlSeconds); }
+  acquire(ttlSeconds: number, token?: string): Promise<string | null> { return this.core.acquire(ttlSeconds, token); }
   release(token: string): Promise<void> { return this.core.release(token); }
+}
+
+export class TavilyBudgetDO extends DurableObject implements TavilyBudgetStub {
+  private readonly core = new TavilyBudgetCore(this.ctx.storage);
+  reserve(credits: number, totalCap: number, dailyCap: number): Promise<TavilyReserveResult> { return this.core.reserve(credits, totalCap, dailyCap); }
+  refund(credits: number, day: string): Promise<void> { return this.core.refund(credits, day); }
+  usage(): Promise<TavilyUsage> { return this.core.usage(); }
 }

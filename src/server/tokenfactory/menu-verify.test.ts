@@ -177,7 +177,7 @@ describe("T4 POST /api/menu/read verify header and photo storage", () => {
     expect(res.headers.get("x-le-verify")).toBe("skipped"); // fixture board: no verify call offline
   });
 
-  it("stores through the real blob module by default (a Map under test), keyed ws/<id>/<uuid>.jpg", async () => {
+  it("stores through the real blob module by default (a Map under test), keyed ws/<id>/menu-photo.jpg", async () => {
     const store = new MemoryBlobStore();
     setBlobStore(store);
     try {
@@ -185,7 +185,7 @@ describe("T4 POST /api/menu/read verify header and photo storage", () => {
       expect(res.status).toBe(200);
       const keys = [...store.objects.keys()];
       expect(keys).toHaveLength(1);
-      expect(keys[0]).toMatch(/^ws\/[^/]+\/[0-9a-f-]{36}\.jpg$/);
+      expect(keys[0]).toMatch(/^ws\/[^/]+\/menu-photo\.jpg$/);
     } finally {
       setBlobStore(undefined);
     }

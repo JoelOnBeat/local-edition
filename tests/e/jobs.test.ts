@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentEvent, JobRun } from "@/contract";
 import { SIGNATURE_MAX_AGE_SECONDS, getLatestJob, getStatus, runMondayJob } from "@/server/handlers/jobs";
-import { signBody, verifySignature } from "@/server/jobs/hmac";
+import { signBody, signRequest, verifySignature } from "@/server/jobs/hmac";
 import { STALE_RUN_MS, executeJob, mondayOf, startMondayJob } from "@/server/jobs/monday";
 import type { BuildEditions } from "@/server/jobs/ports";
 import { getJobPorts as getPorts } from "@/server/jobs/wiring-agent";
@@ -12,6 +12,7 @@ import type { Repo } from "@/server/store";
 import { fakePorts, freshApp, req } from "./helpers";
 
 const SECRET = "test-secret-not-real-0001-0123456789abcdef";
+const sign = (secret: string, raw: string) => signRequest(secret, { method: "POST", path: "/api/jobs/monday" }, raw);
 let repo: Repo;
 const bg: Promise<unknown>[] = [];
 const drain = () => Promise.all(bg.splice(0));
@@ -39,7 +40,7 @@ let tsOffset = 0;
 async function post(body: unknown, opts: { secret?: string; signature?: string; raw?: string } = {}) {
   const withTs = body && typeof body === "object" && !("ts" in body) ? { ...body, ts: Math.floor(Date.now() / 1000) - tsOffset++ } : body;
   const raw = opts.raw ?? JSON.stringify(withTs);
-  const signature = opts.signature ?? (await signBody(opts.secret ?? SECRET, raw));
+  const signature = opts.signature ?? (await sign(opts.secret ?? SECRET, raw));
   return runMondayJob(req("/api/jobs/monday", { method: "POST", headers: { "content-type": "application/json", "x-le-signature": signature }, body: raw }));
 }
 
@@ -71,7 +72,7 @@ describe("T2 POST /api/jobs/monday", () => {
     const forged = await post({}, { secret: "wrong-secret" });
     expect(forged.status).toBe(401);
     expect(await forged.json()).toEqual({ error: "The request signature is not valid.", code: "bad_signature" });
-    const tampered = await post({}, { signature: await signBody(SECRET, '{"storeIds":["store_harlem"]}'), raw: "{}" });
+    const tampered = await post({}, { signature: await sign(SECRET, '{"storeIds":["store_harlem"]}'), raw: "{}" });
     expect(tampered.status).toBe(401);
     const missing = await runMondayJob(req("/api/jobs/monday", { method: "POST", body: "{}" }));
     expect(missing.status).toBe(400);

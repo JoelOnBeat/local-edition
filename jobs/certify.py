@@ -14,8 +14,9 @@ catalogue (run by NeMo as a custom action) and the injection stripper (run befor
 written into every verdict's reasons.
 
 Environment
-  APP_URL         required  base URL of the deployed app
-  LE_JOB_SECRET   required  shared HMAC secret (never printed)
+  APP_URL         required  base URL of the deployed app (not with EVAL_PRINT=1)
+  LE_JOB_SECRET   required  the per-job secret, HMAC(shared secret, job name) (never printed; not with EVAL_PRINT=1)
+  EVAL_PRINT      optional  1: eval mode only, never calls the app; prints the eval table to stdout instead of posting it
   NEBIUS_API_KEY  certify and eval: Token Factory key for Lightning (never printed)
   JOB_NAME        optional  recorded as the job id (the Nebius job name; the platform sets no id variable)
   TRIGGER         optional  cron or manual (default manual)
@@ -89,7 +90,7 @@ def describe(usage, started):
 def run_certify(api, job_id, trigger):
     started, started_iso = time.time(), now_iso()
     sha = script_sha()
-    pending = api.get_signed("/api/jobs/pending", {"x-le-job-id": job_id, "x-le-script-sha": sha})
+    pending = api.get_signed("/api/jobs/pending", {"x-le-script-sha": sha})
     items = (pending or {}).get("items", [])
     log("Pending items: %d" % len(items))
     batch, certifier = make_certifier()
@@ -143,6 +144,13 @@ def eval_cases():
     return [(t, "block") for t in red] + [(t, "pass") for t in benign]
 
 
+def print_table(rows):
+    """The eval rows as a plain table: expected, got, verdict, phrase (cut to 70 characters)."""
+    log("%-3s %-8s %-6s %-5s %s" % ("#", "expected", "got", "ok", "phrase"))
+    for n, r in enumerate(rows, 1):
+        log("%-3d %-8s %-6s %-5s %s" % (n, r["expected"], r["got"], "yes" if r["expected"] == r["got"] else "MISS", r["phrase"].replace("\n", " ")[:70]))
+
+
 def run_eval(api, job_id, trigger):
     started, started_iso = time.time(), now_iso()
     sha = script_sha()
@@ -171,6 +179,12 @@ def run_eval(api, job_id, trigger):
         "at": now_iso(), "cases": len(red), "caught": caught, "falsePositives": fps, "benign": len(ben),
         "catchRate": caught / len(red), "falsePositiveRate": fps / len(ben), "model": certifier.model, "jobId": job_id, "rows": rows,
     }
+    if api is None:
+        print_table(rows)
+        log("Eval (printed, not posted): caught %d of %d red-team phrases (%.0f%%), %d of %d benign wrongly blocked (%.0f%%)" % (
+            caught, len(red), 100 * payload["catchRate"], fps, len(ben), 100 * payload["falsePositiveRate"]))
+        log(describe(certifier.usage, started))
+        return 0
     api.post_json("/api/jobs/eval", {**payload, "scriptSha": sha, "startedAt": started_iso, "trigger": trigger})
     log("Eval: caught %d of %d red-team phrases (%.0f%%), %d of %d benign wrongly blocked (%.0f%%)" % (
         caught, len(red), 100 * payload["catchRate"], fps, len(ben), 100 * payload["falsePositiveRate"]))
@@ -190,7 +204,7 @@ def run_import(api, job_id, trigger):
     if len(raw) > MAX_CSV_BYTES:
         log("The CSV is larger than %d KB." % (MAX_CSV_BYTES // 1024))
         return 2
-    stores = api.post_csv("/api/stores/import", raw.decode("utf-8"), {"x-le-job-id": job_id, "x-le-script-sha": script_sha()})
+    stores = api.post_csv("/api/stores/import", raw.decode("utf-8"), {"x-le-script-sha": script_sha()})
     log("Imported %d store(s) into the demo workspace (job %s, trigger %s)." % (len(stores or []), job_id, trigger))
     return 0
 
@@ -200,7 +214,11 @@ def main():
     parser.add_argument("--mode", choices=["certify", "eval", "import"], default=os.environ.get("MODE", "certify"))
     args = parser.parse_args()
     app, secret = os.environ.get("APP_URL", "").rstrip("/"), os.environ.get("LE_JOB_SECRET", "")
-    if not app.startswith(("http://", "https://")) or not secret:
+    print_only = os.environ.get("EVAL_PRINT") == "1"
+    if print_only and args.mode != "eval":
+        log("EVAL_PRINT=1 works with --mode eval only.")
+        return 2
+    if not print_only and (not app.startswith(("http://", "https://")) or not secret):
         log("APP_URL (an http(s) URL) and LE_JOB_SECRET are required.")
         return 2
     trigger = os.environ.get("TRIGGER", "manual")
@@ -208,8 +226,8 @@ def main():
         log("TRIGGER must be cron or manual.")
         return 2
     job_id = (os.environ.get("JOB_NAME") or "local-%d" % int(time.time()))[:120]
-    log("Local Edition %s job %s against %s" % (args.mode, job_id, app))
-    api = Api(app, secret)
+    log("Local Edition %s job %s against %s" % (args.mode, job_id, "nothing (EVAL_PRINT)" if print_only else app))
+    api = None if print_only else Api(app, secret, job_id)
     return {"certify": run_certify, "eval": run_eval, "import": run_import}[args.mode](api, job_id, trigger)
 
 

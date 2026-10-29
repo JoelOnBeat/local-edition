@@ -1,3 +1,4 @@
+import { UpstreamError } from "../http/errors";
 import { MODELS, type TokenFactory } from "../tokenfactory";
 
 /**
@@ -57,9 +58,9 @@ export function parseSelfCheckAnswer(answer: string | null | undefined): "block"
 
 export type SelfCheck =
   | { outcome: "block" | "allow" }
-  | { outcome: "skipped"; why: string };
+  | { outcome: "skipped"; why: string; capped?: boolean };
 
-/** One Lightning call. Failures and answers that are not yes/no are `skipped`, never a block and never a pass of the model's own. */
+/** One Lightning call. Failures and answers that are not yes/no are `skipped`: never a block, and never a pass either (see `checkCopyDetailed`). */
 export async function selfCheckOutput(tf: TokenFactory, text: string, kind: string, brandVoice: readonly string[]): Promise<SelfCheck> {
   let res;
   try {
@@ -69,7 +70,9 @@ export async function selfCheckOutput(tf: TokenFactory, text: string, kind: stri
       temperature: 0,
       reasoning: "off",
     });
-  } catch {
+  } catch (e) {
+    // The shared spend cap (or a sub-budget) refusing the call is not a model outage: it must not trip the outage breaker.
+    if (e instanceof UpstreamError && e.code === "spend_cap") return { outcome: "skipped", why: "the model spend cap is reached", capped: true };
     return { outcome: "skipped", why: "the model call failed" };
   }
   if (res.mode === "fixture") return { outcome: "skipped", why: "the model is not live in this mode" };

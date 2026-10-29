@@ -8,7 +8,7 @@ export class MemoryBlobStore implements BlobStore {
     const o = this.objects.get(key);
     return o ? { bytes: o.bytes.slice(), contentType: o.contentType } : null;
   }
-  async delete(key: string) { this.objects.delete(key); }
+  async delete(key: string | string[]) { for (const k of [key].flat()) this.objects.delete(k); }
 }
 
 /** Cloudflare R2 (binding `LE_BLOB`). */
@@ -22,7 +22,7 @@ export class R2BlobStore implements BlobStore {
     if (!o) return null;
     return { bytes: new Uint8Array(await o.arrayBuffer()), contentType: o.httpMetadata?.contentType ?? "application/octet-stream" };
   }
-  async delete(key: string) { await this.bucket.delete(key); }
+  async delete(key: string | string[]) { await this.bucket.delete(key); }
 }
 
 const EXT_TYPES: Record<string, string> = { jpg: "image/jpeg", png: "image/png", webp: "image/webp" };
@@ -56,8 +56,8 @@ export class FsBlobStore implements BlobStore {
       throw e;
     }
   }
-  async delete(key: string) {
+  async delete(key: string | string[]) {
     const fs = await import("node:fs/promises");
-    await fs.rm((await this.path(key)).full, { force: true });
+    for (const k of [key].flat()) await fs.rm((await this.path(k)).full, { force: true });
   }
 }

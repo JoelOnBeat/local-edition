@@ -1,6 +1,6 @@
 import type { KvNamespaceLike } from "../store/kv";
 import type { D1Like, DurableObjectNamespaceLike, R2BucketLike, WorkflowBindingLike } from "./types";
-import type { BuildLockStub, SpendMeterStub } from "./stubs";
+import type { BuildLockStub, SpendMeterStub, TavilyBudgetStub } from "./stubs";
 import type { BuildWorkflowInput } from "../workflows/types";
 
 /** Everything the Worker is bound to (see wrangler.jsonc). Every binding is optional: local dev has none. */
@@ -10,6 +10,7 @@ export interface PlatformEnv {
   LE_BLOB?: R2BucketLike;
   SPEND_METER?: DurableObjectNamespaceLike<SpendMeterStub>;
   BUILD_LOCK?: DurableObjectNamespaceLike<BuildLockStub>;
+  TAVILY_BUDGET?: DurableObjectNamespaceLike<TavilyBudgetStub>;
   EDITION_BUILD?: WorkflowBindingLike<BuildWorkflowInput>;
   WEEKLY_REBUILD?: WorkflowBindingLike<BuildWorkflowInput>;
   /** Service-account JSON (`wrangler secret put NEBIUS_SA_CREDENTIALS`); absent means the weekly Nebius job is not started. */

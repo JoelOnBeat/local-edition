@@ -14,9 +14,10 @@ export { resolveRuntime } from "./runtime";
 export { extractPages, TAVILY_EXTRACT_URL } from "./extract";
 export { crawlSite, TAVILY_CRAWL_URL } from "./crawl";
 export {
-  CRAWL_CREDITS, DAILY_CREDIT_CAP, SEARCH_CREDITS, TavilyBudgetError, createLedger, extractCredits, tavilyCreditsUsed,
+  CRAWL_CREDITS, DAILY_CREDIT_CAP, DAILY_CREDIT_SLICE, SEARCH_CREDITS, TOTAL_CREDIT_CAP, TavilyBudgetError, createLedger, extractCredits, tavilyCreditsUsed,
 } from "./budget";
-export type { CreditLedger } from "./budget";
+export type { BudgetReason, CreditLedger, CreditTicket, CreditUsage } from "./budget";
+export { isDemoWorkspace, isSampleQuery, workspaceOfChain } from "./scope";
 export { TAVILY_CACHE_TTL_SECONDS, cacheKey, memoryCache, normaliseQuery, repoCache } from "./cache";
 export type { TavilyCache } from "./cache";
 export { BrandVoiceBody, generateBrandVoice } from "./brand-voice";

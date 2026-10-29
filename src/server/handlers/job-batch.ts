@@ -40,7 +40,7 @@ function extrasOf(rawBody: string | null): z.infer<typeof Extras> {
 export const getPendingJobs = withRoute(routes.getPendingJobs, async (_input, { request }) => {
   const repo = await getRepo();
   await authenticateTimestamped(request, new Uint8Array(0), repo);
-  const items = await listPending(repo);
+  const items = await listPending(repo, undefined, request.headers.get("x-le-job-id")?.trim().slice(0, 120) || null);
   log.info("pending read", { items: items.length, job: request.headers.get("x-le-job-id") ?? undefined });
   return { items };
 });

@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { JOB_BUNDLE } from "./job-bundle.generated";
+import { gunzipSync } from "node:zlib";
+import { buildLocalEditionJob, MAX_INJECTED_TOTAL_BYTES } from "../nebius/job-spec";
+import { JOB_BUNDLE, JOB_PACK_B64 } from "./job-bundle.generated";
 
 const root = resolve(__dirname, "../../..");
 
@@ -23,5 +25,15 @@ describe("the Nebius job bundle", () => {
 
   it("carries no secret-looking values", () => {
     for (const text of Object.values(JOB_BUNDLE)) expect(text).not.toMatch(/(?:sk|tf|nvapi|tvly)-[A-Za-z0-9]{16,}/);
+  });
+
+  it("ships as one gzipped pack that unpacks to exactly the bundle, and the real request fits Nebius's 64 KiB total", () => {
+    const unpacked = JSON.parse(gunzipSync(Buffer.from(JOB_PACK_B64, "base64")).toString("utf8")) as Record<string, string>;
+    expect(unpacked).toEqual(JOB_BUNDLE);
+    const { request } = buildLocalEditionJob({
+      modes: ["certify", "eval"], appUrl: "https://localedition.pages.dev", jobSecret: "j".repeat(64), bundle: JOB_BUNDLE, pack: JOB_PACK_B64, secrets: { NEBIUS_API_KEY: "k".repeat(64) },
+    });
+    const total = (request.spec.injectedFiles ?? []).reduce((n, f) => n + f.content.length + f.containerPath.length, 0);
+    expect(total).toBeLessThan(MAX_INJECTED_TOTAL_BYTES - 10_000); // room to grow
   });
 });

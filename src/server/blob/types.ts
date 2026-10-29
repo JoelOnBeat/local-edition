@@ -9,7 +9,8 @@ export interface BlobObject {
 export interface BlobStore {
   put(key: string, bytes: Uint8Array, contentType: string): Promise<void>;
   get(key: string): Promise<BlobObject | null>;
-  delete(key: string): Promise<void>;
+  /** One key or many; missing keys are not an error. */
+  delete(key: string | string[]): Promise<void>;
 }
 
 export const PHOTO_TYPES = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" } as const;
@@ -18,5 +19,7 @@ export type PhotoType = keyof typeof PHOTO_TYPES;
 /** Same ceiling as the menu-read route (MENU_IMAGE_MAX_BYTES, 5 MB). */
 export const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 
-/** `ws/<workspaceId>/<uuid>.<ext>`: the only key shape any store accepts, so a key can never escape its folder. */
-export const PhotoKey = z.string().regex(/^ws\/[A-Za-z0-9_~-]{1,64}\/[A-Za-z0-9-]{8,64}\.(jpg|png|webp)$/);
+/** `ws/<workspaceId>/menu-photo.<ext>`: the only key shape any store accepts, so a key can never escape its folder. */
+export const PhotoKey = z.string().regex(/^ws\/[A-Za-z0-9_~-]{1,64}\/menu-photo\.(jpg|png|webp)$/);
+/** The one name a workspace's board photo is stored under; a new upload overwrites it. */
+export const PHOTO_NAME = "menu-photo";

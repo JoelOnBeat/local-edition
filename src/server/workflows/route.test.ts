@@ -157,3 +157,50 @@ describe("EditionBuild over the real per-store build", () => {
     expect(await h.repo.acquireLock(`build:${h.workspaceId}`, 5)).toBeTruthy();
   });
 });
+
+describe("L3: stream slots and the reattach rate limit", () => {
+  const quiet = async (rl: RunLog, p: BuildWorkflowInput) => {
+    await rl.append(p.runId, p.workspaceId, { type: "run_started", runId: p.runId, storeIds: ["s"] });
+  };
+
+  it("lets a workspace hold two reattached streams and refuses a third with 429 too_many_streams, then frees a slot when one closes", async () => {
+    const { created, runLog } = await platform(quiet);
+    const abort = new AbortController();
+    const first = await post({}, { "cf-connecting-ip": "10.8.8.8" }, abort.signal);
+    const cookie = cookieOf(first);
+    abort.abort();
+    await first.body?.cancel();
+    const aborts = [new AbortController(), new AbortController(), new AbortController()];
+    const open = (i: number) => post({}, { cookie, "last-event-id": "0", "cf-connecting-ip": "10.8.8.8" }, aborts[i].signal);
+    const a = await open(0);
+    const b = await open(1);
+    expect([a.status, b.status]).toEqual([200, 200]);
+    const c = await open(2);
+    expect(c.status).toBe(429);
+    expect(await c.json()).toMatchObject({ code: "too_many_streams" });
+    expect(created).toHaveLength(1);
+    // one of the two leaves: its slot is free again
+    aborts[0].abort();
+    await a.body?.cancel();
+    expect((await open(2)).status).toBe(200);
+    const runId = created[0].runId;
+    await runLog.finish(runId, "done");
+    aborts.forEach((x) => x.abort());
+  });
+
+  it("rate limits the Last-Event-ID reattach like a build: a burst of 4, then 429 rate_limited", async () => {
+    const { runLog, created } = await platform(quiet);
+    const first = await post({}, { "cf-connecting-ip": "10.7.7.7" });
+    const cookie = cookieOf(first);
+    await first.body?.cancel();
+    await runLog.finish(created[0].runId, "done");
+    const statuses: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      const res = await post({}, { cookie, "last-event-id": "0", "cf-connecting-ip": "10.7.7.7" });
+      statuses.push(res.status);
+      await res.body?.cancel();
+    }
+    expect(statuses.slice(0, 4)).toEqual([200, 200, 200, 200]);
+    expect(statuses.slice(4)).toEqual([429, 429]);
+  });
+});

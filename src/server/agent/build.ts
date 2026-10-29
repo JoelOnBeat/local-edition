@@ -51,7 +51,8 @@ export async function* buildEditions(params: BuildParams, deps: AgentDeps): Asyn
   try {
     yield* runBuild(params, withMetrics(deps));
   } finally {
-    await releaseBuildLock(repo, lock);
+    // A lock lent by an EditionBuild Workflow belongs to the Workflow, which holds it across every store.
+    if (!lock.borrowed) await releaseBuildLock(repo, lock);
   }
 }
 

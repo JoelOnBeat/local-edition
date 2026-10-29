@@ -48,7 +48,7 @@ function crawlFixture(url: string): CrawlResponse {
   };
 }
 
-/** One basic crawl, 10 pages at most. Costs 3 credits live; throws TavilyBudgetError when the day is spent. */
+/** One basic crawl, 10 pages at most. Costs 3 credits live; throws TavilyBudgetError out of scope or when the total or today's slice is spent. */
 export async function crawlSite(url: string, rt: TavilyRuntime): Promise<CrawlOutcome> {
   const body = CrawlRequest.parse({ url, limit: CRAWL_PAGE_LIMIT, max_depth: 1, extract_depth: "basic", format: "text" });
   const { data, mode } = await callTavily<CrawlResponse>(rt, {
@@ -57,6 +57,8 @@ export async function crawlSite(url: string, rt: TavilyRuntime): Promise<CrawlOu
     schema: CrawlResponse,
     fixture: () => crawlFixture(url),
     credits: CRAWL_CREDITS,
+    // Chain setup: the demo workspace's own crawl only. A visitor's chain reads a saved voice or gets the saved-events fallback.
+    liveOk: rt.liveAllowed,
     timeoutMs: 60_000,
   });
   const pages = data.results

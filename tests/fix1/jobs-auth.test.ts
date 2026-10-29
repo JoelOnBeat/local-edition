@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { JOB_BODY_MAX_BYTES, SIGNATURE_MAX_AGE_SECONDS, runMondayJob } from "@/server/handlers/jobs";
-import { signBody, signatureDigest, verifySignature } from "@/server/jobs/hmac";
+import { signBody, signRequest, signatureDigest, verifySignature } from "@/server/jobs/hmac";
 import type { BuildEditions } from "@/server/jobs/ports";
 import { fakePorts, freshApp, req } from "../e/helpers";
 
@@ -10,6 +10,7 @@ const done: BuildEditions = async function* ({ stores, runId }) {
   yield { type: "run_done", runId, editionIds: [] };
 };
 const nowSec = () => Math.floor(Date.now() / 1000);
+const sign = (secret: string, raw: string | Uint8Array) => signRequest(secret, { method: "POST", path: "/api/jobs/monday" }, raw);
 
 beforeEach(() => {
   freshApp({ LE_JOB_SECRET: SECRET }, fakePorts({ buildEditions: done, background: () => undefined }));
@@ -17,7 +18,7 @@ beforeEach(() => {
 
 async function post(body: unknown, opts: { raw?: string | Uint8Array; secret?: string; signature?: string; headers?: Record<string, string> } = {}) {
   const raw = opts.raw ?? JSON.stringify(body);
-  const signature = opts.signature ?? (await signBody(opts.secret ?? SECRET, typeof raw === "string" ? raw : raw));
+  const signature = opts.signature ?? (await sign(opts.secret ?? SECRET, raw));
   return runMondayJob(req("/api/jobs/monday", {
     method: "POST",
     headers: { "content-type": "application/json", "x-le-signature": signature, ...opts.headers },
@@ -59,7 +60,7 @@ describe("M1 job HMAC: ts, window, replay, bytes, size, secret", () => {
 
   it("replay entries store only a sha256 digest of the signature, never the signature", async () => {
     const raw = JSON.stringify({ ts: nowSec() });
-    const sig = await signBody(SECRET, raw);
+    const sig = await sign(SECRET, raw);
     await post({}, { raw, signature: sig });
     const digest = await signatureDigest(sig);
     expect(digest).toMatch(/^[0-9a-f]{64}$/);
@@ -77,7 +78,7 @@ describe("M1 job HMAC: ts, window, replay, bytes, size, secret", () => {
 
   it("verifies over the exact bytes: a BOM or a different byte string for the same decoded text does not verify", async () => {
     const text = JSON.stringify({ ts: nowSec() });
-    const sig = await signBody(SECRET, text);
+    const sig = await sign(SECRET, text);
     const bom = new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode(text)]);
     expect((await post({}, { raw: bom, signature: sig })).status).toBe(401);
     // signing the bytes with the BOM verifies those bytes

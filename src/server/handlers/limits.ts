@@ -1,12 +1,14 @@
 import { LimitsResponse, routes, type Edition, type EditionItemKind, type Store } from "@/contract";
 import { requireChain, wsRoute } from "./ws";
-import { readDropped, readEval, readMetricsTotals, readTavilyCredits } from "./proof-ledger";
+import { tavilyCreditsUsed } from "../tavily/budget";
+import { cacheOfRepo } from "../tavily/cache";
+import { readDropped, readEval, readMetricsTotals } from "./proof-ledger";
 
 /**
  * GET /api/limits: what this system could not do, from stored data only. Cookie-scoped (the blocks and the coverage
  * gaps are read from the visitor's own editions); the counters and rates are system-wide. No model call.
  *
- * Honesty rules: `droppedForEvidence` and `tavilyCreditsUsed` (this workspace's own total) are counters, so nothing recorded means 0. A rate or an
+ * Honesty rules: `droppedForEvidence` and `tavilyCreditsUsed` (the app's GLOBAL Tavily counter, the same one that gates every live search) are counters, so nothing recorded means 0. A rate or an
  * average with nothing behind it is null: `falsePositiveRate` before an eval has run, `costPerEditionUsd` before the
  * build has recorded its model calls and a finished edition.
  */
@@ -59,7 +61,7 @@ export const getLimits = wsRoute(routes.getLimits, async (_input, ctx): Promise<
     readDropped(ctx.repo),
     readEval(ctx.repo),
     readMetricsTotals(ctx.repo),
-    readTavilyCredits(ctx.repo, ctx.workspace.id),
+    tavilyCreditsUsed(cacheOfRepo(ctx.repo)),
   ]);
   const guardrailBlocks = editions.reduce((n, e) => n + e.items.filter((i) => i.guardrail.status === "blocked").length, 0);
   return {

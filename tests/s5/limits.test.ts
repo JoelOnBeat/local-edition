@@ -40,10 +40,10 @@ describe("GET /api/limits", () => {
   });
 
   it("reads the counters and rates that were recorded", async () => {
-    const { cookie, bundle } = await visit();
+    const { cookie } = await visit();
     await recordDropped(repo, 3);
     await recordDropped(repo, 1);
-    await recordTavily(repo, bundle.workspace.id, 2);
+    await recordTavily(repo, 2);
     await recordStep(repo, 1000, 0, 100, 0.02);
     await recordEditions(repo, 4);
     await repo.cachePut(LEDGER_KEYS.evalLatest, mockEval, 3600);
@@ -52,6 +52,16 @@ describe("GET /api/limits", () => {
     expect(body.tavilyCreditsUsed).toBe(2);
     expect(body.costPerEditionUsd).toBeCloseTo(0.005, 10);
     expect(body.falsePositiveRate).toBe(mockEval.falsePositiveRate);
+  });
+
+  it("reports the app's GLOBAL Tavily counter: every visitor sees the same number, whoever spent the credits", async () => {
+    const a = await visit();
+    const b = await visit();
+    await recordTavily(repo, 3);
+    expect((await limits(a.cookie)).body.tavilyCreditsUsed).toBe(3);
+    expect((await limits(b.cookie)).body.tavilyCreditsUsed).toBe(3);
+    await recordTavily(repo, 2);
+    expect((await limits(a.cookie)).body.tavilyCreditsUsed).toBe(5);
   });
 
   it("counts blocked items in the visitor's own editions only", async () => {
@@ -87,9 +97,9 @@ describe("GET /api/limits", () => {
   });
 
   it("ignores a corrupt counter row instead of failing", async () => {
-    const { cookie, bundle } = await visit();
+    const { cookie } = await visit();
     await repo.cachePut("stats:verify:v1", "lots", 3600);
-    await repo.cachePut(`tv:credits:total:${bundle.workspace.id}`, { used: -5 }, 3600);
+    await repo.cachePut("tv:credits:global:v1", { total: -5, day: "x", dayUsed: "lots" }, 3600);
     const { res, body } = await limits(cookie);
     expect(res.status).toBe(200);
     expect(body.droppedForEvidence).toBe(0);

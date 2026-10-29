@@ -1,5 +1,6 @@
 import { createLogger } from "../log";
 import { getRepo } from "../store";
+import type { Repo } from "../store/repo";
 
 const log = createLogger("tavily-cache");
 
@@ -10,6 +11,9 @@ export const TAVILY_CACHE_TTL_SECONDS = 7 * 24 * 3600;
 export interface TavilyCache {
   get<T>(key: string): Promise<T | null>;
   put<T>(key: string, value: T, ttlSeconds: number): Promise<void>;
+  /** Best-effort named lock (the repo's `acquireLock`); the credit ledger takes it around its read-modify-write. */
+  acquireLock?(name: string, ttlSeconds: number): Promise<string | null>;
+  releaseLock?(name: string, token: string): Promise<void>;
 }
 
 export type CacheKind = "search" | "chain" | "extract" | "crawl" | "voice";
@@ -29,19 +33,36 @@ export async function cacheKey(kind: CacheKind, query: string, timeRange: string
   return `tv:${kind}:${hex.slice(0, 40)}`;
 }
 
-/** The app's shared cache (the repo's `cacheGet`/`cachePut`). */
-export async function repoCache(): Promise<TavilyCache> {
-  const repo = await getRepo();
+/** A repo's TTL cache (KV on Workers), with its best-effort locks, as a TavilyCache. */
+export function cacheOfRepo(repo: Pick<Repo, "cacheGet" | "cachePut" | "acquireLock" | "releaseLock">): TavilyCache {
   return {
     get: (key) => repo.cacheGet(key),
     put: (key, value, ttl) => repo.cachePut(key, value, ttl),
+    acquireLock: (name, ttl) => repo.acquireLock(name, ttl),
+    releaseLock: (name, token) => repo.releaseLock(name, token),
   };
+}
+
+/** The app's shared cache (the repo's `cacheGet`/`cachePut`). */
+export async function repoCache(): Promise<TavilyCache> {
+  return cacheOfRepo(await getRepo());
 }
 
 /** In-process cache with TTLs, for tests and for runs with no repo. */
 export function memoryCache(now: () => number = Date.now): TavilyCache & { size(): number } {
   const rows = new Map<string, { value: unknown; expires: number }>();
+  const locks = new Map<string, { token: string; expires: number }>();
   return {
+    async acquireLock(name, ttl) {
+      const held = locks.get(name);
+      if (held && held.expires > now()) return null;
+      const token = Math.random().toString(36).slice(2);
+      locks.set(name, { token, expires: now() + ttl * 1000 });
+      return token;
+    },
+    async releaseLock(name, token) {
+      if (locks.get(name)?.token === token) locks.delete(name);
+    },
     async get<T>(key: string) {
       const row = rows.get(key);
       if (!row || row.expires <= now()) return null;

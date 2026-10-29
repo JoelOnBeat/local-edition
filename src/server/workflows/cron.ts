@@ -1,3 +1,4 @@
+import { deleteWorkspacePhotos, R2BlobStore } from "../blob";
 import { createLogger } from "../log";
 import type { PlatformEnv } from "../platform/env";
 import { DEMO_WORKSPACE_ID } from "../session";
@@ -32,7 +33,9 @@ export async function handleScheduled(env: PlatformEnv, scheduledTime: number): 
   }
   try {
     const db = env.LE_DB;
-    if (db) purged = await createD1Repo(async () => db).purgeExpired();
+    // An expired workspace's R2 photos go first; if that fails its rows stay and the next run tries again.
+    const photos = env.LE_BLOB ? new R2BlobStore(env.LE_BLOB) : undefined;
+    if (db) purged = await createD1Repo(async () => db, { onExpired: photos ? (ids) => deleteWorkspacePhotos(ids, photos) : undefined }).purgeExpired();
   } catch (e) {
     log.error("purge failed", { err: e });
   }

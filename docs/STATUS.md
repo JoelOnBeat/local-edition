@@ -1,5 +1,23 @@
 # Local Edition backend status (Thu 29 Oct 2026)
 
+## Verify pass after the data-path review fixes (30 Oct 2026, 00:10 MYT)
+
+Gate: `npm run typecheck`, `npm run lint`, `npm test` (86 files, 1153 tests), `guardrails` pytest (125), `tests/e` pytest (12) and `npm run build` pass. The
+OpenNext build and `opennextjs-cloudflare preview` ran in workerd with local D1, KV, R2, the three Durable Objects and both Workflows; one small live
+run (Token Factory, Tavily, real Ultra) ran under `next dev`. Full numbers: `docs/BACKEND-SMOKE-3.md`. Nothing was committed or deployed.
+
+| Area | State |
+|---|---|
+| workerd | Verified: migrations, Workflow-backed build with `: open`, progress events and persisted tail (8 and 50 stores), `Last-Event-ID` reattach, `: ping` every 15 s (42 s observed), item PATCH with `If-Match` and override, approve-all, staff card, `/api/proof`, `/api/limits`, cron to WeeklyRebuild (8 of 8), the BuildLock Durable Object (3 simultaneous runs: one refused `build_running`), TavilyBudget Durable Object reserve and refund. |
+| Defect fixed | `d1-binding.ts` read `migrations/` in workerd whenever NODE_ENV was not "production", which failed a cron or Workflow that hit a cold isolate (`readdir '/bundle/migrations'`). Now skipped inside workerd; test added. |
+| Live run | One demo store built in 36 s for $0.0075 with 1 Tavily credit (through the global ledger); a second build of it used 0 credits (cache). Real Ultra review: 936 ms, 713 in / 86 out tokens, $0.0008. Live copy check passed and the public card served. Total $0.0177 of the $0.5 cap. |
+| Gaps | A small `SPEND_CAP_USD` (below $1.50) blocks every visitor action because the reserved floor is a constant; fixture builds cannot yield a public card (M1); SSE beyond 42 s, SpendMeter reserve/settle in workerd with real calls, R2, the Pages `cf-connecting-ip` hop and the Nebius job start were not exercised here. See "Remaining gaps" in the smoke doc. |
+
+Still to do before judging (unchanged): create the D1, KV and R2 resources and put their ids in `wrangler.jsonc`; `wrangler secret put` for the five secrets;
+deploy with `--var GIT_SHA:<sha>`; deploy `edge/pages/` and check `cf-connecting-ip` on the real hop; a stream over 2 minutes on deployed Workers.
+
+---
+
 ## Upgrade integration (29 Oct 23:10 MYT, after the five upgrade streams)
 
 Gate: `npm run typecheck`, `npm run lint`, `npm test` (74 files, 997 tests), `guardrails` pytest (125) and `npm run build` (28 API routes) pass.

@@ -2,7 +2,8 @@
 """Weekly Local Edition rebuild, run as a Nebius AI job (`nebius ai job run jobs/rebuild.py`).
 
 Stdlib only. The job holds no Qloo, Tavily or model logic: it signs a request with LE_JOB_SECRET
-(HMAC-SHA256 of the raw body, hex, header `x-le-signature`), POSTs it to $APP_URL/api/jobs/monday,
+(HMAC-SHA256, hex, header `x-le-signature`, over "le2\n\nPOST\n/api/jobs/monday\n\n" + the raw body, so the method and
+path are signed too), POSTs it to $APP_URL/api/jobs/monday,
 then polls GET $APP_URL/api/jobs/latest until that run finishes. The app does the building.
 
 Environment
@@ -35,8 +36,9 @@ def log(message):
     print(message, flush=True)
 
 
-def sign(secret, body):
-    return hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
+def sign(secret, body, path="/api/jobs/monday"):
+    signed = ("le2\n\nPOST\n%s\n\n" % path).encode("utf-8") + body
+    return hmac.new(secret.encode("utf-8"), signed, hashlib.sha256).hexdigest()
 
 
 def http(method, url, body=None, headers=None, timeout=60):

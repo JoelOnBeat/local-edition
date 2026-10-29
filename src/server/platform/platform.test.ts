@@ -6,6 +6,10 @@ import { resetEnvCache } from "@/lib/env";
 import { BuildLockCore } from "./lock-core";
 import { setPlatformEnv, type PlatformEnv } from "./env";
 import { SpendLedgerCore } from "./spend-core";
+import { TavilyBudgetCore } from "./tavily-budget-core";
+import { DAILY_CREDIT_SLICE, createLedger } from "../tavily/budget";
+import { memoryCache } from "../tavily/cache";
+import { setRepo } from "../store";
 import type { StorageLike } from "./storage";
 import type { BuildLockStub, SpendMeterStub } from "./stubs";
 
@@ -117,15 +121,32 @@ describe("spend.ts and build-lock.ts adapters", () => {
     expect(spend.objects.size).toBe(1);
   });
 
-  it("falls back to the repo ledger when the object throws, and still enforces the cap", async () => {
+  it("refuses a spending call with 503 spend_unavailable when the object throws, never a fresh repo ledger", async () => {
     process.env.SPEND_CAP_USD = "1";
     resetEnvCache();
     const broken = { idFromName: () => "x", get: () => ({ reserve: async () => { throw new Error("boom"); }, settle: async () => undefined, record: async () => undefined, totals: async () => { throw new Error("boom"); } }) };
     setPlatformEnv({ SPEND_METER: broken } as unknown as PlatformEnv);
-    const t = await reserveSpend(0.7);
-    expect(t.id.startsWith("do:")).toBe(false);
-    await expect(reserveSpend(0.5)).rejects.toMatchObject({ code: "spend_cap" });
-    await settleSpend(t, 0.7);
+    const repo = createMemoryRepo();
+    setRepo(repo);
+    // Twice: a second call must not find a separate ledger that started from zero.
+    for (let i = 0; i < 2; i++) await expect(reserveSpend(0.7)).rejects.toMatchObject({ status: 503, code: "spend_unavailable" });
+    expect(await repo.cacheGet("spend:ledger")).toBeNull();
+  });
+
+  it("the Tavily credit ledger rides the TAVILY_BUDGET object when bound: one counter across isolates, and the object failing refuses the call", async () => {
+    const budget = fakeNamespace(() => new TavilyBudgetCore(fakeStorage()));
+    setPlatformEnv({ TAVILY_BUDGET: budget } as unknown as PlatformEnv);
+    const cache = memoryCache();
+    const a = createLedger(cache);
+    const b = createLedger(cache);
+    await a.reserve(DAILY_CREDIT_SLICE - 2);
+    await expect(b.reserve(3)).rejects.toMatchObject({ code: "tavily_budget", reason: "daily" });
+    expect(await b.usage()).toMatchObject({ total: DAILY_CREDIT_SLICE - 2, today: DAILY_CREDIT_SLICE - 2 });
+    expect(budget.objects.size).toBe(1);
+    expect(cache.size()).toBe(0); // nothing leaked to the KV fallback
+
+    setPlatformEnv({ TAVILY_BUDGET: { idFromName: () => "x", get: () => ({ reserve: async () => { throw new Error("boom"); }, refund: async () => undefined, usage: async () => ({ total: 0, today: 0, day: "d" }) }) } } as unknown as PlatformEnv);
+    await expect(createLedger(cache).reserve(1)).rejects.toMatchObject({ code: "tavily_budget", reason: "unavailable" });
   });
 
   it("uses the build-lock object per workspace: second build gets 409, release frees it", async () => {

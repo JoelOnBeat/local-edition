@@ -2,12 +2,13 @@ import type { Chain, Evidence, Store } from "@/contract";
 import { HttpError, UpstreamError } from "../http/errors";
 import { createLogger } from "../log";
 import { getTokenFactory } from "../tokenfactory/client";
-import { TavilyBudgetError, extractCredits } from "./budget";
+import { TavilyBudgetError, extractCredits, type BudgetReason } from "./budget";
 import { cacheKey, softGet, softPut } from "./cache";
 import { chainEvidence, Snapshot, type TriagedEvent } from "./chain-evidence";
 import { extractPages, type ExtractedPages } from "./extract";
 import { buildTavilyBody } from "./request";
 import { resolveRuntime, type TavilyOptions, type TavilyRuntime } from "./runtime";
+import { isSampleSearch } from "./scope";
 import { httpUrl, searchStore, type StoreSearch } from "./search";
 import { listCandidates, type Scored } from "./candidates";
 import { failedTriage, triageCandidate, type StepRecord } from "./triage";
@@ -26,8 +27,10 @@ export interface EventChainResult {
   kept: number;
   /** Summary row first, then one row per kept event, then the page read. Empty when nothing was fetched. */
   evidence: Evidence[];
-  /** Why there is nothing new: the workspace's day is spent, the run is read-only, or Tavily failed. */
+  /** Why there is nothing new: no live search for this call (out of scope or the global credits are spent), the run is read-only, or Tavily failed. */
   fallback: ChainFallback | null;
+  /** When `fallback` is `tavily_budget`: which limit stopped the live search (`scope` = not the demo workspace's sample store). */
+  budgetReason: BudgetReason | null;
   /** Whether the batched extract supplied page text for this store. */
   extracted: boolean;
   /** One entry per Lightning call, for the run panel's `step_metrics` (role `check`, tool `triage`). */
@@ -43,8 +46,8 @@ export interface EventChainBatch {
 const RESULT_CAP = 6;
 const SNIPPET_MAX = 500;
 const TRIAGE_CONCURRENCY = 3;
-const emptyResult = (storeId: string, fallback: ChainFallback | null): EventChainResult => ({
-  storeId, events: [], found: 0, kept: 0, evidence: [], fallback, extracted: false, steps: [],
+const emptyResult = (storeId: string, fallback: ChainFallback | null, budgetReason: BudgetReason | null = null): EventChainResult => ({
+  storeId, events: [], found: 0, kept: 0, evidence: [], fallback, budgetReason, extracted: false, steps: [],
 });
 
 function candidatesOf(search: StoreSearch): Scored[] {
@@ -76,6 +79,8 @@ async function pool<T, R>(items: T[], size: number, fn: (item: T) => Promise<R>)
 
 interface Pending {
   store: Store;
+  /** The search was a sample-store query, so its top page may be read live (see scope.ts). */
+  sample: boolean;
   search: StoreSearch;
   chainKey: string;
   /** One entry per search result: the offline and fallback candidates, and the input of the listing call. */
@@ -120,7 +125,7 @@ function assemble(p: Pending, verdicts: Verdict[], extractedUrl: string | null, 
 
 function fromSnapshot(store: Store, snap: Snapshot, body: ReturnType<typeof buildTavilyBody>, mode: Evidence["mode"], steps: StepRecord[], fallback: ChainFallback | null): EventChainResult {
   const { evidence, events } = chainEvidence({ store, body, snap, mode });
-  return { storeId: store.id, events, found: snap.found, kept: snap.kept, evidence, fallback, extracted: snap.extractedUrl !== null, steps };
+  return { storeId: store.id, events, found: snap.found, kept: snap.kept, evidence, fallback, budgetReason: null, extracted: snap.extractedUrl !== null, steps };
 }
 
 /**
@@ -134,7 +139,8 @@ export async function prefetchEventChains(stores: Store[], chain: ChainChain, op
   const results = new Map<string, EventChainResult>();
   const pending: Pending[] = [];
   let credits = 0;
-  let budgetHit = false;
+  /** The global total or today's slice is spent: every later live call would be refused too. A `scope` refusal is only about that store. */
+  let budgetHit: BudgetReason | null = null;
 
   for (const store of stores) {
     const body = buildTavilyBody(store, chain.city.name, rt.clock());
@@ -148,7 +154,7 @@ export async function prefetchEventChains(stores: Store[], chain: ChainChain, op
       continue;
     }
     if (budgetHit) {
-      results.set(store.id, emptyResult(store.id, "tavily_budget"));
+      results.set(store.id, emptyResult(store.id, "tavily_budget", budgetHit));
       continue;
     }
     try {
@@ -159,12 +165,13 @@ export async function prefetchEventChains(stores: Store[], chain: ChainChain, op
       }
       if (search.mode === "live") credits += 1;
       const hits = candidatesOf(search);
-      pending.push({ store, search, chainKey, results: hits, candidates: hits, extractedUrl: null, steps: [], degraded: false });
+      pending.push({ store, sample: isSampleSearch(store, chain.city.name, rt.clock()), search, chainKey, results: hits, candidates: hits, extractedUrl: null, steps: [], degraded: false });
     } catch (e) {
-      if (e instanceof TavilyBudgetError) budgetHit = true;
-      else if (!(e instanceof UpstreamError)) throw e;
+      if (e instanceof TavilyBudgetError) {
+        if (e.reason !== "scope") budgetHit = e.reason;
+      } else if (!(e instanceof UpstreamError)) throw e;
       log.warn("search skipped", { store: store.id, code: e instanceof HttpError ? e.code : (e as UpstreamError).code });
-      results.set(store.id, emptyResult(store.id, e instanceof TavilyBudgetError ? "tavily_budget" : "tavily_unavailable"));
+      results.set(store.id, e instanceof TavilyBudgetError ? emptyResult(store.id, "tavily_budget", e.reason) : emptyResult(store.id, "tavily_unavailable"));
     }
   }
 
@@ -227,8 +234,10 @@ export async function prefetchEventChains(stores: Store[], chain: ChainChain, op
 async function readTopPages(pending: Pending[], rt: TavilyRuntime): Promise<ExtractedPages | null> {
   const urls = pending.flatMap((p) => (p.results[0] ? [p.results[0].url] : []));
   if (urls.length === 0) return null;
+  // Only a sample store's top page may be read live; another store's page is read from saved copies or not at all.
+  const liveUrls = new Set(pending.flatMap((p) => (p.sample && p.results[0] ? [p.results[0].url] : [])));
   try {
-    return await extractPages(urls, rt);
+    return await extractPages(urls, rt, liveUrls);
   } catch (e) {
     if (e instanceof TavilyBudgetError || e instanceof UpstreamError) {
       log.warn("extract skipped; triage uses search snippets", { code: (e as { code: string }).code });

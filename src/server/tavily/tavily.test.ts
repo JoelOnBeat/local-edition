@@ -3,6 +3,8 @@ import { UpstreamError, upstreamHttpStatus } from "../http/errors";
 import { MemoryRecorder } from "../http/recorder";
 import { SAMPLE_STORES } from "../sample/chain";
 import { eventsThisWeek, toEvents, type TavilyOptions } from "./search";
+import { createLedger } from "./budget";
+import { memoryCache } from "./cache";
 import { buildTavilyBody, TAVILY_SEARCH_URL, weekPhrase } from "./request";
 import { tavilyModeFor } from "./mode";
 import { TAVILY_FIXTURE_STORE_IDS, tavilyFixture } from "./fixtures";
@@ -18,6 +20,12 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 const liveEnv = { TAVILY_MODE: "live" as const, TAVILY_API_KEY: KEY };
 const replayEnv = { TAVILY_MODE: "replay" as const, TAVILY_API_KEY: undefined };
 const fixtureEnv = { TAVILY_MODE: "fixture" as const, TAVILY_API_KEY: undefined };
+
+/** The weekly build's own live scope: the demo workspace, a sample store, the sample city, a ledger and a saved-results cache. */
+function demoLive(extra: Partial<TavilyOptions> = {}): TavilyOptions {
+  const cache = memoryCache();
+  return opts({ env: liveEnv, workspaceId: "demo", city: "New York", cache, ledger: createLedger(cache, clock, { stub: null }), ...extra });
+}
 
 function opts(extra: Partial<TavilyOptions>): TavilyOptions {
   return { sleep: noSleep, random: () => 0.5, clock, recorder: new MemoryRecorder(), ...extra };
@@ -63,12 +71,12 @@ describe("T2 request body", () => {
 
   it("posts the body with the key only in the Authorization header", async () => {
     const fetchImpl = vi.fn(async () => json({ query: "q", results: [] }));
-    await eventsThisWeek(williamsburg, opts({ env: liveEnv, fetchImpl: fetchImpl as never }));
+    await eventsThisWeek(williamsburg, demoLive({ fetchImpl: fetchImpl as never }));
     const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe(TAVILY_SEARCH_URL);
     expect(init.method).toBe("POST");
     expect((init.headers as Record<string, string>).authorization).toBe(`Bearer ${KEY}`);
-    expect(JSON.parse(String(init.body))).toEqual(buildTavilyBody(williamsburg, undefined, clock()));
+    expect(JSON.parse(String(init.body))).toEqual(buildTavilyBody(williamsburg, "New York", clock()));
     expect(String(init.body)).not.toContain(KEY);
   });
 });
@@ -77,12 +85,12 @@ describe("T3 live call, recording and replay", () => {
   it("records the live response without the key, then replays it without calling out", async () => {
     const recorder = new MemoryRecorder();
     const fetchImpl = vi.fn(async () => json(oneResult));
-    const live = await eventsThisWeek(williamsburg, opts({ env: liveEnv, recorder, fetchImpl: fetchImpl as never }));
+    const live = await eventsThisWeek(williamsburg, demoLive({ recorder, fetchImpl: fetchImpl as never }));
     expect(live.evidence.mode).toBe("live");
     expect(recorder.size()).toBe(1);
     expect(JSON.stringify(live.evidence)).not.toContain(KEY);
 
-    const replayed = await eventsThisWeek(williamsburg, opts({ env: replayEnv, recorder, fetchImpl: fetchImpl as never }));
+    const replayed = await eventsThisWeek(williamsburg, opts({ env: replayEnv, city: "New York", recorder, fetchImpl: fetchImpl as never }));
     expect(replayed.evidence.mode).toBe("replay");
     expect(replayed.events).toEqual(live.events);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
@@ -114,7 +122,7 @@ describe("T2 response parsing", () => {
 
   it("writes evidence with the mean relevance, first url, the clock time and no key in params", async () => {
     const fetchImpl = vi.fn(async () => json(oneResult));
-    const { events, evidence } = await eventsThisWeek(williamsburg, opts({ env: liveEnv, fetchImpl: fetchImpl as never }));
+    const { events, evidence } = await eventsThisWeek(williamsburg, demoLive({ fetchImpl: fetchImpl as never }));
     expect(events).toHaveLength(2);
     expect(evidence).toMatchObject({
       source: "tavily",
@@ -127,7 +135,7 @@ describe("T2 response parsing", () => {
     });
     expect(evidence.id).toMatch(/^ev_tv_/);
     expect(evidence.params).toEqual({
-      query: buildTavilyBody(williamsburg, undefined, clock()).query,
+      query: buildTavilyBody(williamsburg, "New York", clock()).query,
       topic: "general",
       time_range: "week",
       max_results: "6",
@@ -137,10 +145,10 @@ describe("T2 response parsing", () => {
 
   it("rejects a malformed JSON body and a wrong response shape", async () => {
     await expect(
-      eventsThisWeek(williamsburg, opts({ env: liveEnv, fetchImpl: vi.fn(async () => new Response("<html>", { status: 200 })) as never })),
+      eventsThisWeek(williamsburg, demoLive({ fetchImpl: vi.fn(async () => new Response("<html>", { status: 200 })) as never })),
     ).rejects.toMatchObject({ code: "bad_json" });
     await expect(
-      eventsThisWeek(williamsburg, opts({ env: liveEnv, fetchImpl: vi.fn(async () => json({ results: "nope" })) as never })),
+      eventsThisWeek(williamsburg, demoLive({ fetchImpl: vi.fn(async () => json({ results: "nope" })) as never })),
     ).rejects.toMatchObject({ code: "invalid_response" });
   });
 });
@@ -148,7 +156,7 @@ describe("T2 response parsing", () => {
 describe("T2 empty results", () => {
   it("returns no events, evidence that says so, and no relevance metric", async () => {
     const fetchImpl = vi.fn(async () => json({ query: "q", results: [] }));
-    const { events, evidence } = await eventsThisWeek(williamsburg, opts({ env: liveEnv, fetchImpl: fetchImpl as never }));
+    const { events, evidence } = await eventsThisWeek(williamsburg, demoLive({ fetchImpl: fetchImpl as never }));
     expect(events).toEqual([]);
     expect(evidence.summary).toBe("Tavily found no event listings this week near Bedford Ave & N 7th St.");
     expect(evidence.metrics).toEqual({});
@@ -160,7 +168,7 @@ describe("T4 failure paths", () => {
   it("maps repeated 429 to rate_limited (HTTP 429) after the retries, without the key in the message", async () => {
     const sleep = vi.fn(async () => {});
     const fetchImpl = vi.fn(async () => new Response("", { status: 429 }));
-    const err = await eventsThisWeek(williamsburg, opts({ env: liveEnv, sleep, fetchImpl: fetchImpl as never })).catch((e) => e);
+    const err = await eventsThisWeek(williamsburg, demoLive({ sleep, fetchImpl: fetchImpl as never })).catch((e) => e);
     expect(err).toBeInstanceOf(UpstreamError);
     expect(err).toMatchObject({ code: "rate_limited", provider: "tavily", status: 429 });
     expect(upstreamHttpStatus(err)).toBe(429);
@@ -170,7 +178,7 @@ describe("T4 failure paths", () => {
 
   it("maps 401 to unauthorized and never exposes it as the client's own auth failure (502)", async () => {
     const fetchImpl = vi.fn(async () => new Response("", { status: 401 }));
-    const err = await eventsThisWeek(williamsburg, opts({ env: liveEnv, fetchImpl: fetchImpl as never })).catch((e) => e);
+    const err = await eventsThisWeek(williamsburg, demoLive({ fetchImpl: fetchImpl as never })).catch((e) => e);
     expect(err).toMatchObject({ code: "unauthorized", status: 401 });
     expect(upstreamHttpStatus(err)).toBe(502);
     expect(fetchImpl).toHaveBeenCalledTimes(1); // no retry on auth failure

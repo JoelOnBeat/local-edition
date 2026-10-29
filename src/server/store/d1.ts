@@ -2,6 +2,7 @@ import type { Chain, Edition, EditionItem, EditionStatus, Evidence, JobRun, Menu
 import { newId, newToken } from "@/lib/ids";
 import type { D1Like, D1PreparedLike } from "../platform/types";
 import { D1Cache, purgeStoreCaches, type CacheBackend } from "./d1-cache";
+import { purgeExpiredRows } from "./d1-purge";
 import { isVisitorId, VISITOR_TTL_SECONDS } from "./ids";
 import { WorkspaceExistsError, type SeedWithId } from "./keyed-repo";
 import { NotFoundError, VersionConflictError, type EditionQuery, type Repo } from "./repo";
@@ -18,28 +19,42 @@ const IN_CHUNK = 50;
 const j = (v: unknown) => JSON.stringify(v);
 const parse = <T>(row: { json: string } | null): T | null => (row ? (JSON.parse(row.json) as T) : null);
 const chunks = <T>(list: T[], size = IN_CHUNK): T[][] => Array.from({ length: Math.ceil(list.length / size) }, (_, i) => list.slice(i * size, (i + 1) * size));
+/**
+ * Workspace guards. A row's `workspace_id` is the one its parent (chain, store, edition) lives in. Reads add
+ * `workspace_id = <the parent's>`, so a row can never be read under another workspace's parent. Writes stamp the parent's
+ * id; a row whose parent is missing (a build racing the purge) gets `orphan:<parent id>`, never '', and the purge removes it.
+ * Where no parent exists there is nothing to compare with, so a read is not narrowed.
+ */
+const SAME_WORKSPACE = (parentWorkspace: string) => `workspace_id = COALESCE((${parentWorkspace}), workspace_id)`;
+const OWNER = (parentWorkspace: string) => `COALESCE((${parentWorkspace}), 'orphan:' || ?)`;
+const EDITION_IN_STORE_WORKSPACE = SAME_WORKSPACE("SELECT workspace_id FROM stores WHERE id = editions.store_id");
 const marks = (n: number) => Array.from({ length: n }, () => "?").join(",");
 
 export interface D1RepoOptions {
   now?: () => number;
   /** Provider cache backing; defaults to the D1 `cache` table. */
   cache?: CacheBackend;
+  /** Called with the ids of expired workspaces before their rows go (the cron deletes their R2 photos here). A throw keeps the rows for the next run. */
+  onExpired?: (workspaceIds: string[]) => Promise<void>;
 }
 
 export class D1Repo implements Repo {
   private readonly now: () => number;
   private readonly cache: CacheBackend;
+  private readonly onExpired: D1RepoOptions["onExpired"];
 
   constructor(private readonly db: () => Promise<D1Like>, opts: D1RepoOptions = {}) {
     this.now = opts.now ?? Date.now;
+    this.onExpired = opts.onExpired;
     this.cache = opts.cache ?? new D1Cache(db, this.now);
   }
 
   private async sql(text: string, ...bind: unknown[]): Promise<D1PreparedLike> {
     return (await this.db()).prepare(text).bind(...bind);
   }
-  private async batch(statements: D1PreparedLike[]): Promise<void> {
-    if (statements.length) await (await this.db()).batch(statements);
+  private async batch(statements: D1PreparedLike[]): Promise<number[]> {
+    if (!statements.length) return [];
+    return (await (await this.db()).batch(statements)).map((r) => r.meta?.changes ?? 0);
   }
   private async one<T>(text: string, ...bind: unknown[]): Promise<T | null> {
     return (await this.sql(text, ...bind)).first<T>();
@@ -87,24 +102,27 @@ export class D1Repo implements Repo {
   }
 
   // ---- Chains
-  async getChain(id: string) { return parse<Chain>(await this.one("SELECT json FROM chains WHERE id = ?", id)); }
+  async getChain(id: string) { return parse<Chain>(await this.one(`SELECT json FROM chains WHERE id = ? AND ${SAME_WORKSPACE("SELECT id FROM workspaces WHERE chain_id = chains.id")}`, id)); }
   async putChain(chain: Chain): Promise<Chain> {
     await this.changes(
-      "INSERT INTO chains (id, workspace_id, json) VALUES (?, COALESCE((SELECT id FROM workspaces WHERE chain_id = ?), ''), ?) ON CONFLICT(id) DO UPDATE SET json = excluded.json",
-      chain.id, chain.id, j(chain));
+      `INSERT INTO chains (id, workspace_id, json) VALUES (?, ${OWNER("SELECT id FROM workspaces WHERE chain_id = ?")}, ?) ON CONFLICT(id) DO UPDATE SET json = excluded.json`,
+      chain.id, chain.id, chain.id, j(chain));
     return chain;
   }
 
   // ---- Stores
   async listStores(chainId: string): Promise<Store[]> {
-    return (await this.rows<{ json: string }>("SELECT json FROM stores WHERE chain_id = ? ORDER BY rowid", chainId)).map((r) => JSON.parse(r.json) as Store);
+    return (await this.rows<{ json: string }>(
+      `SELECT json FROM stores WHERE chain_id = ? AND ${SAME_WORKSPACE("SELECT workspace_id FROM chains WHERE id = ?")} ORDER BY rowid`, chainId, chainId)).map((r) => JSON.parse(r.json) as Store);
   }
-  async getStore(id: string) { return parse<Store>(await this.one("SELECT json FROM stores WHERE id = ?", id)); }
+  async getStore(id: string) {
+    return parse<Store>(await this.one(`SELECT json FROM stores WHERE id = ? AND ${SAME_WORKSPACE("SELECT workspace_id FROM chains WHERE id = stores.chain_id")}`, id));
+  }
   async putStore(store: Store): Promise<Store> { await this.putStores([store]); return store; }
   async putStores(stores: Store[]): Promise<Store[]> {
     await this.batch(await Promise.all(stores.map((s) => this.sql(
-      "INSERT INTO stores (id, workspace_id, chain_id, json) VALUES (?, COALESCE((SELECT workspace_id FROM chains WHERE id = ?), ''), ?, ?) ON CONFLICT(id) DO UPDATE SET json = excluded.json, chain_id = excluded.chain_id",
-      s.id, s.chainId, s.chainId, j(s)))));
+      `INSERT INTO stores (id, workspace_id, chain_id, json) VALUES (?, ${OWNER("SELECT workspace_id FROM chains WHERE id = ?")}, ?, ?) ON CONFLICT(id) DO UPDATE SET json = excluded.json, chain_id = excluded.chain_id`,
+      s.id, s.chainId, s.chainId, s.chainId, j(s)))));
     return stores;
   }
   async deleteStore(id: string): Promise<boolean> {
@@ -122,11 +140,13 @@ export class D1Repo implements Repo {
   }
 
   // ---- Menu
-  async listMenu(chainId: string): Promise<MenuItem[]> { return parse<MenuItem[]>(await this.one("SELECT json FROM menus WHERE chain_id = ?", chainId)) ?? []; }
+  async listMenu(chainId: string): Promise<MenuItem[]> {
+    return parse<MenuItem[]>(await this.one(`SELECT json FROM menus WHERE chain_id = ? AND ${SAME_WORKSPACE("SELECT workspace_id FROM chains WHERE id = ?")}`, chainId, chainId)) ?? [];
+  }
   async replaceMenu(chainId: string, items: MenuItem[]): Promise<MenuItem[]> {
     await this.changes(
-      "INSERT INTO menus (chain_id, workspace_id, json) VALUES (?, COALESCE((SELECT workspace_id FROM chains WHERE id = ?), ''), ?) ON CONFLICT(chain_id) DO UPDATE SET json = excluded.json",
-      chainId, chainId, j(items));
+      `INSERT INTO menus (chain_id, workspace_id, json) VALUES (?, ${OWNER("SELECT workspace_id FROM chains WHERE id = ?")}, ?) ON CONFLICT(chain_id) DO UPDATE SET json = excluded.json`,
+      chainId, chainId, chainId, j(items));
     return items;
   }
 
@@ -138,18 +158,20 @@ export class D1Repo implements Repo {
       await this.sql("DELETE FROM editions WHERE store_id = ? AND week_of = ? AND id <> ?", edition.storeId, edition.weekOf, edition.id),
       await this.sql(
         `INSERT INTO editions (id, workspace_id, store_id, week_of, status, rev, json)
-         VALUES (?, COALESCE((SELECT workspace_id FROM stores WHERE id = ?), ''), ?, ?, ?, 0, ?)
+         VALUES (?, ${OWNER("SELECT workspace_id FROM stores WHERE id = ?")}, ?, ?, ?, 0, ?)
          ON CONFLICT(id) DO UPDATE SET store_id = excluded.store_id, week_of = excluded.week_of, status = excluded.status, json = excluded.json, rev = editions.rev + 1`,
-        edition.id, edition.storeId, edition.storeId, edition.weekOf, edition.status, j(edition)),
+        edition.id, edition.storeId, edition.storeId, edition.storeId, edition.weekOf, edition.status, j(edition)),
     ]);
     return edition;
   }
-  async getEdition(id: string) { return parse<Edition>(await this.one("SELECT json FROM editions WHERE id = ?", id)); }
-  async getEditionForWeek(storeId: string, weekOf: string) { return parse<Edition>(await this.one("SELECT json FROM editions WHERE store_id = ? AND week_of = ?", storeId, weekOf)); }
+  async getEdition(id: string) { return parse<Edition>(await this.one(`SELECT json FROM editions WHERE id = ? AND ${EDITION_IN_STORE_WORKSPACE}`, id)); }
+  async getEditionForWeek(storeId: string, weekOf: string) {
+    return parse<Edition>(await this.one(`SELECT json FROM editions WHERE store_id = ? AND week_of = ? AND ${EDITION_IN_STORE_WORKSPACE}`, storeId, weekOf));
+  }
   async listEditions(query: EditionQuery): Promise<Edition[]> {
     const found = new Map<string, { week: string; edition: Edition }>();
     for (const ids of chunks(query.storeIds)) {
-      const where = [`store_id IN (${marks(ids.length)})`];
+      const where = [`store_id IN (${marks(ids.length)})`, EDITION_IN_STORE_WORKSPACE];
       const bind: unknown[] = [...ids];
       if (query.weekOf) { where.push("week_of = ?"); bind.push(query.weekOf); }
       if (query.finishedOnly) where.push("status <> 'drafting'");
@@ -164,7 +186,7 @@ export class D1Repo implements Repo {
   /** Optimistic read-modify-write: re-reads and re-applies `mutate` when another writer got in first. */
   private async cas(editionId: string, mutate: (current: Edition, rev: number) => Edition): Promise<Edition> {
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-      const row = await this.one<{ json: string; rev: number }>("SELECT json, rev FROM editions WHERE id = ?", editionId);
+      const row = await this.one<{ json: string; rev: number }>(`SELECT json, rev FROM editions WHERE id = ? AND ${EDITION_IN_STORE_WORKSPACE}`, editionId);
       if (!row) throw new NotFoundError("Edition", editionId);
       const current = JSON.parse(row.json) as Edition;
       const next: Edition = { ...mutate(structuredClone(current), row.rev), id: current.id, storeId: current.storeId, weekOf: current.weekOf };
@@ -206,20 +228,24 @@ export class D1Repo implements Repo {
   async putStaffCard(card: StaffCard): Promise<StaffCard> {
     await this.changes(
       `INSERT INTO staff_cards (edition_id, workspace_id, token, json)
-       VALUES (?, COALESCE((SELECT workspace_id FROM editions WHERE id = ?), ''), ?, ?)
+       VALUES (?, ${OWNER("SELECT workspace_id FROM editions WHERE id = ?")}, ?, ?)
        ON CONFLICT(edition_id) DO UPDATE SET token = excluded.token, json = excluded.json`,
-      card.editionId, card.editionId, card.token, j(card));
+      card.editionId, card.editionId, card.editionId, card.token, j(card));
     return card;
   }
   async putStaffCardIfAbsent(card: StaffCard): Promise<StaffCard> {
     await this.changes(
       `INSERT OR IGNORE INTO staff_cards (edition_id, workspace_id, token, json)
-       VALUES (?, COALESCE((SELECT workspace_id FROM editions WHERE id = ?), ''), ?, ?)`,
-      card.editionId, card.editionId, card.token, j(card));
+       VALUES (?, ${OWNER("SELECT workspace_id FROM editions WHERE id = ?")}, ?, ?)`,
+      card.editionId, card.editionId, card.editionId, card.token, j(card));
     return (await this.getStaffCardByEdition(card.editionId)) ?? card;
   }
-  async getStaffCardByEdition(editionId: string) { return parse<StaffCard>(await this.one("SELECT json FROM staff_cards WHERE edition_id = ?", editionId)); }
-  async getStaffCardByToken(token: string) { return parse<StaffCard>(await this.one("SELECT json FROM staff_cards WHERE token = ?", token)); }
+  async getStaffCardByEdition(editionId: string) {
+    return parse<StaffCard>(await this.one(`SELECT json FROM staff_cards WHERE edition_id = ? AND ${SAME_WORKSPACE("SELECT workspace_id FROM editions WHERE id = staff_cards.edition_id")}`, editionId));
+  }
+  async getStaffCardByToken(token: string) {
+    return parse<StaffCard>(await this.one(`SELECT json FROM staff_cards WHERE token = ? AND ${SAME_WORKSPACE("SELECT workspace_id FROM editions WHERE id = staff_cards.edition_id")}`, token));
+  }
 
   // ---- Job runs
   async putJobRun(run: JobRun): Promise<JobRun> {
@@ -244,25 +270,9 @@ export class D1Repo implements Repo {
   async cacheGet<T>(key: string): Promise<T | null> { return ((await this.cache.get(key)) as T | null) ?? null; }
   async cachePut<T>(key: string, value: T, ttlSeconds: number): Promise<void> { await this.cache.put(key, value, ttlSeconds); }
 
-  /** Deletes expired visitor workspaces with everything under them, plus expired evidence, locks, cache and old build runs. Returns the workspaces removed. */
-  async purgeExpired(): Promise<number> {
-    const now = this.now();
-    const gone = await this.rows<{ id: string; chain_id: string }>("SELECT id, chain_id FROM workspaces WHERE expires_at IS NOT NULL AND expires_at <= ?", now);
-    const oldRuns = now - 7 * 24 * 3600 * 1000;
-    const statements: D1PreparedLike[] = [];
-    for (const w of gone) {
-      for (const table of ["staff_cards", "editions", "stores", "menus", "chains", "build_events", "build_runs"]) statements.push(await this.sql(`DELETE FROM ${table} WHERE workspace_id = ?`, w.id));
-      statements.push(await this.sql("DELETE FROM workspaces WHERE id = ?", w.id));
-    }
-    statements.push(
-      await this.sql("DELETE FROM evidence WHERE expires_at IS NOT NULL AND expires_at <= ?", now),
-      await this.sql("DELETE FROM locks WHERE expires_at <= ?", now),
-      await this.sql("DELETE FROM cache WHERE expires_at <= ?", now),
-      await this.sql("DELETE FROM build_events WHERE created_at < ?", oldRuns),
-      await this.sql("DELETE FROM build_runs WHERE updated_at < ?", oldRuns),
-    );
-    await this.batch(statements);
-    return gone.length;
+  /** Deletes expired visitor workspaces with everything under them, plus expired evidence, locks, cache, old build runs and old job runs. Returns the workspaces removed. */
+  purgeExpired(): Promise<number> {
+    return purgeExpiredRows(this.db, this.now(), this.onExpired);
   }
 }
 

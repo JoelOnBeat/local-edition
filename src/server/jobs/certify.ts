@@ -12,7 +12,9 @@ import { sha256Hex } from "./batch-runs";
 export const NEMO_CHECKER = "nemo-guardrails@nebius-job" as const;
 /** Most items one job run reads; the rest wait for the next run. Keeps the results body well under 256 KB. */
 export const CERTIFY_CAP = 200;
-const SNAPSHOT_KEY = "certify:snapshot";
+const SNAPSHOT_PREFIX = "certify:snapshot:";
+/** Used when a request names no job (a hand-made call): the old shared slot, so such a run still works. */
+const ANON_JOB = "anon";
 /** The job reads, thinks and posts; a run that takes longer than this posts nothing the server will accept. */
 const SNAPSHOT_TTL_SECONDS = 6 * 3600;
 const MAX_TEXT = 4000;
@@ -32,6 +34,10 @@ export function itemText(item: EditionItem): string {
 export const cardText = (card: StaffCard): string => join(card.lines.map((l) => `${l.heading}: ${l.body}`));
 
 const key = (editionId: string, itemId: string) => `${editionId}:${itemId}`;
+
+/** What one job was sent, by `<editionId>:<itemId>`: a digest of the item's text. */
+type Snapshot = Record<string, string>;
+const snapshotKey = (jobId: string | null | undefined) => `${SNAPSHOT_PREFIX}${(jobId ?? ANON_JOB).slice(0, 120)}`;
 const digest = async (text: string) => (await sha256Hex(text)).slice(0, 16);
 
 const needsCertifying = (g: GuardrailResult) => (g.checkedBy ?? DEFAULT_CHECKED_BY) !== NEMO_CHECKER;
@@ -49,10 +55,10 @@ async function demoEditions(repo: Repo): Promise<{ editions: Edition[]; brandVoi
  * verdict again, so an edited item comes back. A snapshot of what was sent is kept so a verdict for copy that
  * changed meanwhile is dropped, not applied to the new text.
  */
-export async function listPending(repo: Repo, cap = CERTIFY_CAP): Promise<PendingJobItem[]> {
+export async function listPending(repo: Repo, cap = CERTIFY_CAP, jobId: string | null = null): Promise<PendingJobItem[]> {
   const { editions, brandVoice } = await demoEditions(repo);
   const items: PendingJobItem[] = [];
-  const snapshot: Record<string, string> = {};
+  const snapshot: Snapshot = {};
   const push = async (editionId: string, itemId: string, kind: PendingJobItem["kind"], text: string) => {
     if (!text || items.length >= cap) return;
     items.push({ editionId, itemId, kind, text, brandVoice });
@@ -65,8 +71,8 @@ export async function listPending(repo: Repo, cap = CERTIFY_CAP): Promise<Pendin
     const card = await repo.getStaffCardByEdition(edition.id);
     if (card && card.lines.length > 0 && needsCertifying(card.guardrail)) await push(edition.id, card.token, "card", cardText(card));
   }
-  const previous = (await repo.cacheGet<Record<string, string>>(SNAPSHOT_KEY)) ?? {};
-  await repo.cachePut(SNAPSHOT_KEY, { ...previous, ...snapshot }, SNAPSHOT_TTL_SECONDS);
+  // One snapshot per job: two overlapping runs (or a retried read) each keep what THEY were sent.
+  await repo.cachePut(snapshotKey(jobId), snapshot, SNAPSHOT_TTL_SECONDS);
   return items;
 }
 
@@ -88,12 +94,17 @@ function certified(g: GuardrailResult, now: string, jobId: string | null): Guard
 /**
  * Writes verdicts. NeMo blocking an approved (or draft, or edited) item flips it to `flagged` and bumps its version,
  * so a head-office tab holding the old version gets a 409 instead of approving blocked copy. A verdict is skipped when
- * the item is gone or rejected, when `unchecked` (the job never sends it), when the copy changed since it was read, or
- * when no snapshot of it exists.
+ * the item is gone or rejected, when `unchecked` (the job never sends it), when the copy changed since the job was sent
+ * it (the snapshot is the job's own), or when no snapshot of it exists. A newer version with the same copy (head office
+ * approved while the job ran) still takes the verdict; the version read here is re-checked inside the write, so an edit
+ * that lands in between turns the verdict stale instead of being overwritten. Only editions of the demo chain's stores are
+ * touched: an id from anywhere else is skipped, whatever the body says.
  */
 export async function applyResults(repo: Repo, results: JobResult[], opts: { jobId: string | null; now?: () => Date }): Promise<ApplyOutcome> {
   const now = (opts.now ?? (() => new Date()))().toISOString();
-  const snapshot = (await repo.cacheGet<Record<string, string>>(SNAPSHOT_KEY)) ?? {};
+  const snapshot = (await repo.cacheGet<Snapshot>(snapshotKey(opts.jobId))) ?? (opts.jobId ? await repo.cacheGet<Snapshot>(snapshotKey(null)) : null) ?? {};
+  const demo = await ensureDemoWorkspace(repo);
+  const demoStores = new Set((await repo.listStores(demo.chainId)).map((s) => s.id));
   const out: ApplyOutcome = { updated: 0, passed: 0, blocked: 0, flipped: 0, stale: 0, skipped: 0, storeIds: [] };
   const tally = (g: GuardrailResult) => { if (g.status === "blocked") out.blocked++; else out.passed++; };
   const byEdition = new Map<string, JobResult[]>();
@@ -101,12 +112,12 @@ export async function applyResults(repo: Repo, results: JobResult[], opts: { job
 
   for (const [editionId, group] of byEdition) {
     const edition = await repo.getEdition(editionId);
-    if (!edition) { out.skipped += group.length; continue; }
+    if (!edition || !demoStores.has(edition.storeId)) { out.skipped += group.length; continue; }
     const itemById = new Map(edition.items.map((i) => [i.id, i]));
     const forItems = new Map(group.filter((r) => itemById.has(r.itemId)).map((r) => [r.itemId, r]));
     const forCards = group.filter((r) => !itemById.has(r.itemId));
 
-    // Copy that still matches what the job was sent, at the version we read. The edit below re-checks the version.
+    // Copy that still matches what the job was sent, at the version read now. The write below re-checks that version.
     const readVersion = new Map<string, number>();
     for (const [itemId] of forItems) {
       const item = itemById.get(itemId)!;

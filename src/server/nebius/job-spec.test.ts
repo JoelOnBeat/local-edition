@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildLocalEditionJob, MAX_INJECTED_FILE_BYTES, RUN_SH, timestamp } from "./job-spec";
+import { gzipSync } from "node:zlib";
+import { buildLocalEditionJob, localEditionJobName, MAX_INJECTED_FILE_BYTES, MAX_INJECTED_TOTAL_BYTES, RUN_SH, timestamp } from "./job-spec";
 
 const bundle = {
   "certify.py": "#!/usr/bin/env python3\nprint('certify')\n",
@@ -85,13 +86,75 @@ describe("buildLocalEditionJob", () => {
     expect(() => buildLocalEditionJob({ ...base, ...patch } as never)).toThrowError(expect.objectContaining({ code: "nebius_bad_request" }));
   });
 
-  it("accepts a file of exactly 64 KiB", () => {
-    const big = { ...bundle, "rails/big.txt": "a".repeat(MAX_INJECTED_FILE_BYTES) };
+  it("accepts a file that nearly fills the total allowance (a lone 64 KiB file no longer fits: base64 counts toward 64 KiB in all)", () => {
+    const big = { ...bundle, "rails/big.txt": "a".repeat(45_000) };
     expect(() => buildLocalEditionJob({ ...base, bundle: big })).not.toThrow();
   });
 
   it("counts multi-byte characters in bytes, not characters", () => {
     const big = { ...bundle, "rails/big.txt": "é".repeat(MAX_INJECTED_FILE_BYTES / 2 + 1) };
     expect(() => buildLocalEditionJob({ ...base, bundle: big })).toThrowError(expect.objectContaining({ code: "nebius_bad_request" }));
+  });
+
+  it("M4: run.sh installs first (binary wheels only, hashes required) and reads the secret files only afterwards", () => {
+    const install = RUN_SH.indexOf("pip install");
+    const secrets = RUN_SH.indexOf("/opt/le-secrets");
+    expect(install).toBeGreaterThan(0);
+    expect(secrets).toBeGreaterThan(install);
+    expect(RUN_SH.slice(install, RUN_SH.indexOf("\n", install))).toMatch(/--only-binary :all: --require-hashes --no-deps -r requirements\.txt/);
+    // No export of anything before the install line.
+    expect(RUN_SH.slice(0, install)).not.toMatch(/export /);
+  });
+
+  it("M4: the committed requirements pin every package by version and hash", async () => {
+    const { JOB_BUNDLE } = await import("../jobs/job-bundle.generated");
+    const text = JOB_BUNDLE["requirements.txt"];
+    const entries = text.split(/\n(?=[A-Za-z0-9])/).filter((e) => e.trim());
+    expect(entries.length).toBeGreaterThan(30);
+    for (const entry of entries) {
+      expect(entry, entry.slice(0, 40)).toMatch(/^[A-Za-z0-9._-]+==[0-9][^\s]*( \\)?\n\s+--hash=sha256:[0-9a-f]{64}/);
+    }
+    expect(text).toMatch(/^nemoguardrails==0\.24\.1 /m);
+    expect(text).not.toMatch(/^[^#\s-][^=\n]*$/m); // no unpinned line
+  });
+
+  it("names the job from the modes and the time, the same name buildLocalEditionJob uses", () => {
+    expect(localEditionJobName(["certify", "eval"], new Date("2026-11-02T00:07:30Z"))).toBe("local-edition-certify-eval-202611020007");
+    expect(buildLocalEditionJob({ ...base, modes: ["certify", "eval"] }).name).toBe(localEditionJobName(["certify", "eval"], base.now));
+  });
+
+  it("printOnly: eval alone, no APP_URL and no job secret, EVAL_PRINT=1, and still the model key as a secret file", () => {
+    const { request } = buildLocalEditionJob({ modes: ["eval"], printOnly: true, bundle, secrets: { NEBIUS_API_KEY: "k".repeat(30) }, now: base.now });
+    const env = Object.fromEntries((request.spec.environmentVariables ?? []).map((e) => [e.name, e.value]));
+    expect(env).toMatchObject({ EVAL_PRINT: "1" });
+    expect(env).not.toHaveProperty("APP_URL");
+    const paths = (request.spec.injectedFiles ?? []).map((f) => f.containerPath);
+    expect(paths).toContain("/opt/le-secrets/NEBIUS_API_KEY");
+    expect(paths).not.toContain("/opt/le-secrets/LE_JOB_SECRET");
+    expect(request.spec.args).toBe("/opt/le/run.sh eval");
+    expect(() => buildLocalEditionJob({ modes: ["certify"], printOnly: true, bundle })).toThrowError(expect.objectContaining({ code: "nebius_bad_request" }));
+  });
+
+  it("sends one gzipped pack instead of the loose files when given, and run.sh unpacks it", () => {
+    const pack = gzipSync(Buffer.from(JSON.stringify(bundle))).toString("base64");
+    const { request } = buildLocalEditionJob({ ...base, pack, secrets: { NEBIUS_API_KEY: "k".repeat(30) } });
+    const paths = (request.spec.injectedFiles ?? []).map((f) => f.containerPath);
+    expect(paths).toEqual(["/opt/le/run.sh", "/opt/le/bundle.json.gz", "/opt/le-secrets/LE_JOB_SECRET", "/opt/le-secrets/NEBIUS_API_KEY"]);
+    expect((request.spec.injectedFiles ?? [])[1].content).toBe(pack);
+    expect(RUN_SH).toContain("bundle.json.gz");
+    expect(RUN_SH.indexOf("bundle.json.gz")).toBeLessThan(RUN_SH.indexOf("pip install"));
+  });
+
+  it("refuses a request whose injected files add up to more than Nebius accepts (the dry run does not check this)", () => {
+    // Four 20 KB files: each is under 64 KiB, together they are over (base64 counts).
+    const loose = Object.fromEntries([0, 1, 2, 3].map((i) => [`rails/f${i}.txt`, "a".repeat(20_000)]));
+    expect(() => buildLocalEditionJob({ ...base, bundle: { ...bundle, ...loose } })).toThrowError(
+      expect.objectContaining({ code: "nebius_bad_request", message: expect.stringContaining(String(MAX_INJECTED_TOTAL_BYTES)) }),
+    );
+  });
+
+  it("rejects a pack that is not base64 or is over 64 KiB", () => {
+    expect(() => buildLocalEditionJob({ ...base, pack: "not base64!" })).toThrowError(expect.objectContaining({ code: "nebius_bad_request" }));
+    expect(() => buildLocalEditionJob({ ...base, pack: "A".repeat(90_000) })).toThrowError(expect.objectContaining({ code: "nebius_bad_request" }));
   });
 });

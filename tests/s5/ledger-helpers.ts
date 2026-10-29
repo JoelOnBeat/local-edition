@@ -1,5 +1,6 @@
 import { recordSteps, recordVerifierCounts } from "@/server/agent/stats";
 import { createLedger } from "@/server/tavily/budget";
+import { cacheOfRepo } from "@/server/tavily/cache";
 import type { Repo } from "@/server/store";
 
 /** One recorded model call, as the build writes it (`agent/stats.ts`). */
@@ -12,6 +13,5 @@ export const recordEditions = (repo: Repo, n: number) => recordSteps(repo, [], n
 /** Items the evidence verifier dropped. */
 export const recordDropped = (repo: Repo, n: number) => recordVerifierCounts(repo, { noEvidence: n });
 
-/** Tavily credits a workspace spent, through the same counter that enforces its daily cap. */
-export const recordTavily = (repo: Repo, workspaceId: string, credits: number) =>
-  createLedger({ get: (k) => repo.cacheGet(k), put: (k, v, ttl) => repo.cachePut(k, v, ttl) }).reserve(workspaceId, credits);
+/** Tavily credits the app spent, through the same GLOBAL counter that enforces the total and the daily slice. */
+export const recordTavily = (repo: Repo, credits: number) => createLedger(cacheOfRepo(repo), undefined, { stub: null }).reserve(credits);

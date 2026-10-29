@@ -1,7 +1,8 @@
 import type { Edition, StaffCard, Workspace } from "@/contract";
 import { newId, newToken } from "@/lib/ids";
 import { HttpError } from "./http/errors";
-import { clientIp } from "./limits";
+import { clientIp, ipHash } from "./limits";
+import { serial } from "./serial";
 import { sampleSeed } from "./sample/chain";
 import { getRepo, remapId, workspaceSuffix, WorkspaceExistsError, type Repo, type SeedWithId } from "./store";
 
@@ -29,6 +30,11 @@ export interface NewWorkspaceLimit {
   refillSeconds: number;
 }
 export const DEFAULT_LIMIT: NewWorkspaceLimit = { capacity: 10, refillSeconds: 300 };
+/**
+ * Most new visitor workspaces the whole app creates in one hour, whoever asks. Each one seeds a copy of the sample chain
+ * into D1, and per-network buckets alone cannot stop a spread of networks (or a lost client address) from filling it.
+ */
+export const GLOBAL_WORKSPACES_PER_HOUR = 60;
 
 export function readCookie(request: Request, name: string): string | null {
   const header = request.headers.get("cookie");
@@ -58,22 +64,33 @@ function isSecure(request: Request): boolean {
   return new URL(request.url).protocol === "https:" || request.headers.get("x-forwarded-proto") === "https";
 }
 
-async function ipKey(ip: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(ip));
-  return [...new Uint8Array(digest)].slice(0, 8).map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
 interface Bucket { tokens: number; at: number }
 
-/** Simple token bucket kept in the repo cache (raw IPs are never stored, only a short hash). */
+/**
+ * Simple token bucket kept in the repo cache (raw IPs are never stored, only a short hash). `ip` is the rate-limit
+ * key from `clientIp`: an IPv4 address or an IPv6 /64.
+ */
 export async function takeWorkspaceToken(repo: Repo, ip: string, limit: NewWorkspaceLimit, now = Date.now()): Promise<boolean> {
-  const key = `rl:ws:${await ipKey(ip)}`;
-  const prev = await repo.cacheGet<Bucket>(key);
-  const earned = prev ? ((now - prev.at) / 1000) / limit.refillSeconds : 0;
-  const tokens = Math.min(limit.capacity, (prev?.tokens ?? limit.capacity) + earned);
-  if (tokens < 1) return false;
-  await repo.cachePut<Bucket>(key, { tokens: tokens - 1, at: now }, Math.ceil(limit.capacity * limit.refillSeconds) + 60);
-  return true;
+  const key = `rl:ws:${await ipHash(ip)}`;
+  return serial(key, async () => {
+    const prev = await repo.cacheGet<Bucket>(key);
+    const earned = prev ? ((now - prev.at) / 1000) / limit.refillSeconds : 0;
+    const tokens = Math.min(limit.capacity, (prev?.tokens ?? limit.capacity) + earned);
+    if (tokens < 1) return false;
+    await repo.cachePut<Bucket>(key, { tokens: tokens - 1, at: now }, Math.ceil(limit.capacity * limit.refillSeconds) + 60);
+    return true;
+  });
+}
+
+/** App-wide cap on new workspaces per clock hour (a fixed window in the repo cache; best effort across isolates). */
+export async function takeGlobalWorkspaceSlot(repo: Repo, perHour = GLOBAL_WORKSPACES_PER_HOUR, now = Date.now()): Promise<boolean> {
+  const key = `rl:ws:global:${Math.floor(now / 3_600_000)}`;
+  return serial(key, async () => {
+    const used = (await repo.cacheGet<{ n: number }>(key))?.n ?? 0;
+    if (used >= perHour) return false;
+    await repo.cachePut(key, { n: used + 1 }, 2 * 3600);
+    return true;
+  });
 }
 
 /** The canonical demo workspace (sample chain with canonical ids). Created on first use. */
@@ -135,8 +152,13 @@ export async function resolveWorkspace(
   const cookie = readCookie(request, WORKSPACE_COOKIE);
   if (cookie && cookie !== DEMO_WORKSPACE_ID && (await store.getWorkspace(cookie))) return { workspaceId: cookie };
 
+  // A request with no client address shares the "unknown" bucket. In production that means Cloudflare's
+  // `cf-connecting-ip` did not survive the Pages hop (see `clientIp`), so the whole site would share ten workspaces.
   if (!(await takeWorkspaceToken(store, clientIp(request), limit))) {
     throw new HttpError(429, "rate_limited", "Too many new workspaces from this network. Try again in a few minutes.");
+  }
+  if (!(await takeGlobalWorkspaceSlot(store))) {
+    throw new HttpError(429, "workspace_cap", "A lot of new visitors have arrived in the last hour. Try again in a few minutes.");
   }
   const workspace = await createVisitorWorkspace(store);
   return { workspaceId: workspace.id, setCookie: buildSetCookie(workspace.id, isSecure(request)) };

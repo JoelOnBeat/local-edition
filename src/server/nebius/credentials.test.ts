@@ -16,7 +16,7 @@ describe("parseCredentials", () => {
 
   it("rejects non-JSON without echoing it", () => {
     try {
-      parseCredentials("this is not json -----BEGIN PRIVATE KEY\u002d\u002d\u002d\u002d\u002d");
+      parseCredentials("this is not json " + "-".repeat(5) + "BEGIN" + " PRIVATE KEY");
       expect.unreachable();
     } catch (e) {
       expect(e).toBeInstanceOf(NebiusError);

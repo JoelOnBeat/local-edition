@@ -4,7 +4,7 @@ import { getPendingJobs, postJobEval, postJobResults } from "@/server/handlers/j
 import { readJobRuns } from "@/server/handlers/proof-ledger";
 import { EVAL_KEY } from "@/server/jobs/batch-runs";
 import { itemText } from "@/server/jobs/certify";
-import { signBody as hmacHex } from "@/server/jobs/hmac";
+import { signRequest } from "@/server/jobs/hmac";
 import { ensureDemoWorkspace } from "@/server/session";
 import type { Repo } from "@/server/store";
 import { cardFor, cleanEdition, fakePorts, freshApp, req } from "../e/helpers";
@@ -31,7 +31,7 @@ beforeEach(async () => {
 /** Scheme 2: header timestamp, signature over "<ts>." + body. */
 async function get(path: string, o: { ts?: number; secret?: string; signature?: string; headers?: Record<string, string> } = {}) {
   const ts = String(o.ts ?? nextTs());
-  const signature = o.signature ?? (await hmacHex(o.secret ?? SECRET, `${ts}.`));
+  const signature = o.signature ?? (await signRequest(o.secret ?? SECRET, { method: "GET", path: path.split("?")[0], ts }));
   return getPendingJobs(req(path, { method: "GET", headers: { "x-le-timestamp": ts, "x-le-signature": signature, ...o.headers } }));
 }
 
@@ -39,7 +39,7 @@ type Handler = typeof postJobResults;
 /** Scheme 1: `ts` in the JSON body, signature over the raw bytes. */
 async function signedPost(handler: Handler, path: string, body: Record<string, unknown>, o: { secret?: string; raw?: string } = {}) {
   const raw = o.raw ?? JSON.stringify({ ts: nowSec(), ...body });
-  return handler(req(path, { method: "POST", headers: { "content-type": "application/json", "x-le-signature": await hmacHex(o.secret ?? SECRET, raw) }, body: raw }));
+  return handler(req(path, { method: "POST", headers: { "content-type": "application/json", "x-le-signature": await signRequest(o.secret ?? SECRET, { method: "POST", path }, raw) }, body: raw }));
 }
 
 const verdict = (status: "passed" | "blocked", over: Record<string, unknown> = {}) => ({
@@ -75,7 +75,7 @@ describe("GET /api/jobs/pending", () => {
 
   it("the signature covers the timestamp: a captured signature with a newer ts is refused", async () => {
     const ts = nowSec() - 10;
-    const signature = await hmacHex(SECRET, `${ts}.`);
+    const signature = await signRequest(SECRET, { method: "GET", path: "/api/jobs/pending", ts: String(ts) });
     const res = await getPendingJobs(req("/api/jobs/pending", { headers: { "x-le-timestamp": String(ts + 5), "x-le-signature": signature } }));
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ code: "bad_signature" });

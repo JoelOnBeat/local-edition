@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { GuardrailResult } from "@/contract";
+import { HttpError } from "../http/errors";
 import { chatBody, jsonRes, scriptedTf } from "../tokenfactory/test-utils";
 import { checkCopy, checkCopyDetailed, MAX_TEXT, RAIL_CLAIMS, RAIL_INJECTION, RAIL_SELF_CHECK, resetGuardrailsBreaker } from "./client";
 
@@ -55,20 +56,26 @@ describe("live check: our rules run first and save the model call", () => {
     expect(calls).toHaveLength(0);
     expect((await checkCopy({ text, kind: "card", brandVoice: voice }, { tokenFactory: tf })).rail).toBe(RAIL_INJECTION);
     const other = await checkCopy({ text, kind: "special", brandVoice: voice }, { tokenFactory: tf });
-    expect(other.status).toBe("passed");
+    expect(other.status).toBe("passed"); // the model answered "No"; only event and card copy is scanned for injection
   });
 });
 
-describe("live check: the model is not available (never `unchecked` for that)", () => {
-  it("a failing model call passes the regex rail and says the self check was skipped", async () => {
+describe("live check: the model rail did not run (M1: unchecked, never passed)", () => {
+  const skipped = (r: Awaited<ReturnType<typeof checkCopy>>) => {
+    expect(r.status).toBe("unchecked");
+    expect(r.rail).toBe(RAIL_SELF_CHECK);
+    expect(r.checkedBy).toBe("live");
+    expect(GuardrailResult.safeParse(r).success).toBe(true);
+  };
+
+  it("a failing model call is unchecked, and the reason says what was skipped and what head office must do", async () => {
     const { tf } = scriptedTf(() => jsonRes({ error: "boom" }, 500));
     const r = await checkCopy({ text: "Cold brew, 18 hours.", kind: "card", brandVoice: voice }, { tokenFactory: tf });
-    expect(r.status).toBe("passed");
-    expect(r.reasons).toEqual(["Skipped self check output: the model call failed."]);
-    expect(r.checkedBy).toBe("live");
+    skipped(r);
+    expect(r.reasons).toEqual(["Skipped self check output: the model call failed. Head office must read this copy before approving it."]);
   });
 
-  it("a failure opens a 10 s breaker: no more calls until it closes", async () => {
+  it("a failure opens a 10 s breaker: no more calls until it closes, and the copy in between is unchecked too", async () => {
     const { tf, calls } = scriptedTf(() => jsonRes({ error: "boom" }, 500));
     let t = 1_000;
     const opts = { tokenFactory: tf, now: () => t };
@@ -76,26 +83,50 @@ describe("live check: the model is not available (never `unchecked` for that)", 
     const after = calls.length;
     const r = await checkCopy({ text: "Two", kind: "card", brandVoice: voice }, opts);
     expect(calls).toHaveLength(after);
+    skipped(r);
     expect(r.reasons[0]).toMatch(/recently unreachable/);
     t += 11_000;
     await checkCopy({ text: "Three", kind: "card", brandVoice: voice }, opts);
     expect(calls.length).toBeGreaterThan(after);
   });
 
-  it("fixture mode (no live model) skips the self check; the regex rail still blocks", async () => {
+  it("fixture mode (no live model) is unchecked; the regex rail still blocks", async () => {
     const { tf } = scriptedTf(answer("Yes"), { mode: "fixture" });
     const ok = await checkCopy({ text: "Brown butter cookie.", kind: "special", brandVoice: voice }, { tokenFactory: tf });
-    expect(ok.status).toBe("passed");
+    skipped(ok);
     expect(ok.reasons[0]).toMatch(/not live in this mode/);
     const bad = await checkCopy({ text: "Boosts your immunity", kind: "special", brandVoice: voice }, { tokenFactory: tf });
     expect(bad.status).toBe("blocked");
   });
 
-  it("an answer that is neither yes nor no is skipped, never a block", async () => {
+  it("an answer that is neither yes nor no is unchecked, never a block and never a pass", async () => {
     const { tf } = scriptedTf(answer("Perhaps, hard to say."));
     const r = await checkCopy({ text: "Cardamom bun.", kind: "special", brandVoice: voice }, { tokenFactory: tf });
-    expect(r.status).toBe("passed");
+    skipped(r);
     expect(r.reasons[0]).toMatch(/not yes or no/);
+  });
+
+  it("the spend cap is unchecked, not a pass, and does not open the outage breaker", async () => {
+    const { tf, calls } = scriptedTf(answer("No"), { capUsd: 0 });
+    const opts = { tokenFactory: tf, now: () => 1_000 };
+    const r = await checkCopy({ text: "Oat flat white, steamed slow.", kind: "special", brandVoice: voice }, opts);
+    skipped(r);
+    expect(r.reasons[0]).toMatch(/spend cap/);
+    expect(calls).toHaveLength(0);
+    // Same millisecond: a breaker would answer "recently unreachable" here.
+    const again = await checkCopy({ text: "Another line.", kind: "special", brandVoice: voice }, opts);
+    expect(again.reasons[0]).toMatch(/spend cap/);
+  });
+
+  it("a Durable Object outage on the spend meter (503 spend_unavailable) is unchecked as well", async () => {
+    const { tf, meter } = scriptedTf(answer("No"));
+    meter.reserveUsd = async () => { throw new HttpError(503, "spend_unavailable", "down"); };
+    skipped(await checkCopy({ text: "Oat flat white, steamed slow.", kind: "special", brandVoice: voice }, { tokenFactory: tf }));
+  });
+
+  it("a blocked verdict still wins over a skipped model: the regex rail runs first", async () => {
+    const { tf } = scriptedTf(() => jsonRes({ error: "boom" }, 500));
+    expect((await checkCopy({ text: "A gluten-free bun", kind: "special", brandVoice: voice }, { tokenFactory: tf })).status).toBe("blocked");
   });
 });
 

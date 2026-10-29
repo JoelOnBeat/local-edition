@@ -1,4 +1,6 @@
-import { clientIp, rateLimit } from "../limits";
+import { clientIp, ipHash, rateLimit } from "../limits";
+import { DEMO_WORKSPACE_ID } from "../session";
+import { ADMISSION_USD, chargeSpendBudget } from "../spend-budget";
 import type { WsContext } from "./ws";
 
 /** Bucket sizes for the routes that spend model credits: a burst, then a steady refill per minute. */
@@ -11,15 +13,16 @@ const LIMITS = {
 
 export type SpendAction = keyof typeof LIMITS;
 
-/** A short hash, so a raw IP address is never part of a stored key. */
-async function ipHash(ip: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(ip));
-  return [...new Uint8Array(digest)].slice(0, 8).map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-/** Throws 429 `rate_limited` when this workspace, or this network address, has used up its allowance. */
+/**
+ * Throws 429 `rate_limited` when this workspace, or this network address, has used up its request allowance, then
+ * charges the action's dollars to the workspace sub-budget ($0.40), the network's daily cap ($0.80) and the visitors'
+ * share of the shared spend cap (see `spend-budget.ts`; 429 `workspace_budget` / `ip_budget`, 402 `spend_cap`).
+ */
 export async function limitSpend(ctx: Pick<WsContext, "workspace" | "request">, action: SpendAction): Promise<void> {
   const cfg = LIMITS[action];
+  const ip = await ipHash(clientIp(ctx.request));
   await rateLimit({ key: `${action}:ws:${ctx.workspace.id}`, ...cfg.workspace });
-  await rateLimit({ key: `${action}:ip:${await ipHash(clientIp(ctx.request))}`, ...cfg.ip });
+  await rateLimit({ key: `${action}:ip:${ip}`, ...cfg.ip });
+  // The demo workspace is never reached from a cookie; the guard keeps the weekly build out of a visitor's budget if it ever is.
+  if (ctx.workspace.id !== DEMO_WORKSPACE_ID) await chargeSpendBudget({ workspaceId: ctx.workspace.id, ipKey: ip, usd: ADMISSION_USD[action] });
 }

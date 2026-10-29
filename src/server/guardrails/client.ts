@@ -51,8 +51,10 @@ export function resetGuardrailsBreaker(): void {
  *   1. event and card copy is built from web snippets: a prompt-injection phrase blocks it (our rule, mirror of injection.py);
  *   2. the regex catalogue (our rule, mirror of the NeMo `check health claims` rail): a hit blocks, no model call;
  *   3. NeMo's own `self check output` prompt on Lightning, reasoning off: "Yes" blocks;
- *   4. otherwise `passed`. If the model call is skipped (failure, no live model, a breaker after a failure) the copy
- *      still passed the regex rail and says so in `reasons`. `unchecked` is only for empty or invalid input.
+ *   4. otherwise `passed`. If the model call is skipped (failure, no live model, the breaker after a failure, an
+ *      unreadable answer, the spend cap) the copy is `unchecked`, never `passed`: the identity-targeting, hype and
+ *      brand-voice rules exist only in the model check, so head office must see the gap and approve with an override.
+ *      `unchecked` is also what empty or invalid input gets.
  * Every verdict is `checkedBy: "live"`; the NeMo library in the Nebius job re-certifies it later.
  */
 export async function checkCopyDetailed(input: CheckCopyInput, options: CheckCopyOptions = {}): Promise<CheckedCopy> {
@@ -78,15 +80,16 @@ export async function checkCopyDetailed(input: CheckCopyInput, options: CheckCop
   if (claims.length) return blocked(RAIL_CLAIMS, reasonsFor(claims));
 
   const now = options.now ?? Date.now;
+  // The regex rail passed but the model rail did not run: not a pass. The reason says what was skipped and what to do.
   const skipNote = (why: string): CheckedCopy => ({
     text: value.text,
-    result: { status: "passed", reasons: [`Skipped self check output: ${why}.`], checkedBy: "live" },
+    result: { status: "unchecked", rail: RAIL_SELF_CHECK, reasons: [`Skipped self check output: ${why}. Head office must read this copy before approving it.`], checkedBy: "live" },
   });
   if (now() < modelDownUntil) return skipNote("the model was recently unreachable");
 
   const check = await selfCheckOutput(options.tokenFactory ?? getTokenFactory(), value.text, value.kind, value.brandVoice);
   if (check.outcome === "skipped") {
-    if (check.why === "the model call failed") modelDownUntil = now() + BREAKER_MS;
+    if (!check.capped && check.why === "the model call failed") modelDownUntil = now() + BREAKER_MS;
     return skipNote(check.why);
   }
   if (check.outcome === "block") {

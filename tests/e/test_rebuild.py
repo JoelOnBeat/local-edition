@@ -35,7 +35,7 @@ def make_server(final_status="done", polls_before_done=1, accept=True):
 
         def do_POST(self):
             body = self.rfile.read(int(self.headers["content-length"]))
-            expected = hmac.new(SECRET.encode(), body, hashlib.sha256).hexdigest()
+            expected = hmac.new(SECRET.encode(), b"le2\n\nPOST\n/api/jobs/monday\n\n" + body, hashlib.sha256).hexdigest()
             state["posts"].append((json.loads(body), self.headers.get("x-le-signature") == expected))
             if not accept or self.headers.get("x-le-signature") != expected:
                 return self.reply(401, {"error": "The request signature is not valid.", "code": "bad_signature"})

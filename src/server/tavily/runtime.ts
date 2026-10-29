@@ -6,6 +6,7 @@ import type { TokenFactory } from "../tokenfactory/client";
 import { createLedger, type CreditLedger } from "./budget";
 import { repoCache, type TavilyCache } from "./cache";
 import { tavilyModeFor } from "./mode";
+import { isDemoWorkspace } from "./scope";
 
 /** Options every Tavily entry point takes. Tests pass their own seams; production passes `workspaceId` and `city`. */
 export interface TavilyOptions {
@@ -14,8 +15,13 @@ export interface TavilyOptions {
   recorder?: Recorder;
   /** The chain's city, added to the query so it searches the right town. */
   city?: string;
-  /** Whose daily credit allowance a live call draws on. */
+  /**
+   * Whose build this is. Only the demo workspace may spend a live credit, and only on its unmodified sample stores
+   * and its chain setup (see scope.ts); any other workspace reads saved results.
+   */
   workspaceId?: string;
+  /** Tests only: lift the "sample stores only" limit, so a test can exercise the ledger with any store. Production never sets it. */
+  allowAnyLive?: boolean;
   /** Result cache, used in live mode only (recordings are the cache elsewhere). Defaults to the repo cache. */
   cache?: TavilyCache;
   ledger?: CreditLedger;
@@ -36,6 +42,10 @@ export interface TavilyRuntime {
   apiKey?: string;
   clock: () => Date;
   workspaceId: string;
+  /** Live calls are allowed for this workspace (the demo's); false means every live call is refused with `tavily_budget`. */
+  liveAllowed: boolean;
+  /** Tests only: skip the sample-query check (never set in production). */
+  allowAnyLive: boolean;
   cacheOnly: boolean;
   /** Present only for live runs: replay and fixture runs cost nothing and need no cache. */
   cache: TavilyCache | null;
@@ -56,6 +66,8 @@ export async function resolveRuntime(opts: TavilyOptions): Promise<TavilyRuntime
     apiKey: live ? env.TAVILY_API_KEY : undefined,
     clock,
     workspaceId: opts.workspaceId ?? "shared",
+    liveAllowed: isDemoWorkspace(opts.workspaceId),
+    allowAnyLive: opts.allowAnyLive ?? false,
     cacheOnly: opts.cacheOnly ?? false,
     cache,
     ledger,

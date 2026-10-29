@@ -1,10 +1,11 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { D1Like, D1PreparedLike, D1Result } from "../platform/types";
 
-/** The migration files, split into single statements (D1 `exec` runs one statement per line, which cannot hold ours). */
+/** All migration files in order, split into single statements (D1 `exec` runs one statement per line, which cannot hold ours). */
 export function migrationStatements(root = process.cwd()): string[] {
-  const sql = readFileSync(join(root, "migrations", "0001_init.sql"), "utf8");
+  const dir = join(root, "migrations");
+  const sql = readdirSync(dir).filter((f) => f.endsWith(".sql")).sort().map((f) => readFileSync(join(dir, f), "utf8")).join("\n");
   return sql
     .split("\n")
     .filter((line) => !line.trim().startsWith("--"))

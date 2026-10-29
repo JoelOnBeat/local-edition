@@ -41,3 +41,37 @@ export async function verifySignature(secret: string, body: SignedBody, signatur
   if (!sig || sig.length !== 32) return false;
   return crypto.subtle.verify("HMAC", await key(secret, "verify"), sig, bytesOf(body));
 }
+
+/** What a job request's MAC covers besides the body: protocol tag, header timestamp, HTTP method, path and the job name. */
+export interface RequestScope {
+  method: string;
+  /** URL path without query or host, e.g. `/api/jobs/results`. */
+  path: string;
+  /** Epoch seconds from `x-le-timestamp`; empty for scheme 1, where `ts` is inside the signed body. */
+  ts?: string;
+  /** The job's name (`x-le-job-id`); empty for a request signed with the shared secret by an operator. */
+  jobId?: string;
+}
+
+/**
+ * The exact bytes a signature covers: `le2\n<ts>\n<METHOD>\n<path>\n<jobId>\n` then the body. Signing the method and
+ * path means a MAC captured on one endpoint is useless on another; the job name binds a derived per-job secret to its job.
+ */
+export function signedBytes(scope: RequestScope, body: SignedBody): Uint8Array<ArrayBuffer> {
+  const head = encoder.encode(`le2\n${scope.ts ?? ""}\n${scope.method.toUpperCase()}\n${scope.path}\n${scope.jobId ?? ""}\n`);
+  const payload = typeof body === "string" ? encoder.encode(body) : body;
+  const out = new Uint8Array(new ArrayBuffer(head.length + payload.length));
+  out.set(head, 0);
+  out.set(payload, head.length);
+  return out;
+}
+
+/** Hex signature of a whole request, as `jobs/le_http.py` computes it. */
+export function signRequest(secret: string, scope: RequestScope, body: SignedBody = ""): Promise<string> {
+  return signBody(secret, signedBytes(scope, body));
+}
+
+/** The per-job secret: hex HMAC-SHA256 of the job's name keyed by the shared `LE_JOB_SECRET`. Only this goes into the Nebius job. */
+export function deriveJobSecret(masterSecret: string, jobName: string): Promise<string> {
+  return signBody(masterSecret, jobName);
+}

@@ -1,7 +1,7 @@
 import type { AgentEvent } from "@/contract";
 import { openTestD1 } from "../store/d1-test-utils";
 import type { D1Like } from "../platform/types";
-import { runEditionBuild, type BuildPorts, type StepConfig, type StepLike } from "./edition-build";
+import { runEditionBuild, type BuildPorts, type StepConfig, type StepContext, type StepLike } from "./edition-build";
 import { RunLog } from "./run-log";
 import type { BuildWorkflowParams } from "./types";
 
@@ -16,10 +16,15 @@ export class FakeStep implements StepLike {
   readonly memo = new Map<string, unknown>();
   readonly attempts = new Map<string, number>();
   readonly order: string[] = [];
+  readonly sleeps: Array<[string, string | number]> = [];
   crashAfter: number | null = null;
   private fresh = 0;
 
-  async do<T>(name: string, config: StepConfig, callback: () => Promise<T>): Promise<T> {
+  async sleep(name: string, duration: string | number): Promise<void> {
+    this.sleeps.push([name, duration]);
+  }
+
+  async do<T>(name: string, config: StepConfig, callback: (ctx: StepContext) => Promise<T>): Promise<T> {
     if (this.memo.has(name)) return this.memo.get(name) as T;
     if (this.crashAfter !== null && this.fresh >= this.crashAfter) throw new CrashError("engine restarted");
     const limit = config.retries?.limit ?? 0;
@@ -27,7 +32,7 @@ export class FakeStep implements StepLike {
     for (let attempt = 0; attempt <= limit; attempt++) {
       this.attempts.set(name, attempt + 1);
       try {
-        const value = await callback();
+        const value = await callback({ attempt: attempt + 1 });
         this.memo.set(name, value === undefined ? undefined : structuredClone(value));
         this.order.push(name);
         this.fresh++;

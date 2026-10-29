@@ -5,7 +5,7 @@ import { resetEnvCache } from "@/lib/env";
 import { MemoryRecorder } from "../http/recorder";
 import { setTokenFactory } from "../tokenfactory/client";
 import { chatBody, jsonRes, scriptedTf } from "../tokenfactory/test-utils";
-import { createLedger } from "./budget";
+import { DAILY_CREDIT_SLICE, createLedger } from "./budget";
 import { generateBrandVoice, quoteOnPage, verifyLines } from "./brand-voice";
 import { memoryCache, repoCache } from "./cache";
 import { CLOCK, KEY, liveEnv, noSleep, tavilyFetch } from "./test-utils";
@@ -27,7 +27,7 @@ function setup(answer: unknown = GOOD) {
   const net = tavilyFetch({ crawl: (body) => ({ base_url: body.url, results: PAGES }) });
   const tf = scriptedTf(() => jsonRes(chatBody(JSON.stringify(answer))));
   const cache = memoryCache();
-  const opts = { env: liveEnv, fetchImpl: net.fetchImpl, tf: tf.tf, cache, ledger: createLedger(cache, CLOCK), workspaceId: "ws_a", clock: CLOCK, sleep: noSleep, recorder: new MemoryRecorder() };
+  const opts = { env: liveEnv, fetchImpl: net.fetchImpl, tf: tf.tf, cache, ledger: createLedger(cache, CLOCK, { stub: null }), workspaceId: "demo", clock: CLOCK, sleep: noSleep, recorder: new MemoryRecorder() };
   return { net, tf, cache, opts };
 }
 
@@ -46,19 +46,78 @@ describe("T3 brand voice from one Tavily crawl", () => {
     expect(r.sources.at(-1)).toMatchObject({ source: "tokenfactory", endpoint: "/chat/completions" });
     expect(JSON.stringify(r)).not.toContain(KEY);
     expect((tf.calls[0].body.messages as { content: string }[])[0].content).toMatch(/untrusted/);
-    expect(await opts.ledger.used("ws_a")).toMatchObject({ today: 3 });
+    expect(await opts.ledger.usage()).toMatchObject({ today: 3, total: 3 });
   });
 
-  it("serves the saved result on the next call: at most one crawl per chain", async () => {
+  it("serves the saved result on the next call for the same chain and address: one crawl", async () => {
     const { net, opts, tf } = setup();
     await generateBrandVoice(CHAIN, "https://kettleandkiln.com/", opts);
-    const again = await generateBrandVoice(CHAIN, "https://kettleandkiln.com/another", opts);
+    const again = await generateBrandVoice(CHAIN, "https://kettleandkiln.com/", opts);
     expect(again.cached).toBe(true);
     expect(again.lines).toHaveLength(3);
     expect(net.count("crawl")).toBe(1);
     expect(tf.calls).toHaveLength(1);
     const other = await generateBrandVoice({ id: "chain_b", name: "Other" }, "https://other.example.com/", opts);
     expect(other.cached).toBe(false);
+  });
+
+  it("keys the saved voice by chain AND address: another address is crawled, never answered with the old lines", async () => {
+    const { net, opts } = setup();
+    const first = await generateBrandVoice(CHAIN, "https://kettleandkiln.com/", opts);
+    const second = await generateBrandVoice(CHAIN, "https://kettleandkiln.example.org/", opts);
+    expect(second.cached).toBe(false);
+    expect(net.count("crawl")).toBe(2);
+    expect(first.sources[0].params.url).toBe("https://kettleandkiln.com");
+    expect(second.sources[0].params.url).toBe("https://kettleandkiln.example.org");
+  });
+
+  it("remembers a failed crawl for 24 hours, so a retry does not buy another 3 credits, then tries again", async () => {
+    let now = Date.parse("2026-10-29T04:00:00Z");
+    const cache = memoryCache(() => now);
+    let status = 422;
+    let calls = 0;
+    const fetchImpl = (async () => { calls++; return new Response(JSON.stringify({ detail: "no" }), { status, headers: { "content-type": "application/json" } }); }) as unknown as typeof fetch;
+    const opts = { ...setup().opts, cache, fetchImpl, ledger: createLedger(cache, CLOCK, { stub: null }) };
+    await expect(generateBrandVoice(CHAIN, "https://down.example.com/", opts)).rejects.toMatchObject({ status: 422, code: "crawl_failed" });
+    await expect(generateBrandVoice(CHAIN, "https://down.example.com/", opts)).rejects.toMatchObject({ status: 422, code: "crawl_failed" });
+    expect(calls).toBe(1);
+    // Another address is its own key.
+    await expect(generateBrandVoice(CHAIN, "https://other-down.example.com/", opts)).rejects.toMatchObject({ code: "crawl_failed" });
+    expect(calls).toBe(2);
+    now += 24 * 3600 * 1000 + 1000;
+    status = 422;
+    await expect(generateBrandVoice(CHAIN, "https://down.example.com/", opts)).rejects.toMatchObject({ code: "crawl_failed" });
+    expect(calls).toBe(3);
+  });
+
+  it("remembers an empty crawl (no_site_text) too, and a transient 503 is not remembered", async () => {
+    const { opts } = setup();
+    const empty = tavilyFetch({ crawl: () => ({ results: [{ url: "https://x.com/", raw_content: "ok" }] }) });
+    const o = { ...opts, fetchImpl: empty.fetchImpl };
+    await expect(generateBrandVoice(CHAIN, "https://x.com/", o)).rejects.toMatchObject({ code: "no_site_text" });
+    await expect(generateBrandVoice(CHAIN, "https://x.com/", o)).rejects.toMatchObject({ code: "no_site_text" });
+    expect(empty.count("crawl")).toBe(1);
+
+    let calls = 0;
+    const flaky = (async () => { calls++; return new Response("no", { status: 503 }); }) as unknown as typeof fetch;
+    await expect(generateBrandVoice(CHAIN, "https://y.com/", { ...opts, fetchImpl: flaky })).rejects.toBeTruthy();
+    const first = calls;
+    await expect(generateBrandVoice(CHAIN, "https://y.com/", { ...opts, fetchImpl: flaky })).rejects.toBeTruthy();
+    expect(calls).toBeGreaterThan(first);
+  });
+
+  it("puts only http(s) page addresses into the evidence rows", async () => {
+    const pages = [
+      { url: "javascript:alert(1)//about", raw_content: PAGES[0].raw_content },
+      { url: "https://kettleandkiln.com/visit", raw_content: PAGES[1].raw_content },
+    ];
+    const net = tavilyFetch({ crawl: (body) => ({ base_url: body.url, results: pages }) });
+    const { opts } = setup();
+    const r = await generateBrandVoice(CHAIN, "https://kettleandkiln.com/", { ...opts, fetchImpl: net.fetchImpl });
+    const tavily = r.sources.filter((s) => s.source === "tavily");
+    expect(tavily.length).toBeGreaterThan(0);
+    expect(tavily.every((s) => s.url === undefined || /^https?:\/\//.test(s.url))).toBe(true);
+    expect(tavily.find((s) => s.summary.includes("remember your order"))!.url).toBeUndefined();
   });
 
   it("drops lines whose quote is not on the page and refuses with 422 when none survive", async () => {
@@ -74,15 +133,22 @@ describe("T3 brand voice from one Tavily crawl", () => {
     await expect(generateBrandVoice(CHAIN, "http://169.254.169.254/", opts)).rejects.toMatchObject({ status: 400, code: "private_url" });
     await expect(generateBrandVoice(CHAIN, "ftp://x.com/", opts)).rejects.toMatchObject({ status: 400, code: "invalid_url" });
     expect(net.calls).toHaveLength(0);
-    expect(await opts.ledger.used("ws_a")).toMatchObject({ today: 0 });
+    expect(await opts.ledger.usage()).toMatchObject({ today: 0, total: 0 });
   });
 
-  it("answers 429 tavily_budget when the workspace has under 3 credits left, with no call out", async () => {
+  it("answers 429 tavily_budget when today's slice has under 3 credits left, with no call out", async () => {
     const { net, opts, cache } = setup();
-    const ledger = createLedger(cache, CLOCK);
-    await ledger.reserve("ws_a", 8);
+    const ledger = createLedger(cache, CLOCK, { stub: null });
+    await ledger.reserve(DAILY_CREDIT_SLICE - 2);
     await expect(generateBrandVoice(CHAIN, "https://kettleandkiln.com/", { ...opts, ledger })).rejects.toMatchObject({ status: 429, code: "tavily_budget" });
     expect(net.calls).toHaveLength(0);
+  });
+
+  it("allows the chain-setup crawl live only in the demo workspace: a visitor's gets 429 tavily_budget and no call", async () => {
+    const { net, opts } = setup();
+    await expect(generateBrandVoice(CHAIN, "https://kettleandkiln.com/", { ...opts, workspaceId: "ws_visitor" })).rejects.toMatchObject({ status: 429, code: "tavily_budget" });
+    expect(net.calls).toHaveLength(0);
+    expect(await opts.ledger.usage()).toMatchObject({ total: 0 });
   });
 
   it("answers 422 no_site_text when the crawl returns nothing readable", async () => {
@@ -147,18 +213,19 @@ describe("T4 POST /api/chain/brand-voice", () => {
     expect(bad.status).toBe(400);
   });
 
-  it("answers 429 tavily_budget for a workspace with under 3 credits left, and a second call serves the saved voice", async () => {
+  it("answers 429 tavily_budget with the saved-events message for a visitor workspace in live mode, with no credit spent", async () => {
     process.env.TAVILY_MODE = "live";
     process.env.TAVILY_API_KEY = KEY;
     resetEnvCache();
     const mint = await post({});
     const cookie = mint.headers.get("set-cookie")!.split(";")[0];
     const id = decodeURIComponent(cookie.split("=")[1]);
-    await createLedger(await repoCache()).reserve(id, 9);
+    expect(id).toMatch(/^ws_/);
     const res = await POST(new Request("http://localhost/api/chain/brand-voice", {
       method: "POST", headers: { "content-type": "application/json", cookie }, body: JSON.stringify({ url: "https://kettleandkiln.com/" }),
     }));
     expect(res.status).toBe(429);
     expect(await res.json()).toMatchObject({ code: "tavily_budget", error: expect.stringContaining("saved events") });
+    expect((await createLedger(await repoCache(), undefined, { stub: null }).usage()).total).toBe(0);
   });
 });

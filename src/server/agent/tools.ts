@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { ChatToolSpec } from "./ports";
 import { menuMatch, partnersRank } from "./tools-match";
 import { hostOf, round, type ToolDef } from "./tool-types";
+import { TavilyBudgetError } from "../tavily/budget";
 import { clip } from "./util";
 
 export { storeBrief, type ToolCtx, type ToolDef, type ToolOutcome } from "./tool-types";
@@ -134,7 +135,19 @@ const eventsThisWeek: ToolDef<typeof emptyArgs> = {
   parameters: noParams,
   schema: emptyArgs,
   async run({ sc, deps, mem }) {
-    const { items, evidence } = await deps.tavily.eventsThisWeek(sc.store, sc.chain, sc.weekOf);
+    let found;
+    try {
+      found = await deps.tavily.eventsThisWeek(sc.store, sc.chain, sc.weekOf);
+    } catch (e) {
+      // No live search for this call (not the weekly sample build, or the credits are spent): say so, and carry on without an event tie-in.
+      if (!(e instanceof TavilyBudgetError)) throw e;
+      return {
+        summary: "Using this week's saved events: live web search is not available for this store",
+        payload: { events: [], note: e.message },
+        evidenceIds: [],
+      };
+    }
+    const { items, evidence } = found;
     const ids = mem.addEvidence(evidence);
     const entries = mem.addEvents(items);
     return {

@@ -25,11 +25,15 @@ export class BuildLockCore implements BuildLockStub {
     return run;
   }
 
-  acquire(ttlSeconds: number): Promise<string | null> {
+  /**
+   * `token` lets a caller name its own token: asking again with the token that holds the lock extends it (a retried
+   * Workflow step takes its own lock back) instead of failing. Without one, a fresh random token is issued.
+   */
+  acquire(ttlSeconds: number, token?: string): Promise<string | null> {
     return this.exclusive(async () => {
       const held = await this.storage.get<Held>(KEY);
-      if (held && held.expiresAt > this.now()) return null;
-      const token = newToken();
+      if (held && held.expiresAt > this.now() && !(token && held.token === token)) return null;
+      token = token ?? newToken();
       await this.storage.put(KEY, { token, expiresAt: this.now() + ttlSeconds * 1000 } satisfies Held);
       return token;
     });

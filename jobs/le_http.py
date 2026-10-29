@@ -1,10 +1,13 @@
 """Signed HTTP for the Local Edition jobs. Standard library only (this module runs before any pip install matters).
 
-Two signing schemes, both HMAC-SHA256 hex keyed by LE_JOB_SECRET, header `x-le-signature`:
-  - JSON POST with a `ts` field in the body (results, eval): the signature covers the raw body bytes.
-  - Header timestamp (GET pending, CSV import): header `x-le-timestamp` = epoch seconds, and the signature
-    covers  "<ts>." + body  so the timestamp cannot be swapped on a captured request.
-The server accepts a request for 300 s and once only.
+Two signing schemes, both HMAC-SHA256 hex, header `x-le-signature`. The signature covers
+  "le2\n<ts>\n<METHOD>\n<path>\n<job id>\n" + body
+so a captured request cannot be replayed on another endpoint, with another method or with a swapped timestamp:
+  - JSON POST with a `ts` field in the body (results, eval): <ts> in the prefix is empty, `ts` is inside the body.
+  - Header timestamp (GET pending, CSV import): header `x-le-timestamp` = epoch seconds, repeated in the prefix.
+Every request also sends `x-le-job-id` (the Nebius job name). The key is LE_JOB_SECRET, which inside a Nebius job is
+the per-job secret HMAC(shared secret, job name): the app accepts it only for that name, only on the job endpoints
+and only within an hour of the timestamp in the name. The server accepts a request for 300 s and once only.
 """
 
 import hashlib
@@ -25,6 +28,16 @@ def log(message):
 
 def hmac_hex(secret, payload):
     return hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
+
+
+def signed_bytes(method, path, body=b"", ts="", job_id=""):
+    """The bytes the app verifies: protocol tag, header timestamp, method, path, job name, then the body."""
+    return ("le2\n%s\n%s\n%s\n%s\n" % (ts, method.upper(), path, job_id)).encode("utf-8") + body
+
+
+def derive_job_secret(master, job_name):
+    """What the Worker puts into the job: hex HMAC-SHA256 of the job name keyed by the shared secret."""
+    return hmac_hex(master, job_name.encode("utf-8"))
 
 
 def http(method, url, body=None, headers=None, timeout=60):
@@ -48,9 +61,10 @@ def error_text(payload):
 
 
 class Api:
-    def __init__(self, app_url, secret):
+    def __init__(self, app_url, secret, job_id=""):
         self.app = app_url.rstrip("/")
         self.secret = secret
+        self.job_id = job_id
 
     def _send(self, method, path, build, expect=200):
         """Rebuild and re-sign on every attempt (a signature is good once). 4xx other than 429 is final."""
@@ -75,13 +89,15 @@ class Api:
     def get_signed(self, path, extra_headers=None):
         def build():
             ts = str(int(time.time()))
-            return None, {"x-le-timestamp": ts, "x-le-signature": hmac_hex(self.secret, (ts + ".").encode()), **(extra_headers or {})}
+            sig = hmac_hex(self.secret, signed_bytes("GET", path, b"", ts, self.job_id))
+            return None, {"x-le-timestamp": ts, "x-le-signature": sig, "x-le-job-id": self.job_id, **(extra_headers or {})}
         return self._send("GET", path, build)
 
     def post_json(self, path, payload):
         def build():
             body = json.dumps({**payload, "ts": int(time.time())}, separators=(",", ":")).encode("utf-8")
-            return body, {"content-type": "application/json", "x-le-signature": hmac_hex(self.secret, body)}
+            sig = hmac_hex(self.secret, signed_bytes("POST", path, body, "", self.job_id))
+            return body, {"content-type": "application/json", "x-le-signature": sig, "x-le-job-id": self.job_id}
         return self._send("POST", path, build)
 
     def post_csv(self, path, text, extra_headers=None):
@@ -89,6 +105,6 @@ class Api:
 
         def build():
             ts = str(int(time.time()))
-            sig = hmac_hex(self.secret, (ts + ".").encode() + raw)
-            return raw, {"content-type": "text/csv", "x-le-timestamp": ts, "x-le-signature": sig, **(extra_headers or {})}
+            sig = hmac_hex(self.secret, signed_bytes("POST", path, raw, ts, self.job_id))
+            return raw, {"content-type": "text/csv", "x-le-timestamp": ts, "x-le-signature": sig, "x-le-job-id": self.job_id, **(extra_headers or {})}
         return self._send("POST", path, build)

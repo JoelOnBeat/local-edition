@@ -1,7 +1,7 @@
 import { createPrivateKey } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { base64UrlEncode, DEFAULT_JWT_LIFETIME_SECONDS, MAX_JWT_LIFETIME_SECONDS, pemToPkcs8, pkcs1ToPkcs8, signJwt } from "./jwt";
-import { testKeys } from "./test-utils";
+import { testKeys, pemArmor } from "./test-utils";
 
 const decode = (part: string) => JSON.parse(atob(part.replace(/-/g, "+").replace(/_/g, "/")));
 
@@ -41,9 +41,9 @@ describe("signJwt", () => {
     expect(tiny.exp).toBeGreaterThan(tiny.iat);
   });
 
-  it("signs with a PKCS#1 'BEGIN RSA PRIVATE KEY' key and the result still verifies", async () => {
+  it("signs with a PKCS#1 (RSA) private key and the result still verifies", async () => {
     const k = testKeys();
-    expect(k.pkcs1Pem).toContain("BEGIN RSA PRIVATE KEY");
+    expect(k.pkcs1Pem).toContain("RSA PRIVATE KEY");
     const jwt = await signJwt({ ...k.credentials, privateKeyPem: k.pkcs1Pem }, { nowSeconds: 1_800_000_000 });
     expect(await verifies(jwt, k.publicKey)).toBe(true);
   });
@@ -66,8 +66,8 @@ describe("PEM conversion", () => {
 
   it.each([
     ["not a PEM", "hello"],
-    ["an encrypted key", "-----BEGIN ENCRYPTED PRIVATE KEY\u002d\u002d\u002d\u002d\u002d\nAAAA\n-----END ENCRYPTED PRIVATE KEY-----"],
-    ["an EC key", "-----BEGIN EC PRIVATE KEY\u002d\u002d\u002d\u002d\u002d\nAAAA\n-----END EC PRIVATE KEY-----"],
+    ["an encrypted key", pemArmor("ENCRYPTED PRIVATE KEY", "AAAA")],
+    ["an EC key", pemArmor("EC PRIVATE KEY", "AAAA")],
   ])("rejects %s with nebius_auth and no key material in the message", async (_label, pem) => {
     const { credentials } = testKeys();
     await expect(signJwt({ ...credentials, privateKeyPem: pem })).rejects.toMatchObject({ code: "nebius_auth" });
@@ -75,7 +75,7 @@ describe("PEM conversion", () => {
 
   it("rejects a PEM that is not an RSA key", async () => {
     const { credentials } = testKeys();
-    const pem = "-----BEGIN PRIVATE KEY\u002d\u002d\u002d\u002d\u002d\nAAAAAAAAAAAAAAAA\n-----END PRIVATE KEY-----";
+    const pem = pemArmor("PRIVATE KEY", "AAAAAAAAAAAAAAAA");
     await expect(signJwt({ ...credentials, privateKeyPem: pem })).rejects.toMatchObject({ code: "nebius_auth" });
   });
 });

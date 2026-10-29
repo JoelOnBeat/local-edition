@@ -9,7 +9,9 @@ import { blockProfile } from "../qloo/block";
 import { brandsLocal } from "../qloo/brands";
 import { placesNear } from "../qloo/places";
 import { rising } from "../qloo/rising";
-import { eventsThisWeek } from "../tavily";
+import { TavilyBudgetError, eventChain, isDemoWorkspace, prefetchEventChains, tavilyModeFor, workspaceOfChain } from "../tavily";
+import type { EventChainBatch, EventChainResult } from "../tavily";
+import { weekPhrase } from "../tavily/request";
 import { getTokenFactory } from "../tokenfactory";
 import { getRepo } from "../store";
 import type { Repo } from "../store/repo";
@@ -89,15 +91,52 @@ function qlooPort(repo: Repo): QlooPort {
   };
 }
 
-const tavilyPort: TavilyPort = {
-  async eventsThisWeek(store: Store, chain: Chain) {
-    const r = await eventsThisWeek(store, { city: chain.city.name });
-    const items: EventCandidate[] = r.events.map((e) => ({
-      title: e.title, url: e.url, startsAt: e.date ?? null, snippet: e.snippet, evidenceIds: [r.evidence.id],
-    }));
-    return { items, evidence: [r.evidence] };
-  },
-};
+/** One prefetch per chain and week per isolate, for a quarter of an hour: the stores of one build ask in turn and share it. */
+const PREFETCH_TTL_MS = 15 * 60_000;
+const prefetches = new Map<string, { at: number; run: Promise<EventChainBatch> }>();
+
+/** Tests only. */
+export function resetTavilyPrefetch(): void {
+  prefetches.clear();
+}
+
+/**
+ * The build's and regenerate's one door to Tavily: the cached chain (search, page read, triage), never a bare search.
+ * It reads this week's saved result first; a live call happens only for the demo workspace's unmodified sample stores
+ * and is reserved against the GLOBAL credit ledger first (see `src/server/tavily/budget.ts`). Anywhere else, or when the
+ * credits are spent, it throws TavilyBudgetError and the tool tells the agent it is using this week's saved events.
+ * In live mode the demo workspace's first store to ask prefetches ALL of the chain's stores in one batch (a search each
+ * and one batched page read for the lot: 10 credits for eight stores, not 16), so the other stores' turns find their
+ * results saved.
+ */
+function tavilyPort(repo: Repo): TavilyPort {
+  return {
+    async eventsThisWeek(store: Store, chain: Chain) {
+      const opts = { workspaceId: workspaceOfChain(chain) };
+      let r: EventChainResult | undefined;
+      if (isDemoWorkspace(opts.workspaceId) && tavilyModeFor(serverEnv()).run === "live") {
+        const stores = await repo.listStores(chain.id);
+        const all = stores.some((s) => s.id === store.id) ? stores : [store, ...stores];
+        const key = `${chain.id}|${weekPhrase(new Date())}`;
+        const memo = prefetches.get(key);
+        let entry = memo && Date.now() - memo.at < PREFETCH_TTL_MS ? memo : undefined;
+        if (!entry) {
+          entry = { at: Date.now(), run: prefetchEventChains(all, chain, opts) };
+          prefetches.set(key, entry);
+          entry.run.catch(() => prefetches.delete(key));
+        }
+        r = (await entry.run).results.get(store.id);
+      }
+      r ??= await eventChain(store, chain, opts);
+      if (r.fallback === "tavily_budget") throw new TavilyBudgetError(r.budgetReason ?? "daily");
+      // Only the events Lightning kept become candidates; each carries the evidence row that backs its tie-in.
+      const items: EventCandidate[] = r.events
+        .filter((e) => e.triage.kept && e.evidenceId)
+        .map((e) => ({ title: e.title, url: e.url, startsAt: e.date, venue: e.venue, snippet: e.snippet, evidenceIds: [e.evidenceId as string] }));
+      return { items, evidence: r.evidence };
+    },
+  };
+}
 
 const tfPort: TokenFactoryPort = {
   async embed(texts) {
@@ -153,7 +192,7 @@ export async function liveAgentDeps(): Promise<AgentDeps> {
     repo,
     chat: chatClient,
     qloo: qlooPort(repo),
-    tavily: tavilyPort,
+    tavily: tavilyPort(repo),
     tf: tfPort,
     guardrails: {
       // The detailed form carries the revised text when the sidecar rewrote the copy.

@@ -1,5 +1,5 @@
 import { platformEnvSync } from "./env";
-import type { BuildLockStub, SpendMeterStub } from "./stubs";
+import type { BuildLockStub, SpendMeterStub, TavilyBudgetStub } from "./stubs";
 
 /**
  * Under `next dev` wrangler's platform proxy lists the Durable Object bindings but cannot run them ("these will
@@ -17,4 +17,10 @@ export function spendMeterStub(): SpendMeterStub | null {
 export function buildLockStub(workspaceId: string): BuildLockStub | null {
   const ns = bound()?.BUILD_LOCK;
   return ns ? ns.get(ns.idFromName(`build:${workspaceId}`)) : null;
+}
+
+/** The one global Tavily credit ledger Durable Object, or null when TAVILY_BUDGET is not bound (dev, tests). */
+export function tavilyBudgetStub(): TavilyBudgetStub | null {
+  const ns = bound()?.TAVILY_BUDGET;
+  return ns ? ns.get(ns.idFromName("global")) : null;
 }

@@ -11,7 +11,7 @@ import {
   type SpendTicket,
 } from "../http/spend";
 import { createLogger } from "../log";
-import { UpstreamError } from "../http/errors";
+import { HttpError, UpstreamError } from "../http/errors";
 import { spendMeterStub } from "../platform/adapters";
 import { getRepo } from "../store";
 import { MODELS } from "./models";
@@ -67,23 +67,24 @@ const DO_PREFIX = "do:";
 
 /**
  * The shared meter on Workers: when the SPEND_METER Durable Object is bound, reserve and settle go to it, so
- * the cap holds exactly across every isolate. Without the binding (dev, tests) or if the call fails, it is the
- * repo-backed meter above, so spend is still capped, never unmetered. A ticket remembers which side issued it.
+ * the cap holds exactly across every isolate. If the object errors, a spending call is REFUSED (503
+ * `spend_unavailable`): falling back to the repo ledger would be a second ledger that starts near zero, so the
+ * cap would reset for the length of the outage. Without the binding (dev, tests) it is the repo-backed meter
+ * above. A ticket remembers which side issued it.
  */
 class DurableSpendMeter extends TokenFactorySpendMeter {
   override async reserveUsd(estimateUsd: number): Promise<SpendTicket> {
     const stub = spendMeterStub();
-    if (stub) {
-      try {
-        const res = await stub.reserve(estimateUsd, this.cap());
-        if (res.ok) return { ...res.ticket, id: DO_PREFIX + res.ticket.id };
-        throw new UpstreamError("spend_cap", "tokenfactory", "Spend cap reached; model calls are paused.");
-      } catch (e) {
-        if (e instanceof UpstreamError) throw e;
-        log.warn("spend meter Durable Object unavailable; using the repo ledger", { err: (e as Error)?.name });
-      }
+    if (!stub) return super.reserveUsd(estimateUsd);
+    let res;
+    try {
+      res = await stub.reserve(estimateUsd, this.cap());
+    } catch (e) {
+      log.warn("spend meter Durable Object unavailable; refusing the call", { err: (e as Error)?.name });
+      throw new HttpError(503, "spend_unavailable", "The model spend meter is unavailable, so no model call was made. Try again in a moment.");
     }
-    return super.reserveUsd(estimateUsd);
+    if (!res.ok) throw new UpstreamError("spend_cap", "tokenfactory", "Spend cap reached; model calls are paused.");
+    return { ...res.ticket, id: DO_PREFIX + res.ticket.id };
   }
 
   override async settleUsd(ticket: SpendTicket, actualUsd: number): Promise<void> {

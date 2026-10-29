@@ -8,7 +8,7 @@
 import openNext from "../.open-next/worker.js";
 // @ts-ignore: same file; OpenNext's own Durable Objects (queue, tag cache), re-exported so a binding can find them.
 export { DOQueueHandler, DOShardedTagCache, BucketCachePurge } from "../.open-next/worker.js";
-export { BuildLockDO, SpendMeterDO } from "../src/server/platform/durable-objects";
+export { BuildLockDO, SpendMeterDO, TavilyBudgetDO } from "../src/server/platform/durable-objects";
 export { EditionBuild, WeeklyRebuild } from "./workflows";
 import { applyEnvToProcess, setPlatformEnv, type PlatformEnv } from "../src/server/platform/env";
 import { handleScheduled } from "../src/server/workflows/cron";
