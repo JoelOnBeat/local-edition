@@ -6,9 +6,3 @@ define flow check health claims
   if $r.is_blocked
     bot refuse to respond
     stop
-
-define flow check brand voice
-  $v = execute check_brand_voice(bot_message=$bot_message)
-  if $v.is_blocked
-    bot refuse to respond
-    stop

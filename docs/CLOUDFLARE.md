@@ -35,3 +35,32 @@ Spend: one 8-store run is about $0.09 on Token Factory (pessimistic $0.20). The 
 trial covers development; the two $25 promo credits may take days to arrive. Serve judges
 precomputed editions and rate-limit "regenerate". build.nvidia.com's free Super endpoint is
 deprecated: develop and record on Token Factory.
+
+## Nebius job spike (architect, 29 Oct 22:23 MYT, job local-edition-spike-1, deleted after)
+`nebius ai job run spike.py --name local-edition-<purpose> --platform cpu-d3 --preset 2vcpu-8gb
+--disk-size 20Gi --timeout 1h --no-output` with `requirements.txt: nemoguardrails==0.24.1`:
+COMPLETED in 253 s wall (PROVISIONING -> STARTING -> IMAGE_PULLING -> RUNNING -> COMPLETED; pip
+install included), script 0.7 s. VM: x86_64, Python 3.12.16. nemoguardrails 0.24.1 imports.
+Outbound HTTPS works (Token Factory 401 unauthenticated in 54 ms, public web 200). Cost about
+$0.005. Rules: the CLI profile acts as the account owner; name every job
+`local-edition-*`; always `--no-output` (otherwise it creates a managed bucket); `--timeout` minimum
+is 1h (billing is per second while running); delete finished test jobs; never endpoints/VMs.
+CI service account for GitHub Actions is pending the owner's OK: until then jobs start from the CLI.
+
+## Approved decisions, 29 Oct 23:00 — these override anything above
+1. Public address: the product Worker deploys with `workers_dev = false`. A Cloudflare Pages project
+   named **localedition** fronts it: `public/_worker.js` = `export default { fetch: (req, env) => env.APP.fetch(req) }`,
+   its wrangler.toml has `pages_build_output_dir` and `[[services]] binding = "APP", service = "local-edition"`.
+   Judge URL: **https://localedition.pages.dev**.
+2. GitHub is for the repository only: NO GitHub Actions, Packages/GHCR or Pages. Delete `.github/workflows/`.
+3. Nebius jobs start from Cloudflare: the cron's Workflow step calls `POST https://api.nebius.cloud/ai/v1/jobs`
+   with an IAM token for the shared service account `serviceaccount-e04jbjf4y2wmex8crk`: sign an RS256 JWT with
+   WebCrypto (`kid` = key id, `iss` = `sub` = service account id, `exp` <= 5 min), exchange it, cache the 12 h
+   token in KV. Credentials only via `wrangler secret put NEBIUS_SA_CREDENTIALS < ~/.nebius/hackathon-jobs-sa.json`
+   (never print, log, copy to .dev.vars or commit). CPU jobs in project-e04yk83jbc00bwhyv60mbp (eu-west2).
+   Test as the SA with `nebius --profile hackathon-jobs-sa`; default profile stays `hackathons`. Images: public
+   (python:3.12-slim) or Nebius Container Registry, never GHCR. Jobs are named `local-edition-*`, use no
+   output bucket, and are deleted after a test.
+4. GPU batch jobs with NVIDIA models are allowed only after an estimate is sent to the team and tallied.
+   Local Edition currently plans NO GPU job (see the cost table in the build map).
+5. Cost table: every service, what it draws from, one-month USD; flag anything per-hour or always-on.

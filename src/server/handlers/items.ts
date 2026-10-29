@@ -35,7 +35,7 @@ const RANK: Record<GuardrailResult["status"], number> = { passed: 0, rewritten: 
 export async function recheckItem(item: EditionItem, check: CheckCopy, brandVoice: string[]): Promise<EditionItem> {
   const record = item as unknown as Record<string, unknown>;
   const updates: Record<string, unknown> = {};
-  let verdict: GuardrailResult = { status: "passed", reasons: [] };
+  let verdict = null as GuardrailResult | null;
   for (const field of TEXT_FIELDS[item.kind]) {
     const value = record[field];
     const text = Array.isArray(value) ? value.join(", ") : String(value ?? "");
@@ -47,13 +47,17 @@ export async function recheckItem(item: EditionItem, check: CheckCopy, brandVoic
       result = { status: "unchecked", reasons: ["Guardrails could not be reached."] };
     }
     if (result.status === "rewritten" && result.text && !Array.isArray(value)) updates[field] = result.text;
-    if (RANK[result.status] > RANK[verdict.status]) {
-      verdict = { status: result.status, rail: result.rail, reasons: result.reasons, original: result.original ?? (result.status === "rewritten" ? text : undefined) };
-    } else if (RANK[result.status] === RANK[verdict.status] && result.status !== "passed") {
-      verdict = { ...verdict, reasons: [...new Set([...verdict.reasons, ...result.reasons])] };
+    // The verdict keeps who checked it (`checkedBy`) and every note a field of the same worst status left, such as
+    // "Skipped self check output: ..." on a pass, so an edited item is as honest as a built one.
+    const prev = verdict;
+    if (!prev || RANK[result.status] > RANK[prev.status]) {
+      verdict = { status: result.status, rail: result.rail, reasons: result.reasons, checkedBy: result.checkedBy ?? "live", original: result.original ?? (result.status === "rewritten" ? text : undefined) };
+    } else if (RANK[result.status] === RANK[prev.status]) {
+      verdict = { ...prev, reasons: [...new Set([...prev.reasons, ...result.reasons])] };
     }
   }
-  const guardrail: GuardrailResult = { status: verdict.status, reasons: verdict.reasons, ...(verdict.rail ? { rail: verdict.rail } : {}), ...(verdict.original ? { original: verdict.original } : {}) };
+  const final: GuardrailResult = verdict ?? { status: "passed", reasons: [], checkedBy: "live" };
+  const guardrail: GuardrailResult = { status: final.status, reasons: final.reasons, checkedBy: final.checkedBy, ...(final.rail ? { rail: final.rail } : {}), ...(final.original ? { original: final.original } : {}) };
   const status = guardrail.status === "blocked" ? "flagged" : "edited";
   return { ...item, ...updates, guardrail, status } as EditionItem;
 }

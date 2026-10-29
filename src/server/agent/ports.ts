@@ -2,6 +2,7 @@ import type {
   BlockProfile,
   Chain,
   DataMode,
+  ModelRole,
   Evidence,
   GuardrailResult,
   MenuItem,
@@ -9,6 +10,7 @@ import type {
   Store,
 } from "@/contract";
 import type { Repo } from "../store/repo";
+import type { StepSink } from "./metrics";
 
 /**
  * Everything the edition agent needs from other streams, as narrow ports. `deps.ts` is the only
@@ -19,6 +21,9 @@ import type { Repo } from "../store/repo";
 export const AGENT_MODEL = "nvidia/Nemotron-3.5-Super-VL";
 export const COPY_MODEL = "nvidia/Nemotron-3_5-Lightning";
 export const FALLBACK_AGENT_LABEL = "deterministic-plan";
+/** Head office reviewer (cross-store pass). Falls back to the agent model with an honest `reviewedBy`. */
+export const REVIEW_MODEL = "nvidia/Nemotron-3-Ultra-550b-a55b";
+export const REVIEW_FALLBACK_MODEL = AGENT_MODEL;
 
 // ---- Chat (OpenAI-compatible, Token Factory) -------------------------------------------------
 
@@ -41,6 +46,9 @@ export interface ChatToolSpec {
   parameters: Record<string, unknown>;
 }
 
+/** Provider thinking control (see tokenfactory/reasoning.ts): `off` for copy and JSON, `default` for the tool loop. */
+export type Reasoning = "off" | "low" | "default";
+
 export interface ChatRequest {
   model: string;
   messages: ChatMessage[];
@@ -48,11 +56,28 @@ export interface ChatRequest {
   temperature?: number;
   maxTokens?: number;
   timeoutMs?: number;
+  reasoning?: Reasoning;
+  /** Strict structured output: the provider is asked for JSON matching this schema. */
+  responseFormat?: { name: string; schema: Record<string, unknown> };
+  /** Which job this call does, for `step_metrics`. Defaults from the model id (Lightning is copy, Ultra is review). */
+  role?: ModelRole;
+  /** Names the call in `step_metrics` when it has no tool calls of its own (for example `write_copy`). */
+  tag?: string;
+}
+
+export interface ChatUsage {
+  promptTokens: number;
+  /** Prompt tokens served from the provider's implicit prefix cache. */
+  cachedTokens: number;
+  completionTokens: number;
+  reasoningTokens?: number;
 }
 
 export interface ChatResponse {
   content: string | null;
   toolCalls: ChatToolCall[];
+  /** The provider's usage. When absent, `step_metrics` falls back to a characters-per-token estimate. */
+  usage?: ChatUsage;
 }
 
 export interface ChatClient {
@@ -110,8 +135,20 @@ export interface EventCandidate {
   evidenceIds: string[];
 }
 
+/** One tag of the cached city baseline. `group` is the tag namespace urn of the list it came from (its lowest affinity is the floor for tags the list lacks). */
+export interface BaselineTag {
+  tagId: string;
+  affinity: number;
+  group: string;
+}
+
 export interface QlooPort {
   blockProfile(store: Store, chain: Chain): Promise<{ profile: BlockProfile; evidence: Evidence[] }>;
+  /**
+   * The cached city baseline the block profile's lifts were measured against (tag id and affinity), or null
+   * when none is cached. The evidence verifier recomputes lift from it.
+   */
+  baseline?(chain: Chain): Promise<BaselineTag[] | null>;
   placesNear(store: Store, chain: Chain, opts: { tagIds?: string[]; limit?: number }): Promise<WithEvidence<PlaceCandidate[]>>;
   artistsLocal(store: Store, chain: Chain, opts: { genres?: string[]; limit?: number }): Promise<WithEvidence<ArtistCandidate[]>>;
   brandsLocal(store: Store, chain: Chain, opts: { limit?: number }): Promise<WithEvidence<BrandCandidate[]>>;
@@ -128,7 +165,7 @@ export interface RankedDoc {
 }
 
 export interface TokenFactoryPort {
-  embed(texts: string[]): Promise<{ vectors: number[][]; mode: DataMode }>;
+  embed(texts: string[]): Promise<{ vectors: number[][]; mode: DataMode; usage?: { promptTokens: number } }>;
   /** Reranker first, embedding cosine when the reranker is unavailable. */
   rerank(query: string, docs: string[]): Promise<{ ranked: RankedDoc[]; method: "rerank" | "embedding"; mode: DataMode }>;
 }
@@ -153,6 +190,10 @@ export interface AgentDeps {
   now(): Date;
   /** Tool and model deadlines; tests shrink them. */
   limits?: Partial<AgentLimits>;
+  /** Collects `step_metrics` for every model call; set by `withMetrics` at the entry points. */
+  sink?: StepSink;
+  /** Inject one clearly labelled bad item into the evidence verifier (fixture mode only; see verify.ts). */
+  seedBadItem?: boolean;
 }
 
 export interface AgentLimits {

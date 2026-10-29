@@ -30,7 +30,8 @@ export interface ApiClient {
   regenerateItem(editionId: string, itemId: string, body?: Body<"regenerateItem">, opts?: StreamOptions): AgentEventStream;
   listEditions(weekOf?: string): Out<"listEditions">;
   getEdition(id: string): Out<"getEdition">;
-  patchItem(editionId: string, itemId: string, action: ItemAction): Out<"patchItem">;
+  /** `version` is the item's current `version`, sent as `If-Match`; a stale one fails with 409 `version_conflict`. */
+  patchItem(editionId: string, itemId: string, action: ItemAction, version: number): Out<"patchItem">;
   approveAll(editionId: string): Out<"approveAll">;
   getCard(editionId: string): Out<"getCard">;
   getPublicCard(token: string): Out<"getPublicCard">;
@@ -38,6 +39,17 @@ export interface ApiClient {
   runMondayJob(signature: string, body?: Body<"runMondayJob">): Out<"runMondayJob">;
   getLatestJob(): Out<"getLatestJob">;
   getStatus(): Out<"getStatus">;
+  // Upgrade routes.
+  getProof(): Out<"getProof">;
+  getLimits(): Out<"getLimits">;
+  /** Ultra review pass over the workspace's editions (SSE). */
+  reviewEditions(body?: Body<"reviewEditions">, opts?: StreamOptions): AgentEventStream;
+  /** One Tavily crawl of the chain's pages, then Lightning writes brand-voice lines. Spends Tavily credits. */
+  generateBrandVoice(): Out<"generateBrandVoice">;
+  /** Job-only routes, signed with an HMAC. Exposed for tests; the browser never holds the secret. */
+  getPendingJobs(signature: string): Out<"getPendingJobs">;
+  postJobResults(signature: string, body: Body<"postJobResults">): Out<"postJobResults">;
+  postJobEval(signature: string, body: Body<"postJobEval">): Out<"postJobEval">;
 }
 
 export interface ApiClientOptions {

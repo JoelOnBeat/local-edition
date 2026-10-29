@@ -6,6 +6,10 @@ import { NotFoundError, VersionConflictError } from "../store/repo";
 import { invalidateCard } from "./card-state";
 import { evidenceCheck, produceItem } from "./items";
 import { runStoreAgent } from "./loop";
+import { flush, withMetrics } from "./metrics";
+import { defaultHintFor } from "./review-hint";
+import { recordSteps } from "./stats";
+import { dropMessage, verifyStep } from "./verify";
 import type { Exclusions } from "./plan";
 import type { AgentDeps } from "./ports";
 import { loadEditionAccess } from "./workspace";
@@ -34,7 +38,16 @@ const err = (code: string, message: string, storeId?: string): AgentEvent => ({ 
  * Rewrite one item after head office asks for another take. The agent runs again for that kind
  * only, avoiding what the item says now; the item keeps its id and the repo bumps its version.
  */
-export async function* regenerateItem(params: RegenerateParams, deps: AgentDeps): AsyncGenerator<AgentEvent> {
+export async function* regenerateItem(params: RegenerateParams, base: AgentDeps): AsyncGenerator<AgentEvent> {
+  const deps = withMetrics(base);
+  try {
+    yield* regenerate(params, deps);
+  } finally {
+    await recordSteps(deps.repo, deps.sink?.all ?? [], 0, deps.now());
+  }
+}
+
+async function* regenerate(params: RegenerateParams, deps: AgentDeps): AsyncGenerator<AgentEvent> {
   const { repo } = deps;
   let access;
   try {
@@ -51,19 +64,25 @@ export async function* regenerateItem(params: RegenerateParams, deps: AgentDeps)
   }
   const menu = await repo.listMenu(chain.id);
   const sc = { chain, store, menu, weekOf: edition.weekOf };
+  if (deps.sink) deps.sink.storeId = store.id;
+  // No hint from head office: use the reviewer's, when it was about this kind of item.
+  const hint = params.hint ?? defaultHintFor(edition, current.kind);
   const runId = newId("run");
   yield { type: "run_started", runId, storeIds: [store.id] };
   yield { type: "store_started", storeId: store.id };
 
   try {
-    const { set, mem } = yield* runStoreAgent({ sc, deps, focus: current.kind, hint: params.hint, exclude: exclusionsFor(current) });
-    const { kept } = evidenceCheck(set, mem);
+    const { set, mem } = yield* runStoreAgent({ sc, deps, focus: current.kind, hint, exclude: exclusionsFor(current) });
+    const checked = evidenceCheck(set, mem);
+    for (const d of checked.dropped) yield err("item_dropped", dropMessage(d.kind, d.reason), store.id);
+    const { kept } = yield* verifyStep(deps, chain, store.id, mem, checked);
     const candidate = kept[0];
     if (!candidate) {
       yield err("no_alternative", `No new ${current.kind} candidate with evidence was found.`, store.id);
       return;
     }
-    const produced = await produceItem(deps, sc, mem, candidate, { hint: params.hint, id: current.id, version: current.version });
+    const produced = await produceItem(deps, sc, mem, candidate, { hint, id: current.id, version: current.version });
+    yield* flush(deps);
     if (!produced.item) {
       yield err("item_dropped", `The new ${current.kind} did not fit the edition format.`, store.id);
       return;
@@ -77,9 +96,11 @@ export async function* regenerateItem(params: RegenerateParams, deps: AgentDeps)
       return added.length ? { ...cur, evidence: [...cur.evidence, ...added] } : cur;
     });
     const saved = await repo.updateEditionItem(edition.id, produced.item, current.version);
-    await repo.updateEdition(edition.id, (cur) => ({ ...cur, status: cur.items.some((i) => i.status === "flagged") ? "flagged" : "draft" }));
+    // The reviewer's verdict was about the old draft: it no longer stands, so it is cleared until the next review.
+    await repo.updateEdition(edition.id, (cur) => ({ ...cur, review: null, status: cur.items.some((i) => i.status === "flagged") ? "flagged" : "draft" }));
     await invalidateCard(repo, edition.id);
 
+    yield* flush(deps);
     yield { type: "item_drafted", storeId: store.id, item: saved };
     yield { type: "guardrail", storeId: store.id, itemId: saved.id, result: saved.guardrail };
     yield { type: "store_done", storeId: store.id, editionId: edition.id };

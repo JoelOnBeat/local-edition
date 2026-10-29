@@ -2,4 +2,8 @@ export * from "./helpers";
 export * from "./profiles";
 export * from "./editions";
 export * from "./misc";
+export * from "./metrics";
+export * from "./upgrade-editions";
+export * from "./upgrade-data";
+export * from "./eval-rows";
 export * from "./events";

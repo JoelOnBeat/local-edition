@@ -3,7 +3,8 @@ import { AgentEvent, type Edition } from "@/contract";
 import { setRepo } from "../store";
 import { sseResponse } from "../http/sse";
 import { buildEditions } from "./build";
-import { cardRoute, buildRoute, regenerateRoute } from "./handlers";
+import { cardRoute, buildRoute, regenerateRoute, reviewRoute } from "./handlers";
+import { mondayOf } from "./util";
 import { setAgentDeps } from "./deps";
 import { call, harness, scriptedChat, turn, WEEK_OF, type Harness } from "./test-utils";
 
@@ -126,5 +127,23 @@ describe("routes", () => {
     expect(second.token).toBe(card.token);
     const missing = await cardRoute(req("/x", h.workspaceId), args({ id: "ed_missing" }));
     expect(missing.status).toBe(404);
+  });
+
+  it("POST /api/editions/review streams one Ultra verdict per store; bad body 400; strangers see no editions", async () => {
+    await runBuild();
+    const [a, b] = h.storeIds;
+    h.deps.chat = scriptedChat({ review: () => JSON.stringify({ reviews: [{ storeId: a, verdict: "approve", reason: "Fits.", clashWith: [], hint: null }, { storeId: b, verdict: "needs_change", reason: "Same record fair.", clashWith: [a], hint: "event: another night" }] }) });
+    const ok = await reviewRoute(req("/api/editions/review", h.workspaceId, { method: "POST", body: JSON.stringify({ weekOf: mondayOf(h.deps.now()) }) }));
+    expect(ok.status).toBe(200);
+    expect(ok.headers.get("content-type")).toContain("text/event-stream");
+    const { events } = parseSse(await ok.text());
+    expect(events.filter((e) => e.type === "review").map((e) => (e.type === "review" ? e.verdict : ""))).toEqual(["approve", "needs_change"]);
+    expect(events.filter((e) => e.type === "step_metrics" && e.role === "review")).toHaveLength(1);
+
+    const bad = await reviewRoute(req("/api/editions/review", h.workspaceId, { method: "POST", body: JSON.stringify({ weekOf: "next week" }) }));
+    expect(bad.status).toBe(400);
+    const other = await h.repo.createWorkspace({ ...(await import("../sample/chain")).sampleSeed(), chain: { ...(await import("../sample/chain")).SAMPLE_CHAIN, id: "chain_other2" }, stores: [] });
+    const none = parseSse(await (await reviewRoute(req("/api/editions/review", other.id, { method: "POST", body: "{}" }))).text());
+    expect(none.events[0]).toMatchObject({ type: "error", code: "no_editions" });
   });
 });

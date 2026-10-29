@@ -9,13 +9,14 @@ export { canonicalId, remapId, workspaceSuffix } from "./ids";
 const slot = globalThis as typeof globalThis & { __leRepo?: Repo };
 
 /**
- * Process-wide repo chosen by STORE_DRIVER (memory | file | kv). Held on globalThis so every route
+ * Process-wide repo chosen by STORE_DRIVER (memory | file | kv | d1; d1 is what production runs). Held on globalThis so every route
  * bundle in `next dev` shares one instance. Tests inject their own with `setRepo`.
  */
 export async function getRepo(): Promise<Repo> {
   if (slot.__leRepo) return slot.__leRepo;
   const driver = serverEnv().STORE_DRIVER;
-  if (driver === "kv") slot.__leRepo = (await import("./kv")).createKvRepo();
+  if (driver === "d1") slot.__leRepo = await (await import("./d1-binding")).createBoundD1Repo();
+  else if (driver === "kv") slot.__leRepo = (await import("./kv")).createKvRepo();
   else if (driver === "file") slot.__leRepo = (await import("./file")).createFileRepo();
   else slot.__leRepo = (await import("./memory")).createMemoryRepo();
   return slot.__leRepo;

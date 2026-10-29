@@ -37,7 +37,8 @@ export async function providerStatus(probe?: GuardrailsProbe): Promise<ProviderS
     qloo: providerMode(env.QLOO_MODE, env.QLOO_API_KEY),
     tokenfactory: providerMode(env.TF_MODE, env.NEBIUS_API_KEY),
     tavily: providerMode(env.TAVILY_MODE, env.TAVILY_API_KEY),
-    guardrails: await (probe ?? (() => probeGuardrailsHttp(env.GUARDRAILS_URL)))(),
+    // The live guardrails run in this Worker (regex mirror + Lightning self check); there is no sidecar to probe.
+    guardrails: await (probe ?? (async () => "local" as const))(),
     spend,
   };
 }

@@ -1,5 +1,7 @@
 import type { Edition } from "@/contract";
 import { HttpError } from "../http/errors";
+import { createLogger } from "../log";
+import { buildLockStub } from "../platform/adapters";
 import type { Repo } from "../store/repo";
 
 /**
@@ -9,20 +11,43 @@ import type { Repo } from "../store/repo";
  */
 export const BUILD_LOCK_TTL_SECONDS = 20 * 60;
 
+const log = createLogger("agent:lock");
+
 export interface BuildLock {
   name: string;
   token: string;
+  /** Where the lock lives: the workspace's BuildLockDO (exact across isolates) or the repo (best effort). Absent means the repo. */
+  backend?: "do";
 }
 
-/** Takes the workspace's build lock or throws 409 `build_running`. */
+/**
+ * Takes the workspace's build lock or throws 409 `build_running`. On Workers the BUILD_LOCK Durable Object
+ * holds it; with no binding, or if the object is unreachable, the repo lock does.
+ */
 export async function acquireBuildLock(repo: Repo, workspaceId: string): Promise<BuildLock> {
   const name = `build:${workspaceId}`;
-  const token = await repo.acquireLock(name, BUILD_LOCK_TTL_SECONDS);
+  const stub = buildLockStub(workspaceId);
+  let token: string | null | undefined;
+  let backend: BuildLock["backend"];
+  if (stub) {
+    try {
+      token = await stub.acquire(BUILD_LOCK_TTL_SECONDS);
+      backend = "do";
+    } catch (e) {
+      log.warn("build lock Durable Object unavailable; using the repo lock", { err: (e as Error)?.name });
+    }
+  }
+  if (token === undefined) token = await repo.acquireLock(name, BUILD_LOCK_TTL_SECONDS);
   if (!token) throw new HttpError(409, "build_running", "A build is already running for this workspace. Wait for it to finish.");
-  return { name, token };
+  return backend ? { name, token, backend } : { name, token };
 }
 
 export async function releaseBuildLock(repo: Repo, lock: BuildLock): Promise<void> {
+  if (lock.backend === "do") {
+    const stub = buildLockStub(lock.name.slice("build:".length));
+    if (stub) await stub.release(lock.token).catch(() => undefined);
+    return;
+  }
   await repo.releaseLock(lock.name, lock.token).catch(() => undefined);
 }
 

@@ -17,30 +17,13 @@ import {
   isoDate,
 } from "./domain";
 import { AgentEvent } from "./events";
+import type { RouteSpec } from "./route-spec";
+import { upgradeRoutes } from "./routes-upgrade";
 
 /** API route table. Source of truth: docs/CONTRACT.md. Request/response are zod schemas. */
 
 export const MENU_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 export const MENU_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
-
-export type StreamOwner = "A" | "B" | "C" | "E";
-export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-export type BodyKind = "none" | "json" | "csv" | "multipart";
-
-export interface RouteSpec {
-  method: HttpMethod;
-  /** Next.js style with `:param` segments. */
-  path: string;
-  /** Owning backend stream (docs/BUILD.md ownership table). */
-  stream: StreamOwner;
-  bodyKind: BodyKind;
-  /** Shape of the input: any of { params, query, headers, body }. */
-  request: z.ZodObject;
-  /** JSON response schema, or the single event schema when `sse` is true. */
-  response: z.ZodType;
-  /** True when the response is a text/event-stream of `response` events. */
-  sse: boolean;
-}
 
 const idParams = z.object({ id: z.string().min(1).max(64) });
 const itemParams = z.object({ id: z.string().min(1).max(64), itemId: z.string().min(1).max(64) });
@@ -92,7 +75,8 @@ export const ItemPatch = z
 export type ItemPatch = z.infer<typeof ItemPatch>;
 
 export const ItemAction = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("approve") }),
+  // `override: true` approves copy that guardrails could not check (`unchecked`); blocked copy can never be approved.
+  z.object({ action: z.literal("approve"), override: z.boolean().optional() }),
   z.object({ action: z.literal("reject") }),
   z.object({
     action: z.literal("edit"),
@@ -100,6 +84,10 @@ export const ItemAction = z.discriminatedUnion("action", [
   }),
 ]);
 export type ItemAction = z.infer<typeof ItemAction>;
+
+/** The header `PATCH /api/editions/:id/items/:itemId` requires. Build it with `formatIfMatch(item.version)`. */
+export const ItemPatchHeaders = z.object({ "if-match": z.string().min(1).max(40) });
+export type ItemPatchHeaders = z.infer<typeof ItemPatchHeaders>;
 
 export const MenuImage = z
   .instanceof(File)
@@ -152,7 +140,8 @@ export const routes = {
   },
   buildEditions: {
     method: "POST", path: "/api/editions/build", stream: "C", bodyKind: "json", sse: true,
-    request: z.object({ body: z.object({ storeIds: storeIdList.optional() }) }),
+    // `force` rebuilds a store whose current edition already has approved or edited items.
+    request: z.object({ body: z.object({ storeIds: storeIdList.optional(), force: z.boolean().optional() }) }),
     response: AgentEvent,
   },
   regenerateItem: {
@@ -170,7 +159,11 @@ export const routes = {
   },
   patchItem: {
     method: "PATCH", path: "/api/editions/:id/items/:itemId", stream: "E", bodyKind: "json", sse: false,
-    request: z.object({ params: itemParams, body: ItemAction }), response: EditionItem,
+    // The server also requires `If-Match: <item.version>` (428 version_required when absent, 409 version_conflict
+    // when stale). It is not part of this schema: withRoute would then reject every caller that omits it with a 400,
+    // and the 428/409 codes belong to the handler. See `ItemPatchHeaders`.
+    request: z.object({ params: itemParams, body: ItemAction }),
+    response: EditionItem,
   },
   approveAll: {
     method: "POST", path: "/api/editions/:id/approve-all", stream: "E", bodyKind: "none", sse: false,
@@ -201,6 +194,7 @@ export const routes = {
     method: "GET", path: "/api/status", stream: "E", bodyKind: "none", sse: false,
     request: z.object({}), response: ProviderStatus,
   },
+  ...upgradeRoutes,
 } as const satisfies Record<string, RouteSpec>;
 
 export type Routes = typeof routes;

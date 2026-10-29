@@ -1,5 +1,6 @@
 import type { AgentEvent, EditionItemKind } from "@/contract";
 import { runTool } from "./exec";
+import { flush } from "./metrics";
 import { TOOL_BY_NAME, type ToolCtx } from "./tools";
 
 /** The fixed tool order used when tool calling misbehaves. The model never chooses here. */
@@ -20,5 +21,6 @@ export async function* runFallbackPlan(ctx: ToolCtx, focus?: EditionItemKind): A
     if (name === "partners_rank" && ctx.mem.places.size === 0) continue;
     if (name === "menu_match" && !ctx.mem.profile) continue;
     yield* runTool(ctx, TOOL_BY_NAME.get(name)!, {});
+    yield* flush(ctx.deps);
   }
 }

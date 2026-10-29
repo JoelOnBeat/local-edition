@@ -10,6 +10,7 @@ import { getOrCreateCard } from "./card";
 import { buildEditions } from "./build";
 import { getAgentDeps } from "./deps";
 import { regenerateItem } from "./regenerate";
+import { reviewEditions } from "./review";
 import { loadEditionAccess } from "./workspace";
 
 /**
@@ -43,6 +44,17 @@ export const regenerateRoute = wsRoute(routes.regenerateItem, async ({ params, b
   await limitSpend(ctx, "regenerate");
   const deps = await getAgentDeps();
   const events = regenerateItem({ workspaceId: ctx.workspace.id, editionId: params.id, itemId: params.itemId, hint: body.hint }, deps);
+  return sseResponse(events, { signal: ctx.request.signal });
+});
+
+/**
+ * POST /api/editions/review: SSE of AgentEvent, one `review` per store from the Ultra reviewer. It spends one
+ * Ultra call, so it shares the regenerate allowance (there is no `review` bucket in handlers/limit.ts).
+ */
+export const reviewRoute = wsRoute(routes.reviewEditions, async ({ body }, ctx) => {
+  await limitSpend(ctx, "regenerate");
+  const deps = await getAgentDeps();
+  const events = reviewEditions({ workspaceId: ctx.workspace.id, weekOf: body.weekOf }, deps);
   return sseResponse(events, { signal: ctx.request.signal });
 });
 

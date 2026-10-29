@@ -5,6 +5,7 @@ import { editionSpecsB } from "./edition-data-b";
 import type { StoreEditionSpec } from "./edition-spec";
 import { MOCK_ISSUE_NO, MOCK_NOW, MOCK_WEEK_OF, artists, distanceMeters, evidence, fakeEntityId } from "./helpers";
 import { profileEvidence, profileEvidenceId, tagsFor } from "./profiles";
+import { MOCK_REVIEWS, TIE_IN_EXTRAS, guardrailWithChecker, verificationFor } from "./upgrade-editions";
 
 const specs: Record<string, StoreEditionSpec> = { ...editionSpecsA, ...editionSpecsB };
 const passed: GuardrailResult = { status: "passed", reasons: [] };
@@ -76,7 +77,10 @@ export function buildMockEdition(store: Store, runId = "run_sample_0001"): Editi
   const common = (key: keyof StoreEditionSpec, evidenceIds: string[]) => {
     const s = spec[key];
     const status: ItemStatus = s.status ?? "draft";
-    return { id: `item_${slug}_${key}`, status, evidenceIds, guardrail: s.guardrail ?? passed, version: status === "approved" ? 1 : 0 };
+    return {
+      id: `item_${slug}_${key}`, status, evidenceIds, guardrail: guardrailWithChecker(s.guardrail ?? passed, status),
+      version: status === "approved" ? 1 : 0, verification: verificationFor(key),
+    };
   };
   const base = SAMPLE_MENU.find((m) => m.id === `menu_${spec.special.baseMenuSlug}`)!;
 
@@ -92,7 +96,7 @@ export function buildMockEdition(store: Store, runId = "run_sample_0001"): Editi
       ...common("event", [eventEv.id, profileEvidenceId(store.id)]), kind: "event",
       title: spec.event.title, day: spec.event.day, time: spec.event.time,
       description: spec.event.description,
-      tieIn: spec.event.tieIn ? { ...spec.event.tieIn, source: "tavily" } : null,
+      tieIn: spec.event.tieIn ? { ...spec.event.tieIn, source: "tavily", ...TIE_IN_EXTRAS[slug] } : null,
     },
   ];
 
@@ -100,6 +104,7 @@ export function buildMockEdition(store: Store, runId = "run_sample_0001"): Editi
     id: mockEditionId(store.id), storeId: store.id, weekOf: MOCK_WEEK_OF, issueNo: MOCK_ISSUE_NO,
     items, evidence: [profileEvidence(store.id), flavourEv, copyEv, soundEv, partnerEv, eventEv],
     status: statusOf(items), generatedBy: { ...MOCK_MODELS, runId }, createdAt: MOCK_NOW,
+    review: structuredClone(MOCK_REVIEWS[slug]),
   };
 }
 

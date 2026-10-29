@@ -1,12 +1,17 @@
 import type { Evidence, Store } from "@/contract";
-import { serverEnv, type ServerEnv } from "@/lib/env";
+import { serverEnv } from "@/lib/env";
 import { newId } from "@/lib/ids";
 import { fetchJson } from "../http/fetch-json";
-import type { Recorder } from "../http/recorder";
 import { tavilyFixture } from "./fixtures";
 import { buildTavilyBody, TAVILY_SEARCH_URL, tavilyParams, type TavilyRequest } from "./request";
 import { tavilyModeFor } from "./mode";
+import { callTavily } from "./call";
+import { cacheKey, softGet, softPut } from "./cache";
+import type { TavilyOptions, TavilyRuntime } from "./runtime";
+import { SEARCH_CREDITS } from "./budget";
 import { TavilyResponse, type TavilyResult } from "./schema";
+
+export type { TavilyOptions } from "./runtime";
 
 /** What the edition agent gets for one store: event listings for this week plus one evidence row. */
 export interface TavilyEvent {
@@ -19,19 +24,6 @@ export interface TavilyEvent {
 export interface EventsThisWeek {
   events: TavilyEvent[];
   evidence: Evidence;
-}
-
-export interface TavilyOptions {
-  /** Defaults to the parsed server env. Tests pass their own. */
-  env?: Pick<ServerEnv, "TAVILY_MODE" | "TAVILY_API_KEY">;
-  recorder?: Recorder;
-  /** The chain's city, added to the query so it searches the right town. */
-  city?: string;
-  // Test seams, passed through to fetchJson.
-  fetchImpl?: typeof fetch;
-  sleep?: (ms: number) => Promise<void>;
-  random?: () => number;
-  clock?: () => Date;
 }
 
 const SNIPPET_MAX = 280;
@@ -63,7 +55,7 @@ export function toEvents(results: TavilyResult[]): TavilyEvent[] {
   });
 }
 
-function evidenceFor(
+export function evidenceFor(
   store: Store,
   body: TavilyRequest,
   results: TavilyResult[],
@@ -122,4 +114,39 @@ export async function eventsThisWeek(store: Store, opts: TavilyOptions = {}): Pr
   const events = toEvents(data.results);
   const evidence = evidenceFor(store, body, data.results, events, mode, clock());
   return { events, evidence };
+}
+
+
+export interface StoreSearch {
+  data: TavilyResponse;
+  body: TavilyRequest;
+  /** `cache` when this week's saved search was reused (no credit spent). */
+  mode: Evidence["mode"];
+}
+
+/**
+ * The chain's search step: one basic search per store, saved for 7 days under a hash of the normalised
+ * query and time range. Returns null on a miss when the runtime is read-only (`cacheOnly`: regenerate,
+ * page loads). May throw TavilyBudgetError (live, workspace's day spent).
+ */
+export async function searchStore(store: Store, rt: TavilyRuntime, city?: string): Promise<StoreSearch | null> {
+  const body = buildTavilyBody(store, city, rt.clock());
+  const key = await cacheKey("search", body.query, body.time_range);
+  const hit = await softGet(rt.cache, key, (raw) => {
+    const parsed = TavilyResponse.safeParse(raw);
+    return parsed.success ? parsed.data : null;
+  });
+  if (hit) return { data: hit, body, mode: "cache" };
+  if (rt.cacheOnly && rt.run === "live") return null;
+
+  const { data, mode } = await callTavily<TavilyResponse>(rt, {
+    url: TAVILY_SEARCH_URL,
+    body,
+    schema: TavilyResponse,
+    fixture: () => tavilyFixture(store.id, body.query),
+    credits: SEARCH_CREDITS,
+    timeoutMs: 15_000,
+  });
+  if (mode === "live") await softPut(rt.cache, key, data);
+  return { data, body, mode };
 }

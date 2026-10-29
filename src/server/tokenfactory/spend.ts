@@ -10,8 +10,13 @@ import {
   type SpendStore,
   type SpendTicket,
 } from "../http/spend";
+import { createLogger } from "../log";
+import { UpstreamError } from "../http/errors";
+import { spendMeterStub } from "../platform/adapters";
 import { getRepo } from "../store";
 import { MODELS } from "./models";
+
+const log = createLogger("spend");
 
 export type { SpendTicket } from "../http/spend";
 
@@ -58,11 +63,60 @@ export class TokenFactorySpendMeter extends PricedSpendMeter {
   }
 }
 
+const DO_PREFIX = "do:";
+
+/**
+ * The shared meter on Workers: when the SPEND_METER Durable Object is bound, reserve and settle go to it, so
+ * the cap holds exactly across every isolate. Without the binding (dev, tests) or if the call fails, it is the
+ * repo-backed meter above, so spend is still capped, never unmetered. A ticket remembers which side issued it.
+ */
+class DurableSpendMeter extends TokenFactorySpendMeter {
+  override async reserveUsd(estimateUsd: number): Promise<SpendTicket> {
+    const stub = spendMeterStub();
+    if (stub) {
+      try {
+        const res = await stub.reserve(estimateUsd, this.cap());
+        if (res.ok) return { ...res.ticket, id: DO_PREFIX + res.ticket.id };
+        throw new UpstreamError("spend_cap", "tokenfactory", "Spend cap reached; model calls are paused.");
+      } catch (e) {
+        if (e instanceof UpstreamError) throw e;
+        log.warn("spend meter Durable Object unavailable; using the repo ledger", { err: (e as Error)?.name });
+      }
+    }
+    return super.reserveUsd(estimateUsd);
+  }
+
+  override async settleUsd(ticket: SpendTicket, actualUsd: number): Promise<void> {
+    const stub = ticket.id.startsWith(DO_PREFIX) ? spendMeterStub() : null;
+    if (!stub) return super.settleUsd(ticket, actualUsd);
+    await stub.settle(ticket.id.slice(DO_PREFIX.length), actualUsd).catch((e) => log.warn("spend settle failed", { err: (e as Error)?.name }));
+  }
+
+  override record(model: string, inTokens: number, outTokens: number): void | Promise<void> {
+    const stub = spendMeterStub();
+    if (!stub) return super.record(model, inTokens, outTokens);
+    return stub.record(priceOf(TF_PRICES, model, inTokens, outTokens)).catch(() => super.record(model, inTokens, outTokens));
+  }
+
+  override async totals(): Promise<{ usd: number; capUsd: number }> {
+    const stub = spendMeterStub();
+    if (stub) {
+      try {
+        const t = await stub.totals(this.cap());
+        return { usd: Number(t.usd.toFixed(6)), capUsd: t.capUsd };
+      } catch {
+        // fall through to the repo ledger
+      }
+    }
+    return super.totals();
+  }
+}
+
 /** Process-wide meter, also registered as the shared http meter so /api/status reads the same totals. */
 export function tokenFactoryMeter(): TokenFactorySpendMeter {
   const current = currentSpendMeter();
   if (current instanceof TokenFactorySpendMeter) return current;
-  const meter = new TokenFactorySpendMeter(() => serverEnv().SPEND_CAP_USD, TF_PRICES, new ResilientSpendStore(new RepoSpendStore()));
+  const meter = new DurableSpendMeter(() => serverEnv().SPEND_CAP_USD, TF_PRICES, new ResilientSpendStore(new RepoSpendStore()));
   setSpendMeter(meter);
   return meter;
 }

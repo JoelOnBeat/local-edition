@@ -6,6 +6,7 @@ import { runFallbackPlan } from "./fallback";
 import { ToolMemory } from "./memory";
 import { chooseDeterministic, resolveSubmit, SUBMIT_TOOL, SubmitArgs, type CandidateSet, type Exclusions } from "./plan";
 import { AGENT_MODEL, limitsOf, type AgentDeps, type ChatMessage, type ChatToolCall, type StoreContext } from "./ports";
+import { flush } from "./metrics";
 import { TOOL_BY_NAME, renderPayload, storeBrief, toolSpecs } from "./tools";
 import { withTimeout } from "./util";
 
@@ -30,21 +31,35 @@ export interface LoopResult {
   steps: number;
 }
 
-const SYSTEM = `You are the edition planner for a {category} chain's store. Each week you pick, for one store, a menu special, a sound brief (artists for the room), a local partner and an event night, grounded in what the tools return about that block.
+/** Tool loop thinking: the provider default (docs/LIVE-SMOKE.md: `off` fell back to the fixed plan 2 runs in 3). */
+export const LOOP_REASONING = "default" as const;
+/** Room for the model's own reasoning plus a tool call (docs/LIVE-SMOKE.md: 1,200 cut 6 of 88 turns off mid-thought). */
+export const LOOP_MAX_TOKENS = 3000;
+
+const RULES = `You are the edition planner for a {category} chain's store. Each week you pick, for one store, a menu special, a sound brief (artists for the room), a local partner and an event night, grounded in what the tools return about that block.
 Rules:
 - Call the tools to gather candidates, then call submit_candidates once. Use only the refs the tools returned (s1, a1, p1, e1). Never invent names, refs or facts.
 - Prefer menu_match then partners_rank before choosing. Taste and place only: no health, diet, nutrition or allergen claims, and never target a group of people by age, gender, ethnicity or religion.
 - Say "rising in Qloo's population data", never "rising on this street".
 - You have at most {steps} turns. Do not repeat a tool call with the same arguments.`;
 
+/**
+ * Prompt order is chosen for the provider's implicit prefix cache: brand voice, then the rules, then (the tool
+ * definitions ride along in the request) the chain-wide menu and week, all identical for every store of a run.
+ * Everything specific to one store comes last, in the user turn.
+ */
+function systemPrompt(sc: StoreContext, steps: number): string {
+  return [
+    `Brand voice: ${sc.chain.brandVoice.join(" ")}`,
+    RULES.replace("{category}", sc.chain.category).replace("{steps}", String(steps)),
+    `Menu: ${sc.menu.map((m) => m.name).join(", ")}.`,
+    `Week of ${sc.weekOf}.`,
+  ].join("\n\n");
+}
+
 function userPrompt(input: LoopInput, mem: ToolMemory): string {
   const { sc, focus, hint, exclude } = input;
-  const lines = [
-    `Week of ${sc.weekOf}.`,
-    storeBrief(sc, mem),
-    `Brand voice: ${sc.chain.brandVoice.join(" ")}`,
-    `Menu: ${sc.menu.map((m) => m.name).join(", ")}.`,
-  ];
+  const lines = [storeBrief(sc, mem)];
   if (focus) lines.push(`Only the ${focus} item needs to change. Submit just that kind.`);
   if (hint) lines.push(`Head office asks: "${hint}"`);
   const avoid = Object.entries(exclude ?? {}).filter(([, v]) => v?.length);
@@ -88,7 +103,7 @@ export async function* runStoreAgent(input: LoopInput): AsyncGenerator<AgentEven
   const mem = input.mem ?? new ToolMemory();
   const ctx = { sc, deps, mem };
   const messages: ChatMessage[] = [
-    { role: "system", content: SYSTEM.replace("{category}", sc.chain.category).replace("{steps}", String(limits.maxSteps)) },
+    { role: "system", content: systemPrompt(sc, limits.maxSteps) },
     { role: "user", content: userPrompt(input, mem) },
   ];
   const tools = [...toolSpecs(), { name: SUBMIT_TOOL.name, description: SUBMIT_TOOL.description, parameters: SUBMIT_TOOL.parameters as Record<string, unknown> }];
@@ -100,6 +115,7 @@ export async function* runStoreAgent(input: LoopInput): AsyncGenerator<AgentEven
   const finish = async function* (reason: string): AsyncGenerator<AgentEvent, LoopResult> {
     log.warn("using deterministic plan", { storeId: sc.store.id, reason });
     yield* runFallbackPlan(ctx, focus);
+    yield* flush(deps);
     return { set: chooseDeterministic(mem, sc, focus, input.exclude), mem, usedFallback: true, fallbackReason: reason, steps };
   };
 
@@ -108,12 +124,13 @@ export async function* runStoreAgent(input: LoopInput): AsyncGenerator<AgentEven
     steps++;
     let response;
     try {
-      response = await withTimeout(deps.chat.complete({ model: AGENT_MODEL, messages, tools, temperature: 0.3, maxTokens: 1200, timeoutMs: limits.chatTimeoutMs }), limits.chatTimeoutMs + 2000, "agent model");
+      response = await withTimeout(deps.chat.complete({ model: AGENT_MODEL, role: "agent", messages, tools, temperature: 0.3, maxTokens: LOOP_MAX_TOKENS, reasoning: LOOP_REASONING, timeoutMs: limits.chatTimeoutMs }), limits.chatTimeoutMs + 2000, "agent model");
     } catch (e) {
       if (e instanceof UpstreamError && e.code === "spend_cap") throw e;
       return yield* finish(e instanceof UpstreamError ? e.code : "chat_failed");
     }
 
+    yield* flush(deps);
     const calls: ChatToolCall[] = response.toolCalls.slice(0, 4).map((c, i) => ({ ...c, id: c.id || `call_${steps}_${i}` }));
     messages.push({ role: "assistant", content: response.content, toolCalls: calls.length ? calls : undefined });
 
@@ -153,6 +170,7 @@ export async function* runStoreAgent(input: LoopInput): AsyncGenerator<AgentEven
         continue;
       }
       const run = yield* runTool(ctx, def, args.ok ? args.value : "not json");
+      yield* flush(deps);
       if (run.invalid || !args.ok) invalid++;
       messages.push({ role: "tool", toolCallId: call.id, content: renderPayload(run.payload) });
     }

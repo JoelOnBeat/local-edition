@@ -1,8 +1,9 @@
 import Papa from "papaparse";
-import type { Edition, EditionItem, ItemAction, MenuItem, QlooEntityRef, Store } from "@/contract";
+import type { AgentEvent, Edition, EditionItem, EvalResult, ItemAction, MenuItem, QlooEntityRef, Store } from "@/contract";
 import {
-  buildMockCard, editionStatusOf, getMockProfile, mockBuildEvents, mockCompare, mockJobRun,
-  mockPublicCard, mockRegenerateEvents, mockStatus, mockWorkspaceBundle, profileEvidence,
+  buildMockCard, editionStatusOf, getMockProfile, mockBrandVoice, mockBuildEvents, mockCompare, mockEval, mockJobRun,
+  mockLimits, mockProof, mockPublicCard, mockRegenerateEvents, mockReviewEvents, mockStatus, mockWorkspaceBundle,
+  profileEvidence,
 } from "@/mocks";
 import { newId } from "./ids";
 import { ApiClientError, type ApiClient, type ApiClientOptions } from "./api-types";
@@ -25,13 +26,23 @@ const HEALTH_CLAIM = /\b(healthy|healthier|detox|cures?|boosts?|antioxidants?|im
 function applyGuardrail(item: EditionItem): EditionItem {
   const text = JSON.stringify(item);
   if (HEALTH_CLAIM.test(text)) {
-    return { ...item, status: "flagged", guardrail: { status: "blocked", rail: "no-health-claims", reasons: ["Health, diet or nutrition claims are not allowed."] } };
+    return { ...item, status: "flagged", guardrail: { status: "blocked", rail: "no-health-claims", reasons: ["Health, diet or nutrition claims are not allowed."], checkedBy: "live" } };
   }
   if (text.includes("!")) {
     const cleaned = JSON.parse(text.replace(/!/g, ".")) as EditionItem;
-    return { ...cleaned, guardrail: { status: "rewritten", rail: "brand-voice", reasons: ["Removed exclamation marks."], original: text.slice(0, 160) } };
+    return { ...cleaned, guardrail: { status: "rewritten", rail: "brand-voice", reasons: ["Removed exclamation marks."], original: text.slice(0, 160), checkedBy: "live" } };
   }
-  return { ...item, guardrail: { status: "passed", reasons: [] } };
+  return { ...item, guardrail: { status: "passed", reasons: [], checkedBy: "live" } };
+}
+
+/** The copy a certify job reads for an item: every free-text field, joined. */
+function itemText(item: EditionItem): string {
+  switch (item.kind) {
+    case "special": return `${item.name}. ${item.description} ${item.staffLine}`;
+    case "sound": return `${item.brief} ${item.mood}`;
+    case "partner": return `${item.reason} ${item.offerIdea}`;
+    case "event": return `${item.title}. ${item.description}`;
+  }
 }
 
 export function createMockApi(opts: Pick<ApiClientOptions, "mockDelayMs" | "mockEventDelayMs"> = {}): ApiClient {
@@ -50,7 +61,25 @@ export function createMockApi(opts: Pick<ApiClientOptions, "mockDelayMs" | "mock
     db.latestEditions = db.latestEditions.map((x) => (x.id === next.id ? next : x));
     return structuredClone(next);
   };
+  let evalResult: EvalResult | null = mockEval;
+  const approvedStores = () =>
+    new Set(db.latestEditions.filter((e) => e.items.some((i) => i.status === "approved" || i.status === "edited")).map((e) => e.storeId));
   const nextColor = () => ((db.stores.length % 8) + 1);
+
+  const requireSignature = (signature: string) => {
+    if (!signature) throw new ApiClientError(401, "bad_signature", "Missing signature.");
+  };
+  async function* reviewStream(weekOf: string | undefined, signal?: AbortSignal): AsyncGenerator<AgentEvent> {
+    const editions = db.latestEditions.filter((e) => !weekOf || e.weekOf === weekOf);
+    for await (const event of mockReviewEvents(editions, { delayMs: eventDelayMs, signal })) {
+      if (event.type === "review") {
+        const target = db.latestEditions.find((e) => e.storeId === event.storeId);
+        const { verdict, reason, clashWith, hint, reviewedBy } = event;
+        if (target) replaceEdition({ ...target, review: { verdict, reason, clashWith, hint, reviewedBy, at: new Date().toISOString() } });
+      }
+      yield event;
+    }
+  }
 
   const run = async <T>(fn: () => T): Promise<T> => {
     await wait();
@@ -101,19 +130,22 @@ export function createMockApi(opts: Pick<ApiClientOptions, "mockDelayMs" | "mock
       if (!r) throw new ApiClientError(404, "not_found", "Both stores need a profile to compare.");
       return r;
     }),
-    buildEditions: (body, o) => mockBuildEvents(body.storeIds, { delayMs: eventDelayMs, signal: o?.signal }),
+    buildEditions: (body, o) =>
+      mockBuildEvents(body.storeIds, { delayMs: eventDelayMs, signal: o?.signal, force: body.force, approvedStoreIds: approvedStores() }),
     regenerateItem: (id, itemId, body, o) => mockRegenerateEvents(editionOrThrow(id), itemId, body?.hint, { delayMs: eventDelayMs, signal: o?.signal }),
     listEditions: (weekOf) => run(() => db.latestEditions.filter((e) => !weekOf || e.weekOf === weekOf)),
     getEdition: (id) => run(() => editionOrThrow(id)),
-    patchItem: (id, itemId, action: ItemAction) => run(() => {
+    patchItem: (id, itemId, action: ItemAction, version) => run(() => {
       const edition = editionOrThrow(id);
       const current = edition.items.find((i) => i.id === itemId);
       if (!current) throw new ApiClientError(404, "not_found", "That item does not exist.");
-      if (action.action === "approve" && current.guardrail.status === "blocked") {
+      if (typeof version !== "number") throw new ApiClientError(428, "version_required", "Send the item's version in an If-Match header.");
+      if (version !== current.version) throw new ApiClientError(409, "version_conflict", "Someone changed this item. Reload to see the latest copy.");
+      if (action.action === "approve" && (current.guardrail.status === "blocked" || current.status === "flagged")) {
         throw new ApiClientError(409, "guardrail_blocked", "Blocked items must be edited or regenerated before approval.");
       }
-      if (action.action === "approve" && current.guardrail.status === "unchecked") {
-        throw new ApiClientError(409, "guardrail_unchecked", "This item has not passed guardrails yet, so it cannot be approved.");
+      if (action.action === "approve" && current.guardrail.status === "unchecked" && action.override !== true) {
+        throw new ApiClientError(409, "guardrail_unchecked", "This item has not passed guardrails yet. Approve it only if you have read it yourself.");
       }
       let next: EditionItem = { ...current, version: current.version + 1 };
       if (action.action === "approve") next.status = "approved";
@@ -143,5 +175,36 @@ export function createMockApi(opts: Pick<ApiClientOptions, "mockDelayMs" | "mock
     }),
     getLatestJob: () => run(() => mockJobRun),
     getStatus: () => run(() => mockStatus),
+    getProof: () => run(() => ({ ...mockProof, eval: evalResult })),
+    getLimits: () => run(() => mockLimits),
+    reviewEditions: (body, o) => reviewStream(body?.weekOf, o?.signal),
+    generateBrandVoice: () => run(() => mockBrandVoice),
+    getPendingJobs: (signature) => run(() => {
+      requireSignature(signature);
+      const items = db.latestEditions.flatMap((e) =>
+        e.items
+          .filter((i) => i.guardrail.checkedBy !== "nemo-guardrails@nebius-job" && i.status !== "rejected")
+          .map((i) => ({ editionId: e.id, itemId: i.id, kind: i.kind, text: itemText(i), brandVoice: db.chain.brandVoice })));
+      return { items };
+    }),
+    postJobResults: (signature, body) => run(() => {
+      requireSignature(signature);
+      let updated = 0;
+      for (const r of body.results) {
+        const edition = db.latestEditions.find((e) => e.id === r.editionId);
+        const item = edition?.items.find((i) => i.id === r.itemId);
+        if (!edition || !item) continue;
+        // A blocked verdict on approved copy flips it back to flagged so head office sees why.
+        const status = r.guardrail.status === "blocked" && item.status === "approved" ? "flagged" : item.status;
+        replaceEdition({ ...edition, items: edition.items.map((i): EditionItem => (i.id === item.id ? { ...i, status, guardrail: r.guardrail } : i)) });
+        updated++;
+      }
+      return { updated };
+    }),
+    postJobEval: (signature, body) => run(() => {
+      requireSignature(signature);
+      evalResult = body;
+      return { ok: true as const };
+    }),
   };
 }

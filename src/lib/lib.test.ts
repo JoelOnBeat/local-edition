@@ -44,12 +44,13 @@ describe("mock-mode api client", () => {
   it("approves, rejects and edits items with guardrails", async () => {
     const ed = (await api.listEditions())[0];
     const special = ed.items.find((i) => i.kind === "special")!;
-    expect((await api.patchItem(ed.id, special.id, { action: "approve" })).status).toBe("approved");
-    const bad = await api.patchItem(ed.id, special.id, { action: "edit", patch: { description: "A healthy start that boosts your day" } });
+    const approved = await api.patchItem(ed.id, special.id, { action: "approve" }, special.version);
+    expect(approved.status).toBe("approved");
+    const bad = await api.patchItem(ed.id, special.id, { action: "edit", patch: { description: "A healthy start that boosts your day" } }, approved.version);
     expect(bad.guardrail.status).toBe("blocked");
-    const shouty = await api.patchItem(ed.id, special.id, { action: "edit", patch: { description: "Come and try it!" } });
+    const shouty = await api.patchItem(ed.id, special.id, { action: "edit", patch: { description: "Come and try it!" } }, bad.version);
     expect(shouty.guardrail.status).toBe("rewritten");
-    await expect(api.patchItem(ed.id, "nope", { action: "approve" })).rejects.toMatchObject({ status: 404 });
+    await expect(api.patchItem(ed.id, "nope", { action: "approve" }, 0)).rejects.toMatchObject({ status: 404 });
   });
 
   it("approve-all skips unchecked items; streams build events; reads a public card", async () => {

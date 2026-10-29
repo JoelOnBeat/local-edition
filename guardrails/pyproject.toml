@@ -1,10 +1,10 @@
 [project]
 name = "local-edition-guardrails"
-version = "0.1.0"
-description = "NeMo Guardrails sidecar for Local Edition: blocks health, diet, nutrition and allergen claims and checks brand voice."
+version = "0.2.0"
+description = "NeMo Guardrails batch rails for Local Edition: certifies copy in the Nebius Serverless Job (no server)."
 requires-python = ">=3.11,<3.13"
 dependencies = [
-  "nemoguardrails[server]==0.24.1",
+  "nemoguardrails==0.24.1",
 ]
 
 [dependency-groups]

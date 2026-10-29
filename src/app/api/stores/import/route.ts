@@ -1,3 +1,3 @@
-import { importStores } from "@/server/handlers/workspace";
+import { importStoresRoute } from "@/server/handlers/job-batch";
 
-export const POST = importStores;
+export const POST = importStoresRoute;

@@ -2,6 +2,7 @@ import type { AgentEvent, JobRun } from "@/contract";
 import { newId } from "@/lib/ids";
 import { HttpError, UpstreamError } from "../http/errors";
 import { createLogger } from "../log";
+import { recordJobRun } from "../handlers/proof-ledger";
 import { DEMO_WORKSPACE_ID, ensureDemoWorkspace } from "../session";
 import type { Repo } from "../store";
 import type { JobPorts } from "./ports";
@@ -46,7 +47,7 @@ export async function startMondayJob(opts: StartJobOptions): Promise<JobRun> {
   const latest = await repo.latestJobRun();
   if (latest?.status === "running") {
     if (now().getTime() - Date.parse(latest.startedAt) < STALE_RUN_MS) return latest;
-    await repo.putJobRun({ ...latest, status: "failed", finishedAt: now().toISOString(), note: "Timed out without finishing." });
+    await recordJobRun(repo, { ...latest, status: "failed", finishedAt: now().toISOString(), note: "Timed out without finishing." });
   }
 
   const run: JobRun = {
@@ -54,12 +55,13 @@ export async function startMondayJob(opts: StartJobOptions): Promise<JobRun> {
     trigger: opts.trigger,
     startedAt: now().toISOString(),
     finishedAt: null,
+    mode: "rebuild",
     storeIds: stores.map((s) => s.id),
     status: "running",
     nebiusJobId: opts.nebiusJobId ?? null,
     note: `Building ${stores.length} store${stores.length === 1 ? "" : "s"}.`,
   };
-  await repo.putJobRun(run);
+  await recordJobRun(repo, run);
   ports.background(
     executeJob(run, { repo, ports, now }).catch((e) => log.error("job crashed", { runId: run.id, err: e })),
   );
@@ -101,6 +103,6 @@ export async function executeJob(run: JobRun, ctx: { repo: Repo; ports: JobPorts
     ? `Built ${editionIds.length} of ${run.storeIds.length} editions${kept ? `, kept ${kept} with approvals` : ""}${problems.length ? `; ${problems.length} error(s): ${codes}` : ""}. Drafts await approval.`
     : `Build failed${problems.length ? ` (${codes})` : ""}.`;
   const done: JobRun = { ...run, status: ok ? "done" : "failed", finishedAt: ctx.now().toISOString(), note };
-  await repo.putJobRun(done);
+  await recordJobRun(repo, done);
   return done;
 }

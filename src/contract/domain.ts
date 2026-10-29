@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EditionReview, GuardrailChecker, ItemVerification, JobMode, TieInTriage } from "./upgrade";
 
 /** Domain types for Local Edition. Source of truth: docs/CONTRACT.md. */
 
@@ -55,6 +56,10 @@ export const MenuItem = z.object({
   currency: z.literal("USD"),
   description: z.string().max(240).nullable(),
   source: z.enum(["vl", "manual"]),
+  /** From the VL verify pass: the item was found on the photo. Absent means true. */
+  seen: z.boolean().optional(),
+  /** From the VL verify pass: the price could be read. Absent means true; false shows amber. */
+  priceLegible: z.boolean().optional(),
 });
 export type MenuItem = z.infer<typeof MenuItem>;
 
@@ -112,6 +117,12 @@ export const GuardrailResult = z.object({
   rail: z.string().optional(),
   reasons: z.array(z.string()),
   original: z.string().optional(),
+  /** Who produced the verdict: the Worker's live check, or the NeMo Guardrails library in the Nebius job. Absent means `live`. */
+  checkedBy: GuardrailChecker.optional(),
+  /** When the Nebius job certified it. Only set with `checkedBy: "nemo-guardrails@nebius-job"`. */
+  certifiedAt: isoDateTime.optional(),
+  /** The Nebius job that certified it. */
+  jobId: z.string().min(1).max(120).optional(),
 });
 export type GuardrailResult = z.infer<typeof GuardrailResult>;
 
@@ -127,6 +138,8 @@ const itemCommon = {
   evidenceIds: z.array(z.string().min(1)).min(1), // >= 1, else the item is dropped
   guardrail: GuardrailResult,
   version: z.number().int().nonnegative(),
+  /** Evidence re-check (lift recomputed, entities looked up). Null or absent when nothing was verified. */
+  verification: ItemVerification.nullable().optional(),
 };
 
 export const SpecialItem = z.object({
@@ -164,7 +177,17 @@ export const EventItem = z.object({
   day: Weekday,
   time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), // "19:00"
   description: z.string().min(1),
-  tieIn: z.object({ title: z.string(), url: z.string(), source: z.literal("tavily") }).nullable(),
+  tieIn: z
+    .object({
+      title: z.string(),
+      url: z.string(),
+      source: z.literal("tavily"),
+      venue: z.string().max(160).nullable().optional(),
+      /** ISO date when the listing gives one. */
+      date: z.string().max(40).nullable().optional(),
+      triage: TieInTriage.optional(),
+    })
+    .nullable(),
 });
 
 export const EditionItem = z.discriminatedUnion("kind", [SpecialItem, SoundItem, PartnerItem, EventItem]);
@@ -188,6 +211,8 @@ export const Edition = z.object({
   status: EditionStatus,
   generatedBy: z.object({ agentModel: z.string(), copyModel: z.string(), runId: z.string() }),
   createdAt: isoDateTime,
+  /** The Ultra reviewer's verdict on this edition. Null or absent before a review has run. */
+  review: EditionReview.nullable().optional(),
 });
 export type Edition = z.infer<typeof Edition>;
 
@@ -219,6 +244,10 @@ export const JobRun = z.object({
   status: z.enum(["running", "done", "failed"]),
   nebiusJobId: z.string().nullable(),
   note: z.string(),
+  /** Which job this was. Absent on rows written before the upgrade. */
+  mode: JobMode.optional(),
+  /** sha256 of the job script that ran, so the proof page can show what executed. */
+  scriptSha: z.string().min(7).max(64).nullable().optional(),
 });
 export type JobRun = z.infer<typeof JobRun>;
 

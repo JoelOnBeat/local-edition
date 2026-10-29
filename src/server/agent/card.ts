@@ -5,6 +5,8 @@ import { createLogger } from "../log";
 import { HttpError, UpstreamError } from "../http/errors";
 import { voiceSystem } from "./copy";
 import { guardField, mergeResults } from "./guard";
+import { withMetrics } from "./metrics";
+import { recordSteps } from "./stats";
 import { askJson } from "./json";
 import { COPY_MODEL, limitsOf, type AgentDeps, type StoreContext } from "./ports";
 import { loadEditionAccess } from "./workspace";
@@ -36,7 +38,7 @@ function itemFacts(items: EditionItem[]): string {
 async function writeLines(deps: AgentDeps, sc: StoreContext, items: EditionItem[]): Promise<Line[]> {
   try {
     const user = `Write a one-page staff card for the team at ${sc.store.name} for the week of ${sc.weekOf}. Use only these approved items and keep each line something a barista can say out loud.\n${itemFacts(items)}\nReply as JSON: {"lines": [{"heading": "<=40 chars", "body": "<=240 chars"}]} with 3 to 5 lines.`;
-    const out = await askJson(deps.chat, { model: COPY_MODEL, system: voiceSystem(sc), user, schema: CardLines, maxTokens: 700, timeoutMs: limitsOf(deps).chatTimeoutMs });
+    const out = await askJson(deps.chat, { model: COPY_MODEL, system: voiceSystem(sc), user, schema: CardLines, maxTokens: 700, timeoutMs: limitsOf(deps).chatTimeoutMs, tag: "write_card" });
     return out.lines;
   } catch (e) {
     if (e instanceof UpstreamError && e.code === "spend_cap") throw e;
@@ -50,7 +52,17 @@ async function writeLines(deps: AgentDeps, sc: StoreContext, items: EditionItem[
  * the copy model from the edition's usable items, then every line passes guardrails; a blocked
  * line is left off the card rather than shown.
  */
-export async function getOrCreateCard(deps: AgentDeps, workspaceId: string, editionId: string): Promise<StaffCard> {
+export async function getOrCreateCard(base: AgentDeps, workspaceId: string, editionId: string): Promise<StaffCard> {
+  // The card route answers plain JSON, so its model calls cannot stream `step_metrics`; they are tallied in the metrics ledger.
+  const deps = withMetrics(base);
+  try {
+    return await makeCard(deps, workspaceId, editionId);
+  } finally {
+    await recordSteps(deps.repo, deps.sink?.all ?? [], 0, deps.now());
+  }
+}
+
+async function makeCard(deps: AgentDeps, workspaceId: string, editionId: string): Promise<StaffCard> {
   const { repo } = deps;
   const { edition, store, chain } = await loadEditionAccess(repo, workspaceId, editionId);
   if (edition.status === "drafting") throw new HttpError(409, "edition_drafting", "This edition is still being built.");

@@ -124,3 +124,29 @@ never a raw stack or upstream body.
 - No customer or personal data ever goes to Qloo: only coordinates, entity ids, tag urns.
 - Spend cap: `SPEND_CAP_USD` (default 5) enforced in the Token Factory client; beyond it, calls
   fail with code `spend_cap` and the UI says so.
+
+## Upgrade contract (architect, 29 Oct 22:40) — implemented by the upgrade workflow
+- `AgentEvent` gains:
+  - `step_metrics` {storeId?, role: 'agent'|'vision'|'copy'|'review'|'check'|'embed', model, tool?: string,
+    ms, promptTokens, cachedTokens, completionTokens, usd} — emitted for every model call, so the run panel
+    shows which Nemotron did what.
+  - `review` {storeId, verdict: 'approve'|'needs_change', reason, clashWith: string[] (storeIds), hint: string|null,
+    reviewedBy: model id}.
+  - `progress` {runId, done, total} — the Workflow's persisted progress, replayed by the SSE route.
+- `Edition` gains `review: { verdict, reason, clashWith, hint, reviewedBy, at } | null`.
+- `EditionItem` evidence check: `verification: { lift: 'recomputed'|'mismatch', entities: 'found'|'missing' } | null`;
+  an item failing either is dropped (as before) and counted for /limits.
+- `MenuItem` gains `seen: boolean` and `priceLegible: boolean` from the VL verify pass (amber in the UI when false).
+- `Event` tie-in gains `venue: string|null`, `date: string|null`, `triage: { kept: boolean, reason }`.
+- New routes:
+  | GET /api/proof | — | { jobRuns: JobRun[], eval: EvalResult|null, scriptSha, gitSha, spendPerEditionUsd, cachedRatio } | S5 |
+  | GET /api/limits | — | { droppedForEvidence, guardrailBlocks, falsePositiveRate, qlooCoverageGaps[], costPerEditionUsd, tavilyCreditsUsed } | S5 |
+  | POST /api/editions/review | { weekOf? } | SSE AgentEvent (Ultra review pass over the workspace's editions) | S3 |
+  | GET /api/jobs/pending | HMAC header | { items: { editionId, itemId, kind, text, brandVoice }[] } | S2 |
+  | POST /api/jobs/results | HMAC header | { results: { editionId, itemId, guardrail: GuardrailResult }[] } -> { updated } | S2 |
+  | POST /api/jobs/eval | HMAC header | EvalResult -> { ok } | S2 |
+  | POST /api/chain/brand-voice | {} | { lines: string[], sources: Evidence[] } (one Tavily crawl per chain, then Lightning) | S4 |
+- `EvalResult` { at, cases: number, caught: number, falsePositives: number, benign: number, catchRate, falsePositiveRate,
+  model, jobId, rows: { phrase, expected: 'block'|'pass', got: 'block'|'pass' }[] }.
+- `/api/proof`'s `spendPerEditionUsd` and `cachedRatio`, and `/api/limits`'s `costPerEditionUsd`, are `number | null`: null until a build has recorded its model calls and a finished edition.
+- `JobRun` gains `mode: 'rebuild'|'certify'|'eval'|'import'` and `scriptSha: string|null`.

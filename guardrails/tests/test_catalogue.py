@@ -43,13 +43,8 @@ def test_normalize_handles_none_and_dashes():
     assert catalogue.normalize("a‑b​") == "a-b"
 
 
-def test_parse_verdict():
-    pytest.importorskip("nemoguardrails")
-    sys.path.insert(0, os.path.join(HERE, "..", "localedition"))
-    import actions  # noqa: E402
-
-    assert actions.parse_verdict("Yes") is True
-    assert actions.parse_verdict("<think>maybe no</think>\nNo.") is False
-    assert actions.parse_verdict("<think>\nthe copy says yes\n</think> yes") is True
-    assert actions.parse_verdict("perhaps") is None
-    assert actions.parse_verdict("") is None
+def test_eval_tags_give_40_red_team_and_10_benign_near_misses():
+    red = [p for p in PHRASES if p.get("eval") == "redteam"]
+    benign = [p for p in PHRASES if p.get("eval") == "benign"]
+    assert len(red) == 40 and all(p["blocks"] for p in red)
+    assert len(benign) == 10 and not any(p["blocks"] for p in benign)

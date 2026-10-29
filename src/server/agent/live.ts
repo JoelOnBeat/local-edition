@@ -2,6 +2,8 @@ import type { ChatCompletionMessageParam } from "openai/resources/chat/completio
 import type { Chain, Store } from "@/contract";
 import { checkCopyDetailed } from "../guardrails";
 import { repoCache } from "../qloo/deps";
+import { BLOCK_TAG_TYPES } from "../qloo/util";
+import { serverEnv } from "@/lib/env";
 import { artistsLocal } from "../qloo/artists";
 import { blockProfile } from "../qloo/block";
 import { brandsLocal } from "../qloo/brands";
@@ -14,6 +16,7 @@ import type { Repo } from "../store/repo";
 import type {
   AgentDeps,
   ArtistCandidate,
+  BaselineTag,
   ChatClient,
   ChatMessage,
   EventCandidate,
@@ -29,6 +32,9 @@ import type {
  * Tavily, Token Factory and Guardrails passes through the ports in `ports.ts`.
  */
 
+/** The block profile's city baseline cache key (`qloo/block.ts`); the verifier reads it back to recompute lifts. */
+const baselineKey = (chain: Chain, group: string) => `qloo:baseline:v1:${chain.city.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}:${group}`;
+
 const anchorIds = (chain: Chain) => chain.anchors.map((a) => a.entityId);
 const ids = (evidenceId: string) => (evidenceId ? [evidenceId] : []);
 
@@ -36,6 +42,20 @@ function qlooPort(repo: Repo): QlooPort {
   const cache = { cache: repoCache(repo) };
   return {
     blockProfile: (store, chain) => blockProfile(store, chain, cache),
+
+    async baseline(chain) {
+      const out: BaselineTag[] = [];
+      for (const group of [...BLOCK_TAG_TYPES.map((t) => t.type), "places"]) {
+        const hit = await cache.cache.get<unknown>(baselineKey(chain, group));
+        if (Array.isArray(hit)) {
+          for (const t of hit as { tagId?: string; affinity?: number }[]) if (typeof t?.tagId === "string" && typeof t.affinity === "number") out.push({ tagId: t.tagId, affinity: t.affinity, group });
+        } else if (hit && typeof hit === "object") {
+          // The places fallback caches tag id -> share.
+          for (const [tagId, affinity] of Object.entries(hit as Record<string, unknown>)) if (typeof affinity === "number") out.push({ tagId, affinity, group });
+        }
+      }
+      return out.length ? out : null;
+    },
 
     async placesNear(store, chain, o) {
       const r = await placesNear(store, { tags: o.tagIds, take: o.limit, anchorIds: anchorIds(chain) }, cache);
@@ -108,9 +128,21 @@ const chatClient: ChatClient = {
       model: req.model,
       maxTokens: req.maxTokens ?? 800,
       temperature: req.temperature,
+      reasoning: req.reasoning,
+      responseFormat: req.responseFormat ? { type: "json_schema", json_schema: { name: req.responseFormat.name, schema: req.responseFormat.schema, strict: true } } : undefined,
       tools: req.tools?.map((t) => ({ type: "function" as const, function: { name: t.name, description: t.description, parameters: t.parameters } })),
     });
-    return { content: r.content, toolCalls: r.toolCalls.map((c) => ({ id: c.id, name: c.name, arguments: c.arguments })) };
+    return {
+      content: r.content,
+      toolCalls: r.toolCalls.map((c) => ({ id: c.id, name: c.name, arguments: c.arguments })),
+      usage: {
+        promptTokens: r.usage.inTokens,
+        // The Token Factory client does not parse `prompt_tokens_details.cached_tokens` yet; read it when it does.
+        cachedTokens: (r.usage as { cachedTokens?: number }).cachedTokens ?? 0,
+        completionTokens: r.usage.outTokens,
+        reasoningTokens: r.usage.reasoningTokens,
+      },
+    };
   },
 };
 
@@ -131,5 +163,7 @@ export async function liveAgentDeps(): Promise<AgentDeps> {
       },
     },
     now: () => new Date(),
+    // Fixture mode only: the evidence verifier is shown catching one labelled, deliberately bad item.
+    seedBadItem: serverEnv().QLOO_MODE === "fixture",
   };
 }

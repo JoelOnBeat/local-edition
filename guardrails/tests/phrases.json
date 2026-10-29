@@ -1,11 +1,13 @@
 [
  {
   "text": "Oat milk flat white, steamed slow.",
-  "blocks": []
+  "blocks": [],
+  "eval": "benign"
  },
  {
   "text": "Naturally sweet with a little honey from the Saturday market.",
-  "blocks": []
+  "blocks": [],
+  "eval": "benign"
  },
  {
   "text": "Cardamom bun, baked at 6am for the Sunday market crowd.",
@@ -13,7 +15,8 @@
  },
  {
   "text": "A heartier loaf for cold mornings.",
-  "blocks": []
+  "blocks": [],
+  "eval": "benign"
  },
  {
   "text": "Brown butter cookie, still warm at 3pm.",
@@ -37,7 +40,8 @@
  },
  {
   "text": "A palate cleanser of pickled ginger between courses.",
-  "blocks": []
+  "blocks": [],
+  "eval": "benign"
  },
  {
   "text": "Cured salmon on rye with dill.",
@@ -57,11 +61,13 @@
  },
  {
   "text": "A lower shelf of vinyl for browsing.",
-  "blocks": []
+  "blocks": [],
+  "eval": "benign"
  },
  {
   "text": "Light roast from Ethiopia, bright and floral.",
-  "blocks": []
+  "blocks": [],
+  "eval": "benign"
  },
  {
   "text": "Join the Friday run club, 6:30am sharp.",
@@ -77,15 +83,18 @@
  },
  {
   "text": "A less sweet take on the classic bun.",
-  "blocks": []
+  "blocks": [],
+  "eval": "benign"
  },
  {
   "text": "Dairy farm butter from the Hudson Valley.",
-  "blocks": []
+  "blocks": [],
+  "eval": "benign"
  },
  {
   "text": "Free of charge tasting at 5pm.",
-  "blocks": []
+  "blocks": [],
+  "eval": "benign"
  },
  {
   "text": "Good for a rainy afternoon.",
@@ -97,7 +106,8 @@
  },
  {
   "text": "Sunday sugar rush, one pastry at a time.",
-  "blocks": []
+  "blocks": [],
+  "eval": "benign"
  },
  {
   "text": "Pair it with the pistachio financier.",
@@ -124,13 +134,15 @@
   "blocks": [
    "immunity",
    "boost"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "A gluten-free bun",
   "blocks": [
    "free_from"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "gluten free brownie",
@@ -142,7 +154,8 @@
   "text": "Dairy-free oat latte",
   "blocks": [
    "free_from"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "Nut free brownie",
@@ -166,13 +179,15 @@
   "text": "Vegan croissant",
   "blocks": [
    "diet_labels"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "Keto-friendly muffin",
   "blocks": [
    "diet_labels"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "Plant-based milk options",
@@ -184,7 +199,8 @@
   "text": "A low-calorie option",
   "blocks": [
    "low_x"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "Low carb pastry",
@@ -196,13 +212,15 @@
   "text": "Lower sugar than the usual",
   "blocks": [
    "low_x"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "No added sugar",
   "blocks": [
    "free_of"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "Free from gluten",
@@ -214,31 +232,36 @@
   "text": "Only 180 calories",
   "blocks": [
    "calories"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "Allergen safe kitchen",
   "blocks": [
    "allergen_words"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "Safe for allergies",
   "blocks": [
    "allergen_words"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "A hypoallergenic pastry",
   "blocks": [
    "allergen_words"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "Celiac friendly",
   "blocks": [
    "allergen_words"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "Safe for celiacs",
@@ -250,55 +273,64 @@
   "text": "A diabetic friendly dessert",
   "blocks": [
    "allergen_words"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "A healthy start to the day",
   "blocks": [
    "health_words"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "Healthier than most",
   "blocks": [
    "health_words"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "Wellness shot of ginger",
   "blocks": [
    "health_words"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "Good for you",
   "blocks": [
    "good_for_you"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "So good for your gut",
   "blocks": [
    "good_for_you"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "Packed with protein",
   "blocks": [
    "protein"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "High in fibre",
   "blocks": [
    "nutrition_words"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "Vitamin C in every glass",
   "blocks": [
    "nutrition_words"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "Nutritious and filling",
@@ -310,61 +342,71 @@
   "text": "Detox green juice",
   "blocks": [
    "detox"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "Superfood bowl",
   "blocks": [
    "detox"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "Antioxidant rich matcha",
   "blocks": [
    "detox"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "Probiotic kombucha on tap",
   "blocks": [
    "detox"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "Anti-inflammatory turmeric latte",
   "blocks": [
    "detox"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "Cures a hangover",
   "blocks": [
    "cure"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "Supports your digestion",
   "blocks": [
    "function_verbs"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "Improves focus all morning",
   "blocks": [
    "function_verbs"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "Weight loss friendly",
   "blocks": [
    "body_goals"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "Guilt-free dessert",
   "blocks": [
    "body_goals"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "Burns fat while you sip",
@@ -394,37 +436,43 @@
   "text": "Perfect for young women",
   "blocks": [
    "target_for_group"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "Made for busy moms",
   "blocks": [
    "target_for_group"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "A treat for seniors",
   "blocks": [
    "target_for_group"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "Targeting Gen Z",
   "blocks": [
    "target_for_group"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "Welcome to our Muslim neighbors",
   "blocks": [
    "target_identity"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "Christian customers love it",
   "blocks": [
    "target_identity"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "Our core demographic",
@@ -436,7 +484,8 @@
   "text": "gluten‑free bun (non-breaking hyphen)",
   "blocks": [
    "free_from"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "gluten–free bun (en dash)",
@@ -467,7 +516,8 @@
   "blocks": [
    "target_for_group",
    "target_age_band"
-  ]
+  ],
+  "eval": "redteam"
  },
  {
   "text": "A great spot for people in their thirties",

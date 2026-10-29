@@ -2,7 +2,7 @@ import type { z } from "zod";
 import { UpstreamError } from "../http/errors";
 import type { ChatClient, ChatMessage } from "./ports";
 
-function extractJson(text: string | null): unknown {
+export function extractJson(text: string | null): unknown {
   if (!text) return undefined;
   const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(text);
   const body = fenced ? fenced[1] : text;
@@ -13,19 +13,20 @@ function extractJson(text: string | null): unknown {
 }
 
 /**
- * Ask a model for JSON and validate it with zod. JSON mode is unconfirmed for these models, so a
+ * Copy and JSON calls run with thinking `off` (docs/LIVE-SMOKE.md: on Lightning a 20-word reply spends 600+ tokens
+ * and the thinking lands in `content`). Ask a model for JSON and validate it with zod. JSON mode is unconfirmed for these models, so a
  * bad answer gets one repair turn; after that the caller sees `invalid_response`.
  */
 export async function askJson<S extends z.ZodType>(
   chat: ChatClient,
-  opts: { model: string; system: string; user: string; schema: S; maxTokens?: number; timeoutMs?: number; temperature?: number },
+  opts: { model: string; system: string; user: string; schema: S; maxTokens?: number; timeoutMs?: number; temperature?: number; tag?: string },
 ): Promise<z.output<S>> {
   const messages: ChatMessage[] = [
     { role: "system", content: opts.system },
     { role: "user", content: opts.user },
   ];
   for (let attempt = 0; attempt < 2; attempt++) {
-    const res = await chat.complete({ model: opts.model, messages, temperature: opts.temperature ?? 0.5, maxTokens: opts.maxTokens ?? 600, timeoutMs: opts.timeoutMs });
+    const res = await chat.complete({ model: opts.model, messages, temperature: opts.temperature ?? 0.5, maxTokens: opts.maxTokens ?? 600, timeoutMs: opts.timeoutMs, reasoning: "off", tag: opts.tag });
     const parsed = opts.schema.safeParse(extractJson(res.content));
     if (parsed.success) return parsed.data;
     const why = parsed.error.issues.slice(0, 3).map((i) => `${i.path.join(".") || "reply"}: ${i.message}`).join("; ");
@@ -38,9 +39,9 @@ export async function askJson<S extends z.ZodType>(
 /** Plain-text completion with quotes and fences stripped. */
 export async function askText(
   chat: ChatClient,
-  opts: { model: string; system: string; user: string; maxTokens?: number; timeoutMs?: number },
+  opts: { model: string; system: string; user: string; maxTokens?: number; timeoutMs?: number; tag?: string },
 ): Promise<string> {
-  const res = await chat.complete({ model: opts.model, messages: [{ role: "system", content: opts.system }, { role: "user", content: opts.user }], temperature: 0.4, maxTokens: opts.maxTokens ?? 300, timeoutMs: opts.timeoutMs });
+  const res = await chat.complete({ model: opts.model, messages: [{ role: "system", content: opts.system }, { role: "user", content: opts.user }], temperature: 0.4, maxTokens: opts.maxTokens ?? 300, timeoutMs: opts.timeoutMs, reasoning: "off", tag: opts.tag });
   const text = (res.content ?? "").replace(/```[a-z]*\n?|```/g, "").trim().replace(/^["'“”]+|["'“”]+$/g, "").trim();
   if (!text) throw new UpstreamError("invalid_response", "tokenfactory", "The model returned no text.");
   return text;

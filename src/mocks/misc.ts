@@ -1,8 +1,9 @@
 import type { CompareResult, Edition, Evidence, JobRun, ProviderStatus, PublicStaffCard, StaffCard, Store, Workspace } from "@/contract";
-import { SAMPLE_CHAIN, SAMPLE_CHAIN_ID, SAMPLE_MENU, SAMPLE_STORES } from "@/server/sample/chain";
+import { SAMPLE_CHAIN, SAMPLE_CHAIN_ID, SAMPLE_STORES } from "@/server/sample/chain";
 import { mockEditions } from "./editions";
 import { MOCK_NOW, MOCK_WORKSPACE_ID, fakeEntityId } from "./helpers";
 import { getMockProfile, profileEvidence } from "./profiles";
+import { mockJobRuns, mockMenu } from "./upgrade-data";
 
 export const mockWorkspace: Workspace = { id: MOCK_WORKSPACE_ID, chainId: SAMPLE_CHAIN_ID, createdAt: MOCK_NOW };
 
@@ -57,16 +58,8 @@ export function mockPublicCard(token: string): PublicStaffCard | null {
   return card && store ? { card, store, chainName: SAMPLE_CHAIN.name } : null;
 }
 
-export const mockJobRun: JobRun = {
-  id: "job_sample_2026w44",
-  trigger: "cron",
-  startedAt: "2026-10-26T00:00:00.000Z", // Monday 08:00 MYT
-  finishedAt: "2026-10-26T00:04:41.000Z",
-  storeIds: SAMPLE_STORES.map((s) => s.id),
-  status: "done",
-  nebiusJobId: "nebius-job-7f3a9c21",
-  note: "Sample run: 8 editions rebuilt, 1 item held for review.",
-};
+/** The latest Monday run: the rebuild, which started the certify job. See `mockJobRuns` for one run per mode. */
+export const mockJobRun: JobRun = mockJobRuns[0];
 
 export const mockStatus: ProviderStatus = {
   qloo: "fixture",
@@ -80,6 +73,6 @@ export const mockWorkspaceBundle = () => ({
   workspace: mockWorkspace,
   chain: structuredClone(SAMPLE_CHAIN),
   stores: structuredClone(SAMPLE_STORES),
-  menu: structuredClone(SAMPLE_MENU),
+  menu: structuredClone(mockMenu),
   latestEditions: structuredClone(mockEditions),
 });

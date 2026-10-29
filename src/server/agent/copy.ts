@@ -23,9 +23,10 @@ const SHAPES: Record<keyof typeof SCHEMAS, string> = {
 };
 
 export function voiceSystem(sc: StoreContext): string {
+  // Brand voice first, then the rules: the same prefix for every item of a chain, so the provider's prompt cache hits.
   return [
-    `You write short in-store copy for ${sc.chain.name}, a ${sc.chain.category} chain.`,
     `Brand voice: ${sc.chain.brandVoice.join(" ")}`,
+    `You write short in-store copy for ${sc.chain.name}, a ${sc.chain.category} chain.`,
     "Rules: plain text, no emojis. Use only the facts given. No health, diet, nutrition or allergen claims. Never mention age, gender, ethnicity or religion groups. No prices or discounts unless a fact states one. Say \"rising in Qloo's population data\", never \"rising on this street\".",
     "Reply with only a JSON object.",
   ].join("\n");
@@ -52,7 +53,7 @@ export async function writeCopy(deps: AgentDeps, sc: StoreContext, c: Candidate,
   const kind = c.kind;
   try {
     const user = `${factsFor(c, sc, evidenceFacts)}\n${hint ? `Head office note: ${hint}\n` : ""}Write the ${kind} copy as JSON: ${SHAPES[kind]}`;
-    const fields = await askJson(deps.chat, { model: COPY_MODEL, system: voiceSystem(sc), user, schema: SCHEMAS[kind], timeoutMs: limitsOf(deps).chatTimeoutMs });
+    const fields = await askJson(deps.chat, { model: COPY_MODEL, system: voiceSystem(sc), user, schema: SCHEMAS[kind], timeoutMs: limitsOf(deps).chatTimeoutMs, tag: "write_copy" });
     return { fields: fields as CopyFields, templated: false };
   } catch (e) {
     if (e instanceof UpstreamError && e.code === "spend_cap") throw e;
@@ -69,6 +70,7 @@ export async function rewriteField(deps: AgentDeps, sc: StoreContext, field: str
       system: `${voiceSystem(sc).replace("Reply with only a JSON object.", "Reply with only the rewritten text.")}`,
       user: `Rewrite this ${field} so it keeps the same meaning but removes whatever was flagged.\nFlagged because: ${reasons.join("; ") || "policy"}.\nText: ${text}`,
       timeoutMs: limitsOf(deps).chatTimeoutMs,
+      tag: "rewrite_copy",
     });
   } catch (e) {
     if (e instanceof UpstreamError && e.code === "spend_cap") throw e;

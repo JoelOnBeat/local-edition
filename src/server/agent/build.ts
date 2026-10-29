@@ -6,6 +6,9 @@ import { reapStaleDrafts } from "../store/reaper";
 import { acquireBuildLock, ApprovalsAppeared, hasApprovals, releaseBuildLock, type BuildLock } from "./build-lock";
 import { evidenceCheck, produceItem } from "./items";
 import { runStoreAgent } from "./loop";
+import { flush, withMetrics } from "./metrics";
+import { recordSteps } from "./stats";
+import { dropMessage, verifyStep } from "./verify";
 import { AGENT_MODEL, COPY_MODEL, FALLBACK_AGENT_LABEL, type AgentDeps, type StoreContext } from "./ports";
 import { invalidateCard } from "./card-state";
 import { mondayOf } from "./util";
@@ -46,7 +49,7 @@ export async function* buildEditions(params: BuildParams, deps: AgentDeps): Asyn
     }
   }
   try {
-    yield* runBuild(params, deps);
+    yield* runBuild(params, withMetrics(deps));
   } finally {
     await releaseBuildLock(repo, lock);
   }
@@ -76,26 +79,33 @@ async function* runBuild(params: BuildParams, deps: AgentDeps): AsyncGenerator<A
 
   yield { type: "run_started", runId, storeIds: stores.map((s) => s.id) };
   const editionIds: string[] = [];
-  for (const store of stores) {
-    try {
-      const id = yield* buildStore(deps, { chain, store, menu, weekOf }, runId, params.force === true);
-      if (id) editionIds.push(id);
-    } catch (e) {
-      if (e instanceof UpstreamError && e.code === "spend_cap") {
-        yield err("spend_cap", "The model spend cap has been reached, so the build stopped.", store.id);
-        return;
+  try {
+    for (const [i, store] of stores.entries()) {
+      try {
+        const id = yield* buildStore(deps, { chain, store, menu, weekOf }, runId, params.force === true, i === 0);
+        if (id) editionIds.push(id);
+      } catch (e) {
+        if (e instanceof UpstreamError && e.code === "spend_cap") {
+          yield* flush(deps);
+          yield err("spend_cap", "The model spend cap has been reached, so the build stopped.", store.id);
+          return;
+        }
+        log.error("store build failed", { storeId: store.id, err: e });
+        yield* flush(deps);
+        yield err("store_failed", `Could not finish the edition for ${store.name}.`, store.id);
       }
-      log.error("store build failed", { storeId: store.id, err: e });
-      yield err("store_failed", `Could not finish the edition for ${store.name}.`, store.id);
     }
+    yield { type: "run_done", runId, editionIds };
+  } finally {
+    // Whatever the run spent is tallied for /api/proof, even when it stopped early.
+    await recordSteps(repo, deps.sink?.all ?? [], editionIds.length, deps.now());
   }
-  yield { type: "run_done", runId, editionIds };
 }
 
 const KEPT_APPROVALS = (name: string) => `Kept ${name} as it is: it has approved or edited items. Rebuild with force to replace them.`;
 
 /** Returns the edition id, or null when the store was left alone because head office already worked on it. */
-async function* buildStore(deps: AgentDeps, sc: StoreContext, runId: string, force: boolean): AsyncGenerator<AgentEvent, string | null> {
+async function* buildStore(deps: AgentDeps, sc: StoreContext, runId: string, force: boolean, first: boolean): AsyncGenerator<AgentEvent, string | null> {
   const { repo } = deps;
   const { store, weekOf } = sc;
   const existing = await repo.getEditionForWeek(store.id, weekOf);
@@ -103,12 +113,16 @@ async function* buildStore(deps: AgentDeps, sc: StoreContext, runId: string, for
     yield err("has_approvals", KEPT_APPROVALS(store.name), store.id);
     return null;
   }
+  if (deps.sink) deps.sink.storeId = store.id;
   yield { type: "store_started", storeId: store.id };
 
   const issueNo = existing?.issueNo ?? (await nextIssueNo(deps, store, weekOf));
   const { set, mem, usedFallback } = yield* runStoreAgent({ sc, deps });
-  const { kept, dropped } = evidenceCheck(set, mem);
-  for (const d of dropped) yield err("item_dropped", `The ${d.kind} item was dropped: ${d.reason === "no_evidence" ? "no evidence supports it" : "fewer than 8 artists were found"}.`, store.id);
+  const checked = evidenceCheck(set, mem);
+  for (const d of checked.dropped) yield err("item_dropped", dropMessage(d.kind, d.reason), store.id);
+  // The evidence verifier recomputes lifts and re-checks every cited id against the Qloo payload; drops announce themselves.
+  const { kept } = yield* verifyStep(deps, sc.chain, store.id, mem, checked, { seed: deps.seedBadItem === true && first });
+  yield* flush(deps);
 
   const fresh: Edition = {
     id: existing?.id ?? newId("ed"),
@@ -144,6 +158,7 @@ async function* buildStore(deps: AgentDeps, sc: StoreContext, runId: string, for
     const pending = kept.map((c) => produceItem(deps, sc, mem, c).then((value) => ({ ok: true as const, value }), (error: unknown) => ({ ok: false as const, error })));
     for (const [i, settled] of pending.entries()) {
       const r = await settled;
+      yield* flush(deps);
       if (!r.ok) {
         if (r.error instanceof UpstreamError && r.error.code === "spend_cap") throw r.error;
         log.error("item failed", { kind: kept[i].kind, err: r.error });

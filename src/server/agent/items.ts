@@ -6,10 +6,11 @@ import type { ToolMemory } from "./memory";
 import type { Candidate, CandidateSet } from "./plan";
 import type { AgentDeps, StoreContext } from "./ports";
 import type { CopyFields } from "./templates";
+import type { Dropped } from "./verify";
 
 export const KIND_ORDER: EditionItemKind[] = ["special", "sound", "partner", "event"];
 
-export interface Dropped { kind: EditionItemKind; reason: "no_evidence" | "too_few_artists" }
+export type { Dropped };
 
 /** Evidence check: an item with no evidence id (or a sound item that cannot reach 8 artists) is dropped, never shown. */
 export function evidenceCheck(set: CandidateSet, mem: ToolMemory): { kept: Candidate[]; dropped: Dropped[] } {
@@ -33,6 +34,8 @@ export function assembleItem(c: Candidate, f: CopyFields, guardrail: GuardrailRe
     status: guardrail.status === "blocked" ? ("flagged" as const) : ("draft" as const),
     evidenceIds: c.evidenceIds,
     guardrail,
+    // Set by the evidence verifier; absent when the candidate never went through it.
+    ...("verification" in c ? { verification: c.verification } : {}),
   };
   const raw = (() => {
     switch (c.kind) {

@@ -1,24 +1,24 @@
-# Local Edition copy rails. Colang 1.0 (the default); Colang 2.0 is rejected by /v1/checks.
-# The main model is the agent model (only used if someone calls /v1/chat/completions through the rails).
-# Self-checks run on the cheap copy model: the `brand_voice_check` model entry is picked by the
-# custom action in actions.py (task name = model type). Both read NEBIUS_API_KEY from the environment;
-# without it the brand-voice rail degrades to "skipped" and the regex rail still runs.
+# Local Edition copy rails for the batch job (NeMo Guardrails 0.24.1, library mode: no server).
+# Used by guardrails/localedition/batch.py inside the Nebius Serverless Job (jobs/certify.py).
+#
+# The only model is Lightning on Token Factory, reasoning OFF: top-level reasoning_effort and
+# chat_template_kwargs (measured: 0 reasoning tokens). NeMo's own client sends `parameters` as default
+# request fields; NEBIUS_API_KEY comes from the environment. Never nvidia/nemotron-3-super-120b-a12b
+# (leaves Token Factory Serverless on 9 Nov 2026). `self check output` has no model entry of its own, so
+# it uses this `main` model.
 models:
   - type: main
-    engine: openai
-    model: nvidia/nemotron-3-super-120b-a12b
-    api_key_env_var: NEBIUS_API_KEY
-    parameters:
-      base_url: https://api.tokenfactory.nebius.com/v1/
-  - type: brand_voice_check
     engine: openai
     model: nvidia/Nemotron-3_5-Lightning
     api_key_env_var: NEBIUS_API_KEY
     parameters:
       base_url: https://api.tokenfactory.nebius.com/v1/
+      reasoning_effort: none
+      chat_template_kwargs:
+        enable_thinking: false
 
 rails:
   output:
     flows:
-      - check health claims   # deterministic regex catalogue, runs first
-      - check brand voice     # LLM self-check against the brand voice passed in the request context
+      - check health claims   # OUR regex catalogue, run by NeMo's runtime as a custom action; runs first
+      - self check output     # NeMo's built-in LLM rail; prompt text in prompts.yml; brand voice rides in the user turn

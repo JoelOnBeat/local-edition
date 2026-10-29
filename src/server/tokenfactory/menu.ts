@@ -1,8 +1,12 @@
 import type { MenuItem } from "@/contract";
-import { HttpError } from "../http/errors";
+import { HttpError, UpstreamError } from "../http/errors";
 import { getTokenFactory, MODELS, type TfMode, type TokenFactory } from "./client";
 import { jsonOutput } from "./json";
-import { toMenuItems, VlMenu } from "./menu-parse";
+import { applyVerify, toMenuItems, VerifyOut, VlMenu } from "./menu-parse";
+import { priceUsd } from "./spend";
+import { createLogger } from "../log";
+
+const log = createLogger("menu");
 
 export type MenuMime = "image/jpeg" | "image/png" | "image/webp";
 
@@ -33,13 +37,46 @@ export function toBase64(bytes: Uint8Array): string {
   return btoa(bin);
 }
 
+/** One model call, for the run panel's `step_metrics` (role `vision`). */
+export interface MenuStep {
+  tool: "menu_extract" | "menu_verify";
+  model: string;
+  ms: number;
+  promptTokens: number;
+  completionTokens: number;
+  usd: number;
+}
+
 export interface MenuRead {
   items: MenuItem[];
   mode: TfMode;
+  /** `verified` when the second pass ran; `skipped` when it was off, offline or failed (items then carry no flags). */
+  verify: "verified" | "skipped";
+  /** Rows the verify pass could not find on the photo and removed. */
+  dropped: number;
+  steps: MenuStep[];
 }
 
-/** Photo of a menu board -> MenuItem[] via Nemotron 3.5 Super VL, validated with zod. */
-export async function readMenuBoardDetailed(bytes: Uint8Array, mime: MenuMime, tf: TokenFactory = getTokenFactory()): Promise<MenuRead> {
+const VERIFY_SYSTEM = "You check a transcription of a menu board against the photo of the board. Output JSON only.";
+
+const VERIFY_RULES = [
+  'Return {"rows":[{"i":number,"seen":boolean,"price_legible":boolean}]} with exactly one row per input row, using its "i".',
+  "- seen: true only if that item's name is actually printed on the board in the photo. False if it is not there.",
+  "- price_legible: true only if the item's price is clearly readable in the photo and equals the transcribed price. False if the price is blurred, cut off, hidden by glare, unclear, missing, or different from the transcription.",
+  "Do not correct or add rows.",
+].join("\n");
+
+const dataUrl = (bytes: Uint8Array, mime: MenuMime) => ({ type: "image_url" as const, image_url: { url: `data:${mime};base64,${toBase64(bytes)}` } });
+
+/** Photo of a menu board -> MenuItem[]: Super VL reads it, then a second Super VL call checks each row against the same photo. */
+export async function readMenuBoardDetailed(
+  bytes: Uint8Array,
+  mime: MenuMime,
+  tf: TokenFactory = getTokenFactory(),
+  opts: { verify?: boolean } = {},
+): Promise<MenuRead> {
+  const steps: MenuStep[] = [];
+  const t0 = Date.now();
   const r = await jsonOutput(VlMenu, {
     tf,
     model: MODELS.vision,
@@ -49,20 +86,47 @@ export async function readMenuBoardDetailed(bytes: Uint8Array, mime: MenuMime, t
     temperature: 0,
     messages: [
       { role: "system", content: SYSTEM },
-      {
-        role: "user",
-        content: [
-          { type: "image_url", image_url: { url: `data:${mime};base64,${toBase64(bytes)}` } },
-          { type: "text", text: INSTRUCTIONS },
-        ],
-      },
+      { role: "user", content: [dataUrl(bytes, mime), { type: "text", text: INSTRUCTIONS }] },
     ],
   });
-  const items = toMenuItems(r.data);
-  if (items.length === 0) {
+  steps.push({ tool: "menu_extract", model: MODELS.vision, ms: Date.now() - t0, promptTokens: r.usage.inTokens, completionTokens: r.usage.outTokens, usd: priceUsd(MODELS.vision, r.usage.inTokens, r.usage.outTokens) });
+  const extracted = toMenuItems(r.data);
+  if (extracted.length === 0) {
     throw new HttpError(422, "no_menu_items", "No menu items could be read from this photo. Try a straighter, brighter shot of the board.");
   }
-  return { items, mode: r.mode };
+  // The built-in fixture board cannot answer a verify prompt, so offline runs skip it.
+  if (opts.verify === false || tf.mode === "fixture") return { items: extracted, mode: r.mode, verify: "skipped", dropped: 0, steps };
+  return { ...(await verifyRows(tf, bytes, mime, extracted, steps)), mode: r.mode, steps };
+}
+
+async function verifyRows(tf: TokenFactory, bytes: Uint8Array, mime: MenuMime, extracted: MenuItem[], steps: MenuStep[]) {
+  const skipped = { items: extracted, verify: "skipped" as const, dropped: 0 };
+  const rows = extracted.map((m, i) => ({ i, name: m.name, price: m.price }));
+  const t1 = Date.now();
+  try {
+    const v = await jsonOutput(VerifyOut, {
+      tf,
+      model: MODELS.vision,
+      repairModel: MODELS.copy,
+      name: "menu_verify",
+      maxTokens: 3000,
+      temperature: 0,
+      messages: [
+        { role: "system", content: VERIFY_SYSTEM },
+        { role: "user", content: [dataUrl(bytes, mime), { type: "text", text: `${VERIFY_RULES}\n\nTranscription:\n${JSON.stringify(rows)}` }] },
+      ],
+    });
+    steps.push({ tool: "menu_verify", model: MODELS.vision, ms: Date.now() - t1, promptTokens: v.usage.inTokens, completionTokens: v.usage.outTokens, usd: priceUsd(MODELS.vision, v.usage.inTokens, v.usage.outTokens) });
+    const applied = applyVerify(extracted, v.data);
+    // A verifier that sees nothing is broken, not right: keep the first read rather than empty the menu.
+    if (applied.items.length === 0) return skipped;
+    return { ...applied, verify: "verified" as const };
+  } catch (e) {
+    // The photo was already read and paid for; a failed or rate-limited check must not lose it. Only the spend cap speaks.
+    if (e instanceof UpstreamError && e.code === "spend_cap") throw e;
+    log.warn("menu verify pass failed; keeping the first read", { code: e instanceof UpstreamError ? e.code : "error" });
+    return skipped;
+  }
 }
 
 export async function readMenuBoard(bytes: Uint8Array, mime: MenuMime, tf?: TokenFactory): Promise<MenuItem[]> {

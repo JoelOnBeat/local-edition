@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import { routes, type AgentEvent, type RouteId, type RouteOutput } from "@/contract";
+import { formatIfMatch, routes, type AgentEvent, type RouteId, type RouteOutput } from "@/contract";
 import { clientDataMode } from "./env";
 import { createMockApi } from "./mock-api";
 import { ApiClientError, type AgentEventStream, type ApiClient, type ApiClientOptions, type Out } from "./api-types";
@@ -89,13 +89,21 @@ function createHttpApi(baseUrl = "", fetchImpl: typeof fetch = (...a) => fetch(.
     regenerateItem: (id, itemId, body = {}, o) => stream("regenerateItem", { params: { id, itemId }, body }, o?.signal),
     listEditions: (weekOf) => json("listEditions", { query: { weekOf } }),
     getEdition: (id) => json("getEdition", { params: { id } }),
-    patchItem: (id, itemId, action) => json("patchItem", { params: { id, itemId }, body: action }),
+    patchItem: (id, itemId, action, version) =>
+      json("patchItem", { params: { id, itemId }, headers: { "if-match": formatIfMatch(version) }, body: action }),
     approveAll: (id) => json("approveAll", { params: { id } }),
     getCard: (id) => json("getCard", { params: { id } }),
     getPublicCard: (token) => json("getPublicCard", { params: { token } }),
     runMondayJob: (signature, body = {}) => json("runMondayJob", { headers: { "x-le-signature": signature }, body }),
     getLatestJob: () => json("getLatestJob"),
     getStatus: () => json("getStatus"),
+    getProof: () => json("getProof"),
+    getLimits: () => json("getLimits"),
+    reviewEditions: (body = {}, o) => stream("reviewEditions", { body }, o?.signal),
+    generateBrandVoice: () => json("generateBrandVoice", { body: {} }),
+    getPendingJobs: (signature) => json("getPendingJobs", { headers: { "x-le-signature": signature } }),
+    postJobResults: (signature, body) => json("postJobResults", { headers: { "x-le-signature": signature }, body }),
+    postJobEval: (signature, body) => json("postJobEval", { headers: { "x-le-signature": signature }, body }),
   };
 }
 

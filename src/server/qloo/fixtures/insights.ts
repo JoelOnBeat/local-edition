@@ -15,8 +15,11 @@ const BIAS: Record<string, number> = { off: 0, very_low: 0.02, low: 0.05, mid: 0
 const takeOf = (p: Record<string, string>, dflt = 20) => Math.round(clamp(num(p.take) ?? dflt, 1, 50));
 const biasOf = (p: Record<string, string>) => BIAS[p["bias.trends"] ?? "medium"] ?? 0.15;
 
+/** A wanted tag is a urn (exact or a namespace prefix) or, as a model may send it, a plain word matched against the slug. */
+const slugOf = (w: string) => w.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 const matchesTag = (tagIds: string[], wanted: string[]) =>
-  !wanted.length || wanted.some((w) => tagIds.some((t) => t === w || t.startsWith(`${w}:`)));
+  !wanted.length ||
+  wanted.some((w) => (w.startsWith("urn:") ? tagIds.some((t) => t === w || t.startsWith(`${w}:`)) : tagIds.some((t) => t.endsWith(`:${slugOf(w)}`))));
 
 function explain(entity: Json, anchors: string[]): Json {
   if (!anchors.length) return entity;
@@ -86,7 +89,14 @@ const mergeCity = (pick: (fx: (typeof STORE_FIXTURES)[number]) => Named[]): Name
 function artists(p: Record<string, string>): Json {
   const point = parseWktPoint(p["signal.location"]);
   const pool = point ? artistsFor(nearestFixture(point)) : mergeCity(artistsFor);
-  return ranked(pool, p, p["feature.explainability"] === "true" ? list(p["signal.interests.entities"]) : []);
+  const anchors = p["feature.explainability"] === "true" ? list(p["signal.interests.entities"]) : [];
+  const strict = ranked(pool, p, anchors);
+  // Fixture lenience: a genre the block's artists do not carry narrows nothing instead of emptying the list, so a
+  // model-chosen genre can no longer leave the sound item without candidates (docs/LIVE-SMOKE.md, item 4).
+  if (list(p["filter.tags"]).length && !(((strict.results as Json).entities as unknown[]) ?? []).length) {
+    return ranked(pool, { ...p, "filter.tags": "" }, anchors);
+  }
+  return strict;
 }
 
 function brands(p: Record<string, string>): Json {

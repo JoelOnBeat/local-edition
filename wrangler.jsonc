@@ -1,8 +1,50 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "local-edition",
-  "main": ".open-next/worker.js",
+  // worker/index.ts re-exports OpenNext's .open-next/worker.js plus the Durable Objects, Workflows and cron handler.
+  "main": "worker/index.ts",
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
-  "assets": { "directory": ".open-next/assets", "binding": "ASSETS" }
+  "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
+  // No public *.workers.dev address (docs/CLOUDFLARE.md, approval 1): the Pages project "localedition" fronts this Worker
+  // through a service binding (edge/pages/), and https://localedition.pages.dev is the judge URL.
+  "workers_dev": false,
+
+  "vars": {
+    // Production default. `next dev` ignores this file's vars and keeps STORE_DRIVER=file unless set in .env.local.
+    "STORE_DRIVER": "d1",
+    "BUILD_MODE": "workflow",
+    // The weekly Workflow starts the Nebius job itself (src/server/workflows/nebius-start.ts). Secrets, set with
+    // `wrangler secret put`: NEBIUS_SA_CREDENTIALS (< ~/.nebius/hackathon-jobs-sa.json), LE_JOB_SECRET, NEBIUS_API_KEY,
+    // QLOO_API_KEY, TAVILY_API_KEY. Never .dev.vars.
+    "APP_URL": "https://localedition.pages.dev",
+    "NEBIUS_PROJECT_ID": "project-e04yk83jbc00bwhyv60mbp"
+  },
+
+  // Monday 00:00 UTC (08:00 Kuala Lumpur). Cloudflare numbers weekdays from Sunday, so name the day.
+  "triggers": { "crons": ["0 0 * * MON"] },
+
+  "d1_databases": [
+    // Create with `wrangler d1 create local-edition`, paste the id here, then `wrangler d1 migrations apply LE_DB --remote`.
+    { "binding": "LE_DB", "database_name": "local-edition", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "migrations" }
+  ],
+  // Provider cache (Qloo, Tavily) with TTL. Create with `wrangler kv namespace create LE_KV`.
+  "kv_namespaces": [{ "binding": "LE_KV", "id": "00000000000000000000000000000000" }],
+  // Menu photos: ws/<workspaceId>/<uuid>.<ext>. Create with `wrangler r2 bucket create local-edition-blobs`.
+  "r2_buckets": [{ "binding": "LE_BLOB", "bucket_name": "local-edition-blobs" }],
+
+  "durable_objects": {
+    "bindings": [
+      { "name": "SPEND_METER", "class_name": "SpendMeterDO" },
+      { "name": "BUILD_LOCK", "class_name": "BuildLockDO" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SpendMeterDO", "BuildLockDO"] }],
+
+  "workflows": [
+    { "name": "local-edition-edition-build", "binding": "EDITION_BUILD", "class_name": "EditionBuild" },
+    { "name": "local-edition-weekly-rebuild", "binding": "WEEKLY_REBUILD", "class_name": "WeeklyRebuild" }
+  ],
+
+  "observability": { "enabled": true }
 }

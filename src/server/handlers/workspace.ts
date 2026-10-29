@@ -40,7 +40,7 @@ function nextColor(existing: Store[], offset: number): number {
  * `skipDuplicates` (CSV import): a row naming a store the chain already has, or an earlier row of the
  * same file, is left out, so uploading the same sheet twice changes nothing.
  */
-async function addStores(ctx: WsContext, rows: StoreInput[], skipDuplicates = false): Promise<Store[]> {
+export async function addStores(ctx: WsContext, rows: StoreInput[], skipDuplicates = false): Promise<Store[]> {
   const chain = await requireChain(ctx);
   const existing = await ctx.repo.listStores(chain.id);
   const inputs = skipDuplicates ? dedupeStores(rows, existing) : rows;

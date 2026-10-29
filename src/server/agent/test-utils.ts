@@ -2,7 +2,7 @@ import type { AgentEvent, BlockProfile, Evidence, GuardrailResult, Store } from 
 import { sampleSeed } from "../sample/chain";
 import { createMemoryRepo } from "../store/memory";
 import type { Repo } from "../store/repo";
-import { AGENT_MODEL, COPY_MODEL, type AgentDeps, type ChatRequest, type ChatResponse, type ChatToolCall, type QlooPort } from "./ports";
+import { AGENT_MODEL, COPY_MODEL, type AgentDeps, type BaselineTag, type ChatRequest, type ChatResponse, type ChatToolCall, type QlooPort } from "./ports";
 import { fnv, makeEvidence } from "./util";
 
 /** Test doubles for the agent's ports. Everything here is sample data. */
@@ -40,20 +40,33 @@ export interface FakeQlooOptions {
   /** Places come back without evidence ids (the evidence-less case). */
   placesWithoutEvidence?: boolean;
   artistCount?: number;
+  /** `match` (default): the baseline the fake profile's lifts were measured against. `skewed`: a baseline they do not match. `none`: no cached baseline. */
+  baseline?: "match" | "skewed" | "none";
+  /** Every store sees the same place ids (two stores can then pick the same partner). */
+  sharedPlaces?: boolean;
+}
+
+/** The profile's tags: id, name, kind, affinity, lift. The baseline affinity is `affinity - lift`. */
+const PROFILE_TAGS = [
+  ["urn:tag:specialty_dish:place:cardamom_bun", "Cardamom Pastry", "cuisine", 0.9, 0.34, "urn:tag:specialty_dish:place"],
+  ["urn:tag:genre:music:soul", "Soul", "music", 0.88, 0.3, "urn:tag:genre:music"],
+  ["urn:tag:ambience:qloo:cozy", "Cozy", "ambience", 0.8, 0.2, "urn:tag:ambience:qloo"],
+  ["urn:tag:cuisine:qloo:cold_brew", "Cold Brew", "flavour", 0.78, 0.1, "urn:tag:cuisine:qloo"],
+] as const;
+
+function fakeBaseline(mode: FakeQlooOptions["baseline"]): BaselineTag[] | null {
+  if (mode === "none") return null;
+  return PROFILE_TAGS.map(([tagId, , , affinity, lift, group]) => ({ tagId, group, affinity: mode === "skewed" ? affinity - lift - 0.25 : affinity - lift }));
 }
 
 export function fakeQloo(o: FakeQlooOptions = {}): QlooPort {
   return {
+    async baseline() { return fakeBaseline(o.baseline); },
     async blockProfile(store) {
       const evidence = [ev(store, "/v2/insights", `Around ${store.name}, cardamom pastries and soul records over-index against New York.`)];
       const profile: BlockProfile = {
         storeId: store.id,
-        tags: [
-          { tagId: "urn:tag:specialty_dish:place:cardamom_bun", name: "Cardamom Pastry", kind: "cuisine", affinity: 0.9, lift: 0.34 },
-          { tagId: "urn:tag:genre:music:soul", name: "Soul", kind: "music", affinity: 0.88, lift: 0.3 },
-          { tagId: "urn:tag:ambience:qloo:cozy", name: "Cozy", kind: "ambience", affinity: 0.8, lift: 0.2 },
-          { tagId: "urn:tag:cuisine:qloo:cold_brew", name: "Cold Brew", kind: "flavour", affinity: 0.78, lift: 0.1 },
-        ],
+        tags: PROFILE_TAGS.map(([tagId, name, kind, affinity, lift]) => ({ tagId, name, kind, affinity, lift })),
         evidenceIds: evidence.map((e) => e.id),
         computedAt: NOW.toISOString(),
       };
@@ -64,7 +77,7 @@ export function fakeQloo(o: FakeQlooOptions = {}): QlooPort {
       const places = [
         ["Greenlight Bookstore", 240], ["Vinyl Haven Records", 410], ["Paper Plane Gallery", 760],
       ].map(([name, d], i) => ({
-        entity: { entityId: `${fnv(store.id + name)}-place-${i}`, name: String(name), type: "urn:entity:place" },
+        entity: { entityId: `${fnv((o.sharedPlaces ? "shared" : store.id) + name)}-place-${i}`, name: String(name), type: "urn:entity:place" },
         address: `${100 + i} Main St`, lat: store.lat + 0.001 * (i + 1), lon: store.lon, distanceM: Number(d),
         affinity: 0.9 - i * 0.1, tags: ["Books", "Local"], evidenceIds: o.placesWithoutEvidence ? [] : [evidence[0].id],
       }));
@@ -151,16 +164,25 @@ export interface ScriptOptions {
   agent?: (ChatResponse | Error)[] | ((req: ChatRequest, n: number) => ChatResponse);
   /** Copy-model reply per kind (JSON object) or a function over the user text. */
   copy?: (user: string, req: ChatRequest) => string;
+  /** Reviewer reply (JSON text) or an Error to throw, per call; `n` counts review calls from 0. */
+  review?: (req: ChatRequest, n: number) => string | Error;
+  /** Usage the fake provider reports for agent and copy calls (cached tokens, for example). */
+  usage?: ChatResponse["usage"];
 }
 
-export interface ScriptedChat { complete(req: ChatRequest): Promise<ChatResponse>; requests: ChatRequest[]; agentCalls: number; copyCalls: number }
+export interface ScriptedChat { complete(req: ChatRequest): Promise<ChatResponse>; requests: ChatRequest[]; agentCalls: number; copyCalls: number; reviewCalls: number }
 
 export function scriptedChat(o: ScriptOptions = {}): ScriptedChat {
   const script = o.agent ?? happyAgent();
   const chat: ScriptedChat = {
-    requests: [], agentCalls: 0, copyCalls: 0,
+    requests: [], agentCalls: 0, copyCalls: 0, reviewCalls: 0,
     async complete(req) {
       chat.requests.push({ ...req, messages: [...req.messages] });
+      if (req.role === "review") {
+        const out = o.review ? o.review(req, chat.reviewCalls++) : (chat.reviewCalls++, "{}");
+        if (out instanceof Error) throw out;
+        return text(out);
+      }
       if (req.model === AGENT_MODEL) {
         chat.agentCalls++;
         // The turn number is read from the conversation itself, so each store replays the script from the top.
@@ -168,14 +190,14 @@ export function scriptedChat(o: ScriptOptions = {}): ScriptedChat {
         if (typeof script === "function") return script(req, n);
         const reply = script[Math.min(n, script.length - 1)];
         if (reply instanceof Error) throw reply;
-        return reply;
+        return o.usage ? { ...reply, usage: o.usage } : reply;
       }
       if (req.model === COPY_MODEL) {
         chat.copyCalls++;
         const user = String([...req.messages].reverse().find((m) => m.role === "user")?.content ?? "");
         const system = String(req.messages[0].content ?? "");
         const out = o.copy ? o.copy(user, req) : defaultCopy(user, system);
-        return text(out);
+        return o.usage ? { ...text(out), usage: o.usage } : text(out);
       }
       throw new Error(`unexpected model ${req.model}`);
     },
@@ -214,13 +236,13 @@ export interface Harness {
   storeIds: string[];
 }
 
-export async function harness(opts: ScriptOptions & { qloo?: FakeQlooOptions; guardrails?: "ok" | "down" | "block-all"; tf?: { rerankFails?: boolean }; limits?: AgentDeps["limits"]; storeCount?: number } = {}): Promise<Harness> {
+export async function harness(opts: ScriptOptions & { seedBadItem?: boolean; qloo?: FakeQlooOptions; guardrails?: "ok" | "down" | "block-all"; tf?: { rerankFails?: boolean }; limits?: AgentDeps["limits"]; storeCount?: number } = {}): Promise<Harness> {
   const repo = createMemoryRepo();
   const seed = sampleSeed();
   seed.stores = seed.stores.slice(0, opts.storeCount ?? 2);
   const workspace = await repo.createWorkspace(seed);
   const chat = scriptedChat(opts);
   const guardrails = fakeGuardrails(opts.guardrails);
-  const deps: AgentDeps = { repo, chat, qloo: fakeQloo(opts.qloo), tavily: fakeTavily(), tf: fakeTf(opts.tf), guardrails, now: () => NOW, limits: opts.limits };
+  const deps: AgentDeps = { repo, chat, qloo: fakeQloo(opts.qloo), tavily: fakeTavily(), tf: fakeTf(opts.tf), guardrails, now: () => NOW, limits: opts.limits, seedBadItem: opts.seedBadItem };
   return { deps, repo, chat, guardrails, workspaceId: workspace.id, storeIds: seed.stores.map((s) => s.id) };
 }

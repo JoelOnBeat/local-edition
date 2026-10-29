@@ -27,7 +27,7 @@ const norm = (s: string) =>
   s.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
 /** Health, diet, nutrition and allergen wording never reaches the app (contract guarantee). */
-const CLAIM_WORDS =
+export const CLAIM_WORDS =
   /\b(vegan|vegetarian|plant[- ]based|gluten|dairy[- ]free|lactose|sugar[- ]free|keto|paleo|allergen|allergy|nuts?|calories?|kcal|nutrition\w*|low[- ]?(fat|carb|cal\w*)|healthy|organic|halal|kosher|protein|diet\w*|immun\w*)\b/i;
 const TAG_PAREN = /\s*\((?:v|vg|vgn|gf|df|nf|ve|veg|vegan|vegetarian|gluten[- ]?free|dairy[- ]?free|contains[^)]*)\)\s*/gi;
 
@@ -103,4 +103,28 @@ export function toMenuItems(menu: VlMenu): MenuItem[] {
     });
   }
   return [...byName.values()].slice(0, MAX_ITEMS);
+}
+
+/** What the verify pass returns: one row per extracted item, judged against the same photo. */
+export const VerifyOut = z.object({
+  rows: z
+    .array(z.object({ i: z.number().int().nonnegative(), seen: z.boolean(), price_legible: z.boolean() }))
+    .max(300),
+});
+export type VerifyOut = z.infer<typeof VerifyOut>;
+
+/**
+ * Applies the verify pass: rows the model could not see on the photo are dropped (they were invented or
+ * misread); rows whose price it could not read stay, flagged `priceLegible: false` so the UI shows them amber.
+ * A row the verifier skipped is kept but flagged amber too: unconfirmed is not the same as fine.
+ */
+export function applyVerify(items: MenuItem[], verify: VerifyOut): { items: MenuItem[]; dropped: number } {
+  const byIndex = new Map(verify.rows.map((r) => [r.i, r]));
+  const kept: MenuItem[] = [];
+  items.forEach((item, i) => {
+    const row = byIndex.get(i);
+    if (row && !row.seen) return;
+    kept.push(row ? { ...item, seen: true, priceLegible: row.price_legible } : { ...item, priceLegible: false });
+  });
+  return { items: kept, dropped: items.length - kept.length };
 }

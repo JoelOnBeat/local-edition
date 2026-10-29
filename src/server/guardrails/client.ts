@@ -1,11 +1,10 @@
 import { z } from "zod";
 import { GuardrailResult } from "@/contract";
-import { serverEnv } from "@/lib/env";
 import { HttpError } from "../http/errors";
-import { createLogger } from "../log";
+import { getTokenFactory, type TokenFactory } from "../tokenfactory";
 import { findHits, reasonsFor } from "./catalogue";
-
-const log = createLogger("guardrails");
+import { findInjection } from "./injection";
+import { selfCheckOutput } from "./self-check";
 
 export const CopyKind = z.enum(["special", "event", "card", "sound", "partner", "other"]);
 export type CopyKind = z.infer<typeof CopyKind>;
@@ -18,222 +17,85 @@ export const CheckCopyInput = z.object({
 export type CheckCopyInput = z.input<typeof CheckCopyInput>;
 
 export interface CheckCopyOptions {
-  /** Default: GUARDRAILS_URL from the environment. */
-  url?: string;
-  /** Shared secret sent as x-le-guard-token. Default: GUARDRAILS_TOKEN from the environment. */
-  token?: string;
-  /** Default 4000. */
-  timeoutMs?: number;
-  // Test seams.
-  fetchImpl?: typeof fetch;
+  /** Default: the shared Token Factory client. */
+  tokenFactory?: TokenFactory;
+  /** Test seam. */
   now?: () => number;
 }
 
-export const LOCAL_RAIL = "local:claims";
+/** Rail names. The regex rail and the self check use NeMo's flow names so live and batch verdicts read alike. */
+export const RAIL_CLAIMS = "check health claims";
+export const RAIL_SELF_CHECK = "self check output";
+export const RAIL_INJECTION = "strip prompt injection";
 /** Longest copy the checker accepts. Longer text is refused with 413, never waved through as "unchecked". */
 export const MAX_TEXT = 8000;
+/** Copy built from web snippets: the event, and the staff card that repeats it. */
+const WEB_KINDS: ReadonlySet<CopyKind> = new Set<CopyKind>(["event", "card"]);
 const BREAKER_MS = 10_000;
-
-/** What POST /v1/checks answers (NeMo Guardrails 0.24.1). */
-const ChecksResponse = z.object({
-  status: z.enum(["passed", "modified", "blocked"]),
-  content: z.string(),
-  rail: z.string().optional().nullable(),
-});
-
-/** The sidecar's side channel: why it blocked and which checks it skipped (guardrails/config.py). */
-const RailsHeader = z.object({
-  reasons: z.array(z.string()).default([]),
-  skipped: z.array(z.object({ rail: z.string(), why: z.string() })).default([]),
-});
-type RailsInfo = z.infer<typeof RailsHeader>;
-
-export function parseRailsHeader(raw: string | null): RailsInfo {
-  const empty: RailsInfo = { reasons: [], skipped: [] };
-  if (!raw) return empty;
-  try {
-    const parsed = RailsHeader.safeParse(JSON.parse(raw));
-    return parsed.success ? parsed.data : empty;
-  } catch {
-    return empty;
-  }
-}
 
 export interface CheckedCopy {
   result: GuardrailResult;
-  /** The text to use: the sidecar's rewrite when status is 'rewritten', else the input text. */
+  /** The text to use. Nothing here rewrites copy, so it is the input text. */
   text: string;
 }
 
-type Failure = { kind: "down"; why: string } | { kind: "rejected"; why: string };
-let downUntil = 0;
+let modelDownUntil = 0;
 
 /** Test seam: forget the circuit-breaker state. */
 export function resetGuardrailsBreaker(): void {
-  downUntil = 0;
+  modelDownUntil = 0;
 }
-
-function resolveConfig(o: CheckCopyOptions): { url: string; token: string | undefined } {
-  let url = o.url;
-  let token = o.token;
-  if (!url || token === undefined) {
-    try {
-      const env = serverEnv();
-      url ||= env.GUARDRAILS_URL;
-      token ??= env.GUARDRAILS_TOKEN;
-    } catch {
-      url ||= "http://127.0.0.1:8000";
-      token ??= typeof process !== "undefined" ? process.env?.GUARDRAILS_TOKEN : undefined;
-    }
-  }
-  return { url: url.replace(/\/+$/, ""), token: token || undefined };
-}
-
-async function callSidecar(
-  input: z.output<typeof CheckCopyInput>,
-  o: CheckCopyOptions,
-): Promise<{ ok: true; body: z.infer<typeof ChecksResponse>; info: RailsInfo } | { ok: false; failure: Failure }> {
-  const { url, token } = resolveConfig(o);
-  const doFetch = o.fetchImpl ?? fetch;
-  const timeoutMs = o.timeoutMs ?? 4000;
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), timeoutMs);
-  const headers: Record<string, string> = { "content-type": "application/json", accept: "application/json" };
-  if (token) headers["x-le-guard-token"] = token;
-  try {
-    const res = await doFetch(`${url}/v1/checks`, {
-      method: "POST",
-      headers,
-      signal: ac.signal,
-      redirect: "error",
-      body: JSON.stringify({
-        model: "nvidia/Nemotron-3_5-Lightning",
-        // NeMo 0.24.1 needs a user turn before the assistant turn once a context message is present.
-        messages: [
-          { role: "user", content: "Check this copy." },
-          { role: "assistant", content: input.text },
-        ],
-        guardrails: {
-          config_id: "localedition",
-          rail_types: ["output"],
-          context: { brand_voice: input.brandVoice, kind: input.kind },
-        },
-      }),
-    });
-    if (res.status === 401 || res.status === 403) {
-      return { ok: false, failure: { kind: "rejected", why: "The guardrails server rejected the shared secret." } };
-    }
-    if (!res.ok) return { ok: false, failure: { kind: "down", why: `The guardrails server answered HTTP ${res.status}.` } };
-    const parsed = ChecksResponse.safeParse(await res.json());
-    if (!parsed.success) {
-      return { ok: false, failure: { kind: "down", why: "The guardrails server returned an unexpected response." } };
-    }
-    return { ok: true, body: parsed.data, info: parseRailsHeader(res.headers.get("x-le-rails")) };
-  } catch (e) {
-    const timedOut = ac.signal.aborted;
-    log.warn("guardrails server unreachable", { err: (e as Error)?.name, timedOut });
-    return {
-      ok: false,
-      failure: { kind: "down", why: timedOut ? `The guardrails server did not answer within ${timeoutMs} ms.` : "The guardrails server is unreachable." },
-    };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-const unique = (xs: string[]) => [...new Set(xs)];
 
 /**
- * Check generated copy. Never throws. Order: the local regex catalogue first (a hit is a block even if the
- * server is down or disagrees), then the NeMo Guardrails sidecar (regex rail again plus the brand-voice
- * self-check). Server down or timed out -> 'unchecked' (never auto-approvable), or 'blocked' with
- * rail 'local:claims' when the local catalogue already hit. Never throws, except HttpError 413
- * `copy_too_long` for text over MAX_TEXT: length is a schema rule, not a reason to skip the rails.
+ * Live check, in the Worker, no sidecar. Never throws except HttpError 413 `copy_too_long`.
+ *   1. event and card copy is built from web snippets: a prompt-injection phrase blocks it (our rule, mirror of injection.py);
+ *   2. the regex catalogue (our rule, mirror of the NeMo `check health claims` rail): a hit blocks, no model call;
+ *   3. NeMo's own `self check output` prompt on Lightning, reasoning off: "Yes" blocks;
+ *   4. otherwise `passed`. If the model call is skipped (failure, no live model, a breaker after a failure) the copy
+ *      still passed the regex rail and says so in `reasons`. `unchecked` is only for empty or invalid input.
+ * Every verdict is `checkedBy: "live"`; the NeMo library in the Nebius job re-certifies it later.
  */
 export async function checkCopyDetailed(input: CheckCopyInput, options: CheckCopyOptions = {}): Promise<CheckedCopy> {
   const parsed = CheckCopyInput.safeParse(input);
   const text = typeof input?.text === "string" ? input.text : "";
-  const unchecked = (why: string): CheckedCopy => ({ text, result: { status: "unchecked", reasons: [why] } });
+  const unchecked = (why: string): CheckedCopy => ({ text, result: { status: "unchecked", reasons: [why], checkedBy: "live" } });
   if (!parsed.success) return unchecked("The copy could not be checked: invalid input.");
   const value = parsed.data;
   if (!value.text.trim()) return unchecked("There is no copy to check.");
   if (value.text.length > MAX_TEXT) {
     throw new HttpError(413, "copy_too_long", `Copy can be at most ${MAX_TEXT} characters.`);
   }
-
-  const now = options.now ?? Date.now;
-  const local = findHits(value.text);
-  const localReasons = reasonsFor(local);
-
-  const blockedLocally = (note: string): CheckedCopy => ({
+  const blocked = (rail: string, reasons: string[]): CheckedCopy => ({
     text: value.text,
-    result: { status: "blocked", rail: LOCAL_RAIL, reasons: [...localReasons, note], original: value.text },
+    result: { status: "blocked", rail, reasons, original: value.text, checkedBy: "live" },
   });
 
-  if (now() < downUntil) {
-    return local.length ? blockedLocally("Checked locally only: the guardrails server was recently unreachable.") : unchecked("The guardrails server was recently unreachable.");
+  if (WEB_KINDS.has(value.kind)) {
+    const injected = findInjection(value.text);
+    if (injected.length) return blocked(RAIL_INJECTION, injected.map((h) => `${h.rule.reason} Matched "${h.match.slice(0, 80)}".`));
   }
+  const claims = findHits(value.text);
+  if (claims.length) return blocked(RAIL_CLAIMS, reasonsFor(claims));
 
-  const res = await callSidecar(value, options);
-  if (!res.ok) {
-    if (res.failure.kind === "down") downUntil = now() + BREAKER_MS;
-    return local.length ? blockedLocally(`Checked locally only. ${res.failure.why}`) : unchecked(res.failure.why);
-  }
+  const now = options.now ?? Date.now;
+  const skipNote = (why: string): CheckedCopy => ({
+    text: value.text,
+    result: { status: "passed", reasons: [`Skipped self check output: ${why}.`], checkedBy: "live" },
+  });
+  if (now() < modelDownUntil) return skipNote("the model was recently unreachable");
 
-  const { body, info } = res;
-  if (local.length) {
-    const note = body.status === "blocked" ? [] : ["The guardrails server did not flag this copy; the local catalogue did."];
-    return {
-      text: value.text,
-      result: {
-        status: "blocked",
-        rail: body.status === "blocked" ? (body.rail ?? "check health claims") : LOCAL_RAIL,
-        reasons: unique([...localReasons, ...info.reasons, ...note]),
-        original: value.text,
-      },
-    };
+  const check = await selfCheckOutput(options.tokenFactory ?? getTokenFactory(), value.text, value.kind, value.brandVoice);
+  if (check.outcome === "skipped") {
+    if (check.why === "the model call failed") modelDownUntil = now() + BREAKER_MS;
+    return skipNote(check.why);
   }
-
-  if (body.status === "blocked") {
-    const rail = body.rail ?? "unknown rail";
-    return {
-      text: value.text,
-      result: {
-        status: "blocked",
-        rail,
-        reasons: info.reasons.length ? unique(info.reasons) : [`Blocked by the "${rail}" rail.`],
-        original: value.text,
-      },
-    };
+  if (check.outcome === "block") {
+    return blocked(RAIL_SELF_CHECK, ["The self check (NeMo's prompt on Lightning) says the copy breaks the brand voice or the claims policy."]);
   }
-
-  const skipNotes = info.skipped.map((s) => `Skipped ${s.rail}: ${s.why}.`);
-  if (body.status === "modified") {
-    const reasons = unique([...info.reasons, ...skipNotes]);
-    return {
-      text: body.content,
-      result: { status: "rewritten", reasons: reasons.length ? reasons : ["The guardrails server rewrote the copy."], original: value.text },
-    };
-  }
-  return { text: value.text, result: { status: "passed", reasons: skipNotes } };
+  return { text: value.text, result: { status: "passed", reasons: [], checkedBy: "live" } };
 }
 
 /** Same as checkCopyDetailed, returning only the contract's GuardrailResult. */
 export async function checkCopy(input: CheckCopyInput, options: CheckCopyOptions = {}): Promise<GuardrailResult> {
   return (await checkCopyDetailed(input, options)).result;
-}
-
-/** For /api/status: is the sidecar answering its health route. */
-export async function probeGuardrails(options: CheckCopyOptions = {}): Promise<"up" | "down"> {
-  const { url } = resolveConfig(options);
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), options.timeoutMs ?? 2000);
-  try {
-    const res = await (options.fetchImpl ?? fetch)(`${url}/v1/health`, { signal: ac.signal, redirect: "error" });
-    return res.ok ? "up" : "down";
-  } catch {
-    return "down";
-  } finally {
-    clearTimeout(timer);
-  }
 }

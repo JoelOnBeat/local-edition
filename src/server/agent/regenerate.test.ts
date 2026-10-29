@@ -26,7 +26,9 @@ describe("regenerateItem", () => {
     h.deps.chat = (await import("./test-utils")).scriptedChat({ agent: pickSecondPlace });
     const events = await collect(regenerateItem({ workspaceId: h.workspaceId, editionId: ed.id, itemId: partner.id, hint: "somewhere quieter" }, h.deps));
 
-    expect(events.map((e) => e.type)).toEqual(["run_started", "store_started", "tool_call", "tool_result", "item_drafted", "guardrail", "store_done", "run_done"]);
+    expect(events.filter((e) => e.type !== "step_metrics").map((e) => e.type)).toEqual(["run_started", "store_started", "tool_call", "tool_result", "item_drafted", "guardrail", "store_done", "run_done"]);
+    // One step per model call: the agent turn that picked the tool, the submit turn, and the copy.
+    expect(events.filter((e) => e.type === "step_metrics").map((e) => (e.type === "step_metrics" ? e.role : ""))).toEqual(["agent", "agent", "copy"]);
     const after = (await h.repo.getEdition(ed.id))!;
     const next = after.items.find((i) => i.id === partner.id)!;
     expect(next.version).toBe(partner.version + 1);

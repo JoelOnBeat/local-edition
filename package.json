@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test --pass-with-no-tests",
-    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview"
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "gen:job-bundle": "node scripts/gen-job-bundle.mjs"
   },
   "dependencies": {
     "@opennextjs/cloudflare": "^1.20.14",

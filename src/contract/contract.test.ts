@@ -93,10 +93,10 @@ describe("T1 contract: sample chain and mocks parse", () => {
 });
 
 describe("T1 contract: route table", () => {
-  it("lists all 21 contract routes with unique method+path", () => {
-    expect(routeTable).toHaveLength(21);
-    expect(new Set(routeTable.map((r) => `${r.method} ${r.path}`)).size).toBe(21);
-    expect(routeTable.filter((r) => r.sse).map((r) => r.id)).toEqual(["buildEditions", "regenerateItem"]);
+  it("lists all 28 contract routes with unique method+path", () => {
+    expect(routeTable).toHaveLength(28);
+    expect(new Set(routeTable.map((r) => `${r.method} ${r.path}`)).size).toBe(28);
+    expect(routeTable.filter((r) => r.sse).map((r) => r.id)).toEqual(["buildEditions", "regenerateItem", "reviewEditions"]);
   });
 
   it("validates request shapes", () => {
