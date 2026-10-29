@@ -1,0 +1,14 @@
+define bot refuse to respond
+  "BLOCKED"
+
+define flow check health claims
+  $r = execute check_health_claims(bot_message=$bot_message)
+  if $r.is_blocked
+    bot refuse to respond
+    stop
+
+define flow check brand voice
+  $v = execute check_brand_voice(bot_message=$bot_message)
+  if $v.is_blocked
+    bot refuse to respond
+    stop

@@ -1,0 +1,38 @@
+{
+  "query": "events this week near Orchard St & Rivington St, Lower East Side, New York",
+  "follow_up_questions": null,
+  "answer": null,
+  "images": [],
+  "results": [
+    {
+      "title": "Rivington Street makers' pop-up",
+      "url": "https://events.example.com/rivington-makers-popup",
+      "content": "Twelve makers selling candles, zines and small-batch hot sauce, Saturday 7 November, noon to 6pm, in a closed car park.",
+      "score": 0.81,
+      "raw_content": null
+    },
+    {
+      "title": "Orchard Street shopfront walking tour",
+      "url": "https://events.example.com/orchard-street-shopfront-tour",
+      "content": "Walking tour of the old dry goods shopfronts, Friday 6 November, 4pm, starting outside the corner store.",
+      "score": 0.74,
+      "raw_content": null
+    },
+    {
+      "title": "Basement comedy night",
+      "url": "https://events.example.com/basement-comedy-night-les",
+      "content": "Eight comics, one room, Thursday 5 November at 9pm. Two-drink minimum.",
+      "score": 0.7,
+      "raw_content": null
+    },
+    {
+      "title": "Beginner sourdough class",
+      "url": "https://events.example.com/beginner-sourdough-class-les",
+      "content": "Two hours of bread basics in a shared kitchen, Monday 2 November, 6:30pm, twelve seats at $60.",
+      "score": 0.67,
+      "raw_content": null
+    }
+  ],
+  "response_time": 0.87,
+  "request_id": "e4c3a7f1-2d85-4b6e-8f09-6a3d1c5e9b74"
+}

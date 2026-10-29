@@ -1,0 +1,38 @@
+{
+  "query": "events this week near Lexington Ave & E 78th St, Upper East Side, New York",
+  "follow_up_questions": null,
+  "answer": null,
+  "images": [],
+  "results": [
+    {
+      "title": "Lexington Avenue vintage textile sale",
+      "url": "https://events.example.com/lexington-vintage-textile-sale",
+      "content": "Estate linens and wool coats in a church basement, Saturday 7 November, 10am to 4pm. Cash and card.",
+      "score": 0.76,
+      "raw_content": null
+    },
+    {
+      "title": "Chamber concert in a community house parlour",
+      "url": "https://events.example.com/community-house-parlour-concert",
+      "content": "Small salon concert in a parlour room, Sunday 8 November, 4pm. Tickets $30 at the door or online.",
+      "score": 0.7,
+      "raw_content": null
+    },
+    {
+      "title": "Reservoir morning walk",
+      "url": "https://events.example.com/reservoir-morning-walk-78th",
+      "content": "Thirty-minute walk along the reservoir path, meeting at the 78th Street steps. Tuesday 3 November, 8am, free.",
+      "score": 0.63,
+      "raw_content": null
+    },
+    {
+      "title": "Portuguese reds tasting",
+      "url": "https://events.example.com/portuguese-reds-tasting",
+      "content": "Shop-hosted tasting of four Portuguese reds, Thursday 5 November, 6:30pm. $20 with a cheese plate.",
+      "score": 0.68,
+      "raw_content": null
+    }
+  ],
+  "response_time": 0.87,
+  "request_id": "7f0b2e9a-3c44-4d18-95a6-0e8c4f1b2d67"
+}

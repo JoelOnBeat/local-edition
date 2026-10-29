@@ -1,0 +1,38 @@
+{
+  "query": "events this week near 7th Ave & 9th St, Park Slope, New York",
+  "follow_up_questions": null,
+  "answer": null,
+  "images": [],
+  "results": [
+    {
+      "title": "Canal film night in the library basement",
+      "url": "https://events.example.com/canal-film-night-park-slope",
+      "content": "Community screening of a documentary about the Gowanus canal, Wednesday 4 November, doors at 6:30pm and the film at 7. A short talk with a local canal organiser follows.",
+      "score": 0.8,
+      "raw_content": null
+    },
+    {
+      "title": "Seventh Avenue winter squash swap",
+      "url": "https://events.example.com/seventh-ave-squash-swap",
+      "content": "Bring squash, pumpkins or seed packets to swap on Saturday 7 November, 10am to noon, outside the church hall.",
+      "score": 0.77,
+      "raw_content": null
+    },
+    {
+      "title": "Debut novel reading about night shifts",
+      "url": "https://events.example.com/night-shift-novel-reading",
+      "content": "Author reading and signing at a neighbourhood bookshop, Thursday 5 November, 7pm. Ten copies are held back for the event.",
+      "score": 0.71,
+      "raw_content": null
+    },
+    {
+      "title": "Brass quintet in the bandshell",
+      "url": "https://events.example.com/brass-quintet-bandshell-sunday",
+      "content": "Free outdoor concert, Sunday 8 November, 3pm. Bring a blanket and something warm to drink.",
+      "score": 0.6,
+      "raw_content": null
+    }
+  ],
+  "response_time": 0.87,
+  "request_id": "9c2d7e4a-1f3b-4a85-8e6d-2b7a0c4f9d32"
+}

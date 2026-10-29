@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1600">
+<title>Kettle &amp; Kiln sample menu board</title>
+<style>
+  /* Sample chalkboard for the Kettle & Kiln sample chain. Rendered to public/sample/menu-board.png at 1600x1100. */
+  html, body { margin: 0; padding: 0; background: #1d1f1c; }
+  .board {
+    position: relative; width: 1600px; height: 1100px; box-sizing: border-box;
+    padding: 46px 84px 40px; overflow: hidden;
+    background:
+      radial-gradient(ellipse at 22% 18%, rgba(255,255,255,0.06), transparent 55%),
+      radial-gradient(ellipse at 80% 85%, rgba(255,255,255,0.04), transparent 60%),
+      linear-gradient(170deg, #2d3430 0%, #252b27 48%, #2a302c 100%);
+    color: #f1ece1;
+    font-family: "Chalkboard SE", "Bradley Hand", "Comic Sans MS", cursive;
+    border: 30px solid #5b4029;
+    box-shadow: inset 0 0 0 6px #3a2817, inset 0 0 60px rgba(0,0,0,0.55);
+  }
+  .board::before { /* faint chalk dust */
+    content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.35;
+    background-image:
+      radial-gradient(circle at 12% 30%, rgba(255,255,255,0.05) 0 2px, transparent 3px),
+      radial-gradient(circle at 63% 72%, rgba(255,255,255,0.04) 0 3px, transparent 4px),
+      radial-gradient(circle at 91% 14%, rgba(255,255,255,0.05) 0 2px, transparent 3px);
+    background-size: 210px 180px, 260px 240px, 190px 210px;
+  }
+  header { text-align: center; position: relative; }
+  h1 {
+    margin: 0; font-family: "Chalkduster", "Chalkboard SE", cursive; font-weight: 400;
+    font-size: 84px; letter-spacing: 2px; line-height: 1; color: #f7f2e7;
+    text-shadow: 0 0 1px rgba(255,255,255,0.6);
+  }
+  .tagline { margin: 8px 0 0; font-size: 29px; color: #e9c98a; }
+  .rule { display: block; margin: 10px auto 0; width: 620px; height: 14px; }
+  .columns { display: grid; grid-template-columns: 1fr 1fr 1fr; column-gap: 56px; margin-top: 22px; }
+  section + section { margin-top: 22px; }
+  h2 {
+    margin: 0 0 8px; font-family: "Chalkduster", "Chalkboard SE", cursive; font-weight: 400;
+    font-size: 32px; color: #f2c46d; letter-spacing: 1px;
+  }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { margin: 0 0 10px; }
+  .row { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; font-size: 26px; line-height: 1.15; }
+  .price { white-space: nowrap; color: #f7f2e7; }
+  .desc { margin-top: 2px; font-size: 17px; line-height: 1.25; color: #d8d3c6; opacity: 0.9; }
+  footer {
+    position: absolute; left: 84px; right: 84px; bottom: 24px;
+    display: flex; justify-content: space-between; font-size: 20px; color: #bfb8a8; opacity: 0.85;
+  }
+</style>
+</head>
+<body>
+<div class="board">
+  <header>
+    <h1>KETTLE &amp; KILN</h1>
+    <p class="tagline">coffee, bread and small plates</p>
+    <svg class="rule" viewBox="0 0 620 14" aria-hidden="true">
+      <path d="M4 9 C 90 3, 170 12, 260 7 S 430 4, 520 9 S 600 6, 616 8" fill="none" stroke="#e9c98a" stroke-width="3" stroke-linecap="round" opacity="0.9"/>
+    </svg>
+  </header>
+
+  <div class="columns">
+    <div>
+      <section>
+        <h2>Coffee</h2>
+        <ul>
+          <li><div class="row"><span>Espresso</span><span class="price">$3.50</span></div><div class="desc">Double shot of our house blend, pulled short.</div></li>
+          <li><div class="row"><span>Cortado</span><span class="price">$4.75</span></div><div class="desc">Equal parts espresso and steamed milk, served in a small glass.</div></li>
+          <li><div class="row"><span>Flat White</span><span class="price">$5.25</span></div><div class="desc">Two ristretto shots under a thin layer of silky milk.</div></li>
+          <li><div class="row"><span>Latte</span><span class="price">$5.50</span></div><div class="desc">Espresso with steamed milk and a light cap of foam.</div></li>
+          <li><div class="row"><span>Batch Brew</span><span class="price">$3.75</span></div><div class="desc">Fresh filter coffee, a single origin that changes weekly.</div></li>
+          <li><div class="row"><span>Pour Over</span><span class="price">$6.25</span></div><div class="desc">Single origin brewed by hand, one cup at a time.</div></li>
+          <li><div class="row"><span>Mocha</span><span class="price">$6.00</span></div><div class="desc">Espresso, steamed milk and house-made dark chocolate sauce.</div></li>
+        </ul>
+      </section>
+    </div>
+
+    <div>
+      <section>
+        <h2>Cold</h2>
+        <ul>
+          <li><div class="row"><span>Cold Brew</span><span class="price">$5.00</span></div><div class="desc">Steeped for eighteen hours, served over ice.</div></li>
+          <li><div class="row"><span>Iced Latte</span><span class="price">$5.75</span></div><div class="desc">Espresso poured over cold milk and ice.</div></li>
+          <li><div class="row"><span>Nitro Cold Brew</span><span class="price">$6.00</span></div><div class="desc">Cold brew on tap with a creamy, cascading head.</div></li>
+          <li><div class="row"><span>Sparkling Lemonade</span><span class="price">$4.50</span></div><div class="desc">Fresh lemon, cane sugar and soda water.</div></li>
+        </ul>
+      </section>
+      <section>
+        <h2>Tea</h2>
+        <ul>
+          <li><div class="row"><span>Masala Chai</span><span class="price">$5.00</span></div><div class="desc">Black tea simmered with ginger, cardamom and cinnamon, finished with milk.</div></li>
+          <li><div class="row"><span>Matcha Latte</span><span class="price">$6.00</span></div><div class="desc">Ceremonial-grade matcha whisked with steamed milk.</div></li>
+          <li><div class="row"><span>Hojicha</span><span class="price">$4.75</span></div><div class="desc">Roasted green tea with a toasty, caramel finish.</div></li>
+        </ul>
+      </section>
+    </div>
+
+    <div>
+      <section>
+        <h2>Bakery</h2>
+        <ul>
+          <li><div class="row"><span>Butter Croissant</span><span class="price">$4.25</span></div><div class="desc">Laminated daily, baked until deep gold.</div></li>
+          <li><div class="row"><span>Almond Croissant</span><span class="price">$5.25</span></div><div class="desc">Filled with frangipane and topped with toasted almonds.</div></li>
+          <li><div class="row"><span>Banana Bread</span><span class="price">$4.50</span></div><div class="desc">Thick slice with brown butter and a pinch of sea salt.</div></li>
+          <li><div class="row"><span>Brown Butter Cookie</span><span class="price">$3.75</span></div><div class="desc">Chewy centre, crisp edge, flaky salt on top.</div></li>
+          <li><div class="row"><span>Cardamom Morning Bun</span><span class="price">$5.00</span></div><div class="desc">Rolled with cardamom sugar and baked in a muffin tin.</div></li>
+        </ul>
+      </section>
+      <section>
+        <h2>Food</h2>
+        <ul>
+          <li><div class="row"><span>Avocado Toast</span><span class="price">$11.50</span></div><div class="desc">Sourdough, smashed avocado, chili flakes and lemon.</div></li>
+          <li><div class="row"><span>Egg and Cheddar Sandwich</span><span class="price">$9.75</span></div><div class="desc">Soft scrambled egg and sharp cheddar on a toasted brioche roll.</div></li>
+          <li><div class="row"><span>Yogurt and Granola Cup</span><span class="price">$7.50</span></div><div class="desc">Greek yogurt, house granola and seasonal fruit.</div></li>
+        </ul>
+      </section>
+    </div>
+  </div>
+
+  <footer>
+    <span>Kettle &amp; Kiln (sample chain)</span>
+    <span>Sample menu, not a real business</span>
+  </footer>
+</div>
+</body>
+</html>

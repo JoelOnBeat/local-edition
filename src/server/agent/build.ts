@@ -1,0 +1,135 @@
+import type { AgentEvent, Edition, EditionItem, Store } from "@/contract";
+import { newId } from "@/lib/ids";
+import { createLogger } from "../log";
+import { UpstreamError } from "../http/errors";
+import { evidenceCheck, produceItem } from "./items";
+import { runStoreAgent } from "./loop";
+import { AGENT_MODEL, COPY_MODEL, FALLBACK_AGENT_LABEL, type AgentDeps, type StoreContext } from "./ports";
+import { invalidateCard } from "./card-state";
+import { mondayOf } from "./util";
+
+const log = createLogger("agent:build");
+
+export interface BuildParams {
+  workspaceId: string;
+  /** Omit to build every store in the workspace. */
+  storeIds?: string[];
+  /** ISO Monday; defaults to the current week. */
+  weekOf?: string;
+  /** Reuse a run id minted by the caller (the Monday job). */
+  runId?: string;
+}
+
+const err = (code: string, message: string, storeId?: string): AgentEvent => ({ type: "error", ...(storeId ? { storeId } : {}), code, message });
+
+/**
+ * Build this week's edition for each store: tool loop -> evidence check -> copy -> guardrails ->
+ * persisted Edition. Yields every event in docs/CONTRACT.md. Stores run one after another so the
+ * stream reads as a story; a failing store reports an error and the run carries on.
+ */
+export async function* buildEditions(params: BuildParams, deps: AgentDeps): AsyncGenerator<AgentEvent> {
+  const { repo } = deps;
+  const workspace = await repo.getWorkspace(params.workspaceId);
+  const chain = workspace && (await repo.getChain(workspace.chainId));
+  if (!workspace || !chain) {
+    yield err("workspace_not_found", "That workspace does not exist.");
+    return;
+  }
+  const all = await repo.listStores(chain.id);
+  const wanted = params.storeIds;
+  const unknown = wanted?.filter((id) => !all.some((s) => s.id === id)) ?? [];
+  if (unknown.length) {
+    yield err("unknown_store", `Unknown store: ${unknown.join(", ")}.`);
+    return;
+  }
+  const stores = wanted ? all.filter((s) => wanted.includes(s.id)) : all;
+  const menu = await repo.listMenu(chain.id);
+  const weekOf = params.weekOf ?? mondayOf(deps.now());
+  const runId = params.runId ?? newId("run");
+
+  yield { type: "run_started", runId, storeIds: stores.map((s) => s.id) };
+  const editionIds: string[] = [];
+  for (const store of stores) {
+    try {
+      const id = yield* buildStore(deps, { chain, store, menu, weekOf }, runId);
+      editionIds.push(id);
+    } catch (e) {
+      if (e instanceof UpstreamError && e.code === "spend_cap") {
+        yield err("spend_cap", "The model spend cap has been reached, so the build stopped.", store.id);
+        return;
+      }
+      log.error("store build failed", { storeId: store.id, err: e });
+      yield err("store_failed", `Could not finish the edition for ${store.name}.`, store.id);
+    }
+  }
+  yield { type: "run_done", runId, editionIds };
+}
+
+async function* buildStore(deps: AgentDeps, sc: StoreContext, runId: string): AsyncGenerator<AgentEvent, string> {
+  const { repo } = deps;
+  const { store, weekOf } = sc;
+  yield { type: "store_started", storeId: store.id };
+
+  const existing = await repo.getEditionForWeek(store.id, weekOf);
+  const issueNo = existing?.issueNo ?? (await nextIssueNo(deps, store, weekOf));
+  const { set, mem, usedFallback } = yield* runStoreAgent({ sc, deps });
+  const { kept, dropped } = evidenceCheck(set, mem);
+  for (const d of dropped) yield err("item_dropped", `The ${d.kind} item was dropped: ${d.reason === "no_evidence" ? "no evidence supports it" : "fewer than 8 artists were found"}.`, store.id);
+
+  const edition: Edition = {
+    id: existing?.id ?? newId("ed"),
+    storeId: store.id,
+    weekOf,
+    issueNo,
+    items: [],
+    evidence: [],
+    status: "drafting",
+    generatedBy: { agentModel: usedFallback ? FALLBACK_AGENT_LABEL : AGENT_MODEL, copyModel: COPY_MODEL, runId },
+    createdAt: deps.now().toISOString(),
+  };
+  await repo.putEdition(edition);
+  if (existing) await invalidateCard(repo, edition.id);
+
+  try {
+    // Copy and guardrails for the kept items run concurrently; events still go out in item order.
+    const pending = kept.map((c) => produceItem(deps, sc, mem, c).then((value) => ({ ok: true as const, value }), (error: unknown) => ({ ok: false as const, error })));
+    for (const [i, settled] of pending.entries()) {
+      const r = await settled;
+      if (!r.ok) {
+        if (r.error instanceof UpstreamError && r.error.code === "spend_cap") throw r.error;
+        log.error("item failed", { kind: kept[i].kind, err: r.error });
+        yield err("item_failed", `Could not write the ${kept[i].kind} item.`, store.id);
+        continue;
+      }
+      const item = r.value.item;
+      if (!item) {
+        yield err("item_dropped", `The ${kept[i].kind} item was dropped: it did not fit the edition format.`, store.id);
+        continue;
+      }
+      edition.items.push(item);
+      edition.evidence = mem.evidenceFor([...new Set(edition.items.flatMap((x) => x.evidenceIds))]);
+      await repo.putEdition(edition);
+      yield { type: "item_drafted", storeId: store.id, item };
+      yield { type: "guardrail", storeId: store.id, itemId: item.id, result: item.guardrail };
+    }
+
+    if (!edition.items.length) yield err("no_items", `No items could be built for ${store.name}.`, store.id);
+    edition.status = edition.items.length === 0 || edition.items.some(isFlagged) ? "flagged" : "draft";
+    await repo.putEdition(edition);
+  } finally {
+    // A closed stream (client left) or a thrown error must not leave the edition 'drafting' forever.
+    if (edition.status === "drafting") {
+      edition.status = "flagged";
+      await repo.putEdition(edition).catch(() => undefined);
+    }
+  }
+  yield { type: "store_done", storeId: store.id, editionId: edition.id };
+  return edition.id;
+}
+
+const isFlagged = (i: EditionItem) => i.status === "flagged";
+
+async function nextIssueNo(deps: AgentDeps, store: Store, weekOf: string): Promise<number> {
+  const prior = await deps.repo.listEditions({ storeIds: [store.id] });
+  return prior.filter((e) => e.weekOf !== weekOf).reduce((max, e) => Math.max(max, e.issueNo), 0) + 1;
+}

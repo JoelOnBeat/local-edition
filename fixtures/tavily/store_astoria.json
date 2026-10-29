@@ -1,0 +1,38 @@
+{
+  "query": "events this week near 30th Ave & 31st St, Astoria, New York",
+  "follow_up_questions": null,
+  "answer": null,
+  "images": [],
+  "results": [
+    {
+      "title": "Ditmars Street open studios",
+      "url": "https://events.example.com/ditmars-street-open-studios",
+      "content": "Four artists open their studios to visitors on Saturday 7 November, 1 to 6pm. Walk in, free, with tea on the back steps.",
+      "score": 0.82,
+      "raw_content": null
+    },
+    {
+      "title": "Pastry tasting walk along 31st Street",
+      "url": "https://events.example.com/31st-street-pastry-walk",
+      "content": "A guided walk past five bakeries, with a small taste at each. Sunday 8 November, 10am start. Tickets $25 through the event page.",
+      "score": 0.74,
+      "raw_content": null
+    },
+    {
+      "title": "Cumbia night at a neighbourhood social club",
+      "url": "https://events.example.com/cumbia-night-astoria",
+      "content": "Dance night with a seven-piece band, Friday 6 November, 9pm to midnight. Ages 21 and up.",
+      "score": 0.69,
+      "raw_content": null
+    },
+    {
+      "title": "Public meeting on the 30th Avenue bike lane",
+      "url": "https://events.example.com/30th-ave-bike-lane-meeting",
+      "content": "Community board meeting on the proposed bike lane, Tuesday 3 November, 6:30pm, in the library's community room.",
+      "score": 0.6,
+      "raw_content": null
+    }
+  ],
+  "response_time": 0.87,
+  "request_id": "5e1b9d3c-8a2f-4c07-b6e4-7d0f3a9c1e58"
+}

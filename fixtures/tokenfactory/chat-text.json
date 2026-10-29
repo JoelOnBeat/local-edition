@@ -1,0 +1,20 @@
+{
+  "id": "chatcmpl-fixture-text",
+  "object": "chat.completion",
+  "model": "nvidia/Nemotron-3_5-Lightning",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "Synthetic fixture reply. No live model was called."
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 40,
+    "completion_tokens": 12,
+    "total_tokens": 52
+  }
+}

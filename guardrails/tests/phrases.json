@@ -1,0 +1,486 @@
+[
+ {
+  "text": "Oat milk flat white, steamed slow.",
+  "blocks": []
+ },
+ {
+  "text": "Naturally sweet with a little honey from the Saturday market.",
+  "blocks": []
+ },
+ {
+  "text": "Cardamom bun, baked at 6am for the Sunday market crowd.",
+  "blocks": []
+ },
+ {
+  "text": "A heartier loaf for cold mornings.",
+  "blocks": []
+ },
+ {
+  "text": "Brown butter cookie, still warm at 3pm.",
+  "blocks": []
+ },
+ {
+  "text": "Cold brew steeped for 18 hours, served over one big cube.",
+  "blocks": []
+ },
+ {
+  "text": "Sesame brittle croissant, a nod to the bakery on Grand Street.",
+  "blocks": []
+ },
+ {
+  "text": "Live jazz on Thursday at 7pm, no cover.",
+  "blocks": []
+ },
+ {
+  "text": "Free refill on drip coffee every Monday.",
+  "blocks": []
+ },
+ {
+  "text": "A palate cleanser of pickled ginger between courses.",
+  "blocks": []
+ },
+ {
+  "text": "Cured salmon on rye with dill.",
+  "blocks": []
+ },
+ {
+  "text": "Mineral water, still or sparkling.",
+  "blocks": []
+ },
+ {
+  "text": "Race day pour-over, ready before the 8am start.",
+  "blocks": []
+ },
+ {
+  "text": "Low lighting, loud records.",
+  "blocks": []
+ },
+ {
+  "text": "A lower shelf of vinyl for browsing.",
+  "blocks": []
+ },
+ {
+  "text": "Light roast from Ethiopia, bright and floral.",
+  "blocks": []
+ },
+ {
+  "text": "Join the Friday run club, 6:30am sharp.",
+  "blocks": []
+ },
+ {
+  "text": "Reading night with the Greenpoint poets, 19:00.",
+  "blocks": []
+ },
+ {
+  "text": "Playlist: Khruangbin, Bonobo, Nils Frahm.",
+  "blocks": []
+ },
+ {
+  "text": "A less sweet take on the classic bun.",
+  "blocks": []
+ },
+ {
+  "text": "Dairy farm butter from the Hudson Valley.",
+  "blocks": []
+ },
+ {
+  "text": "Free of charge tasting at 5pm.",
+  "blocks": []
+ },
+ {
+  "text": "Good for a rainy afternoon.",
+  "blocks": []
+ },
+ {
+  "text": "Support local roasters with every cup.",
+  "blocks": []
+ },
+ {
+  "text": "Sunday sugar rush, one pastry at a time.",
+  "blocks": []
+ },
+ {
+  "text": "Pair it with the pistachio financier.",
+  "blocks": []
+ },
+ {
+  "text": "Matcha latte with a salted caramel top.",
+  "blocks": []
+ },
+ {
+  "text": "Doors open at 7am; the first pour is on us.",
+  "blocks": []
+ },
+ {
+  "text": "Our barista Maya picked this single origin from Huila.",
+  "blocks": []
+ },
+ {
+  "text": "A spiced chai for the walk along Bedford Avenue.",
+  "blocks": []
+ },
+ {
+  "text": "Boosts your immunity",
+  "blocks": [
+   "immunity",
+   "boost"
+  ]
+ },
+ {
+  "text": "A gluten-free bun",
+  "blocks": [
+   "free_from"
+  ]
+ },
+ {
+  "text": "gluten free brownie",
+  "blocks": [
+   "free_from"
+  ]
+ },
+ {
+  "text": "Dairy-free oat latte",
+  "blocks": [
+   "free_from"
+  ]
+ },
+ {
+  "text": "Nut free brownie",
+  "blocks": [
+   "free_from"
+  ]
+ },
+ {
+  "text": "Sugar-free syrup on request",
+  "blocks": [
+   "free_from"
+  ]
+ },
+ {
+  "text": "Caffeine free all afternoon",
+  "blocks": [
+   "free_from"
+  ]
+ },
+ {
+  "text": "Vegan croissant",
+  "blocks": [
+   "diet_labels"
+  ]
+ },
+ {
+  "text": "Keto-friendly muffin",
+  "blocks": [
+   "diet_labels"
+  ]
+ },
+ {
+  "text": "Plant-based milk options",
+  "blocks": [
+   "diet_labels"
+  ]
+ },
+ {
+  "text": "A low-calorie option",
+  "blocks": [
+   "low_x"
+  ]
+ },
+ {
+  "text": "Low carb pastry",
+  "blocks": [
+   "low_x"
+  ]
+ },
+ {
+  "text": "Lower sugar than the usual",
+  "blocks": [
+   "low_x"
+  ]
+ },
+ {
+  "text": "No added sugar",
+  "blocks": [
+   "free_of"
+  ]
+ },
+ {
+  "text": "Free from gluten",
+  "blocks": [
+   "free_of"
+  ]
+ },
+ {
+  "text": "Only 180 calories",
+  "blocks": [
+   "calories"
+  ]
+ },
+ {
+  "text": "Allergen safe kitchen",
+  "blocks": [
+   "allergen_words"
+  ]
+ },
+ {
+  "text": "Safe for allergies",
+  "blocks": [
+   "allergen_words"
+  ]
+ },
+ {
+  "text": "A hypoallergenic pastry",
+  "blocks": [
+   "allergen_words"
+  ]
+ },
+ {
+  "text": "Celiac friendly",
+  "blocks": [
+   "allergen_words"
+  ]
+ },
+ {
+  "text": "Safe for celiacs",
+  "blocks": [
+   "safe_for"
+  ]
+ },
+ {
+  "text": "A diabetic friendly dessert",
+  "blocks": [
+   "allergen_words"
+  ]
+ },
+ {
+  "text": "A healthy start to the day",
+  "blocks": [
+   "health_words"
+  ]
+ },
+ {
+  "text": "Healthier than most",
+  "blocks": [
+   "health_words"
+  ]
+ },
+ {
+  "text": "Wellness shot of ginger",
+  "blocks": [
+   "health_words"
+  ]
+ },
+ {
+  "text": "Good for you",
+  "blocks": [
+   "good_for_you"
+  ]
+ },
+ {
+  "text": "So good for your gut",
+  "blocks": [
+   "good_for_you"
+  ]
+ },
+ {
+  "text": "Packed with protein",
+  "blocks": [
+   "protein"
+  ]
+ },
+ {
+  "text": "High in fibre",
+  "blocks": [
+   "nutrition_words"
+  ]
+ },
+ {
+  "text": "Vitamin C in every glass",
+  "blocks": [
+   "nutrition_words"
+  ]
+ },
+ {
+  "text": "Nutritious and filling",
+  "blocks": [
+   "nutrition_words"
+  ]
+ },
+ {
+  "text": "Detox green juice",
+  "blocks": [
+   "detox"
+  ]
+ },
+ {
+  "text": "Superfood bowl",
+  "blocks": [
+   "detox"
+  ]
+ },
+ {
+  "text": "Antioxidant rich matcha",
+  "blocks": [
+   "detox"
+  ]
+ },
+ {
+  "text": "Probiotic kombucha on tap",
+  "blocks": [
+   "detox"
+  ]
+ },
+ {
+  "text": "Anti-inflammatory turmeric latte",
+  "blocks": [
+   "detox"
+  ]
+ },
+ {
+  "text": "Cures a hangover",
+  "blocks": [
+   "cure"
+  ]
+ },
+ {
+  "text": "Supports your digestion",
+  "blocks": [
+   "function_verbs"
+  ]
+ },
+ {
+  "text": "Improves focus all morning",
+  "blocks": [
+   "function_verbs"
+  ]
+ },
+ {
+  "text": "Weight loss friendly",
+  "blocks": [
+   "body_goals"
+  ]
+ },
+ {
+  "text": "Guilt-free dessert",
+  "blocks": [
+   "body_goals"
+  ]
+ },
+ {
+  "text": "Burns fat while you sip",
+  "blocks": [
+   "body_goals"
+  ]
+ },
+ {
+  "text": "Perfect for dieters",
+  "blocks": [
+   "body_goals"
+  ]
+ },
+ {
+  "text": "A Sunday morning boost",
+  "blocks": [
+   "boost"
+  ]
+ },
+ {
+  "text": "BOOSTS ENERGY",
+  "blocks": [
+   "boost"
+  ]
+ },
+ {
+  "text": "Perfect for young women",
+  "blocks": [
+   "target_for_group"
+  ]
+ },
+ {
+  "text": "Made for busy moms",
+  "blocks": [
+   "target_for_group"
+  ]
+ },
+ {
+  "text": "A treat for seniors",
+  "blocks": [
+   "target_for_group"
+  ]
+ },
+ {
+  "text": "Targeting Gen Z",
+  "blocks": [
+   "target_for_group"
+  ]
+ },
+ {
+  "text": "Welcome to our Muslim neighbors",
+  "blocks": [
+   "target_identity"
+  ]
+ },
+ {
+  "text": "Christian customers love it",
+  "blocks": [
+   "target_identity"
+  ]
+ },
+ {
+  "text": "Our core demographic",
+  "blocks": [
+   "target_words"
+  ]
+ },
+ {
+  "text": "gluten‑free bun (non-breaking hyphen)",
+  "blocks": [
+   "free_from"
+  ]
+ },
+ {
+  "text": "gluten–free bun (en dash)",
+  "blocks": [
+   "free_from"
+  ]
+ },
+ {
+  "text": "g​luten-free bun (zero-width space)",
+  "blocks": [
+   "free_from"
+  ]
+ },
+ {
+  "text": "ＧＬＵＴＥＮ－ＦＲＥＥ bun (fullwidth)",
+  "blocks": [
+   "free_from"
+  ]
+ },
+ {
+  "text": "GLUTEN-FREE BUN",
+  "blocks": [
+   "free_from"
+  ]
+ },
+ {
+  "text": "Perfect for young single women in their twenties.",
+  "blocks": [
+   "target_for_group",
+   "target_age_band"
+  ]
+ },
+ {
+  "text": "A great spot for people in their thirties",
+  "blocks": [
+   "target_age_band"
+  ]
+ },
+ {
+  "text": "Open to everyone on the block, from the bakery to the bookshop.",
+  "blocks": []
+ },
+ {
+  "text": "New neighbours welcome, stay as long as you like",
+  "blocks": []
+ }
+]

@@ -1,0 +1,24 @@
+# Local Edition copy rails. Colang 1.0 (the default); Colang 2.0 is rejected by /v1/checks.
+# The main model is the agent model (only used if someone calls /v1/chat/completions through the rails).
+# Self-checks run on the cheap copy model: the `brand_voice_check` model entry is picked by the
+# custom action in actions.py (task name = model type). Both read NEBIUS_API_KEY from the environment;
+# without it the brand-voice rail degrades to "skipped" and the regex rail still runs.
+models:
+  - type: main
+    engine: openai
+    model: nvidia/nemotron-3-super-120b-a12b
+    api_key_env_var: NEBIUS_API_KEY
+    parameters:
+      base_url: https://api.tokenfactory.nebius.com/v1/
+  - type: brand_voice_check
+    engine: openai
+    model: nvidia/Nemotron-3_5-Lightning
+    api_key_env_var: NEBIUS_API_KEY
+    parameters:
+      base_url: https://api.tokenfactory.nebius.com/v1/
+
+rails:
+  output:
+    flows:
+      - check health claims   # deterministic regex catalogue, runs first
+      - check brand voice     # LLM self-check against the brand voice passed in the request context

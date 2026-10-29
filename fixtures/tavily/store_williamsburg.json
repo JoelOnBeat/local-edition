@@ -1,0 +1,38 @@
+{
+  "query": "events this week near Bedford Ave & N 7th St, Williamsburg, New York",
+  "follow_up_questions": null,
+  "answer": null,
+  "images": [],
+  "results": [
+    {
+      "title": "Ceramics opening at Salt Line Studio",
+      "url": "https://events.example.com/salt-line-studio-ceramics-opening",
+      "content": "Opening night for a small group show of hand-built ceramics, Thursday 5 November, 6 to 9pm. Free entry, house wine by donation, and most of the pieces are under $80.",
+      "score": 0.84,
+      "raw_content": null
+    },
+    {
+      "title": "North 6th Street stoop sale",
+      "url": "https://events.example.com/north-6th-stoop-sale",
+      "content": "Neighbours on North 6th between Driggs and Bedford are clearing out records, plants and kitchen things. Saturday 7 November from 9am until the tables are empty.",
+      "score": 0.79,
+      "raw_content": null
+    },
+    {
+      "title": "Piano trio in the back room at Velvet Anchor",
+      "url": "https://events.example.com/velvet-anchor-piano-trio",
+      "content": "Piano trio playing standards and a few originals, Friday 6 November, first set at 8pm. No cover before 9.",
+      "score": 0.73,
+      "raw_content": null
+    },
+    {
+      "title": "Sunday repair café at the community room",
+      "url": "https://events.example.com/sunday-repair-cafe-williamsburg",
+      "content": "Bring a broken lamp, a wobbly chair or a radio that hums. Volunteers fix what they can on Sunday 8 November, 11am to 3pm.",
+      "score": 0.66,
+      "raw_content": null
+    }
+  ],
+  "response_time": 0.87,
+  "request_id": "3f8a1c2e-7b4d-4e61-9a20-5d1c8e7f0a11"
+}

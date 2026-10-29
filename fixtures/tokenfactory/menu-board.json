@@ -1,0 +1,20 @@
+{
+  "id": "chatcmpl-fixture-menu",
+  "object": "chat.completion",
+  "model": "nvidia/Nemotron-3.5-Super-VL",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "{\"items\": [{\"name\": \"Drip Coffee\", \"category\": \"Coffee\", \"price\": 3.25, \"currency\": \"USD\", \"description\": \"Daily rotating single origin\", \"confidence\": 0.82}, {\"name\": \"Espresso\", \"category\": \"Coffee\", \"price\": 3.5, \"currency\": \"USD\", \"description\": null, \"confidence\": 0.97}, {\"name\": \"Cortado\", \"category\": \"Coffee\", \"price\": 4.25, \"currency\": \"USD\", \"description\": \"Equal parts espresso and steamed milk\", \"confidence\": 0.97}, {\"name\": \"Flat White\", \"category\": \"Coffee\", \"price\": 4.75, \"currency\": \"USD\", \"description\": null, \"confidence\": 0.97}, {\"name\": \"Oat Milk Latte\", \"category\": \"Coffee\", \"price\": 5.5, \"currency\": \"USD\", \"description\": null, \"confidence\": 0.97}, {\"name\": \"Cold Brew\", \"category\": \"Cold\", \"price\": 4.95, \"currency\": \"USD\", \"description\": \"Steeped 18 hours\", \"confidence\": 0.82}, {\"name\": \"Iced Hojicha Latte\", \"category\": \"Cold\", \"price\": 6.0, \"currency\": \"USD\", \"description\": \"Roasted green tea, milk, ice\", \"confidence\": 0.97}, {\"name\": \"Jasmine Pearl Tea\", \"category\": \"Tea\", \"price\": 4.5, \"currency\": \"USD\", \"description\": null, \"confidence\": 0.97}, {\"name\": \"Earl Grey\", \"category\": \"Tea\", \"price\": 4.0, \"currency\": \"USD\", \"description\": null, \"confidence\": 0.97}, {\"name\": \"Butter Croissant\", \"category\": \"Bakery\", \"price\": 4.25, \"currency\": \"USD\", \"description\": \"Baked each morning\", \"confidence\": 0.97}, {\"name\": \"Cardamom Bun\", \"category\": \"Bakery\", \"price\": 4.75, \"currency\": \"USD\", \"description\": null, \"confidence\": 0.82}, {\"name\": \"Miso Chocolate Cookie\", \"category\": \"Bakery\", \"price\": 3.95, \"currency\": \"USD\", \"description\": null, \"confidence\": 0.97}, {\"name\": \"Egg and Cheddar Sandwich\", \"category\": \"Food\", \"price\": 9.5, \"currency\": \"USD\", \"description\": \"On a toasted brioche roll\", \"confidence\": 0.97}, {\"name\": \"Smoked Salmon Toast\", \"category\": \"Food\", \"price\": 12.0, \"currency\": \"USD\", \"description\": \"Rye, crème fraîche, dill\", \"confidence\": 0.97}], \"unreadable_regions\": [\"bottom-right corner is cropped\"]}"
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1450,
+    "completion_tokens": 520,
+    "total_tokens": 1970
+  }
+}

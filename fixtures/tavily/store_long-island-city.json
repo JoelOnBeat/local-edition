@@ -1,0 +1,38 @@
+{
+  "query": "events this week near Vernon Blvd & 48th Ave, Long Island City, New York",
+  "follow_up_questions": null,
+  "answer": null,
+  "images": [],
+  "results": [
+    {
+      "title": "Open studios in a former print factory",
+      "url": "https://events.example.com/former-print-factory-open-studios",
+      "content": "Forty artists in a converted print factory, Saturday 7 and Sunday 8 November, 1 to 6pm both days.",
+      "score": 0.83,
+      "raw_content": null
+    },
+    {
+      "title": "Waterfront run club on the esplanade",
+      "url": "https://events.example.com/esplanade-run-club-lic",
+      "content": "Easy 5K loop along the East River esplanade, Wednesday 4 November, 6:30pm. Meets at the ferry landing.",
+      "score": 0.65,
+      "raw_content": null
+    },
+    {
+      "title": "Rooftop screening of a 1970s crime film",
+      "url": "https://events.example.com/rooftop-screening-lic",
+      "content": "Outdoor screening on the roof, Friday 6 November, 7pm. Blankets provided.",
+      "score": 0.72,
+      "raw_content": null
+    },
+    {
+      "title": "Ramen walk on Vernon Boulevard",
+      "url": "https://events.example.com/vernon-ramen-walk",
+      "content": "Four noodle shops, four bowls and one walking map, Sunday 8 November, 1pm start. $35.",
+      "score": 0.7,
+      "raw_content": null
+    }
+  ],
+  "response_time": 0.87,
+  "request_id": "d8a5f3b2-9e61-4c0d-a7f2-3b5e8d1c0a96"
+}

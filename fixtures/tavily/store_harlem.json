@@ -1,0 +1,38 @@
+{
+  "query": "events this week near Frederick Douglass Blvd & W 116th St, Harlem, New York",
+  "follow_up_questions": null,
+  "answer": null,
+  "images": [],
+  "results": [
+    {
+      "title": "Print and photo walk through Harlem galleries",
+      "url": "https://events.example.com/harlem-print-photo-walk",
+      "content": "Four small galleries stay open late for a walking tour of new photography, Thursday 5 November, 5 to 8pm.",
+      "score": 0.8,
+      "raw_content": null
+    },
+    {
+      "title": "Open mic and spoken word night",
+      "url": "https://events.example.com/open-mic-spoken-word-harlem",
+      "content": "Open mic with a featured poet, Wednesday 4 November, 7pm. Sign-up at the door.",
+      "score": 0.73,
+      "raw_content": null
+    },
+    {
+      "title": "Quartet playing mid-century standards",
+      "url": "https://events.example.com/mid-century-standards-quartet",
+      "content": "Two sets at 8pm and 10pm on Friday 6 November, playing standards from the 1950s and 60s. Reservations recommended.",
+      "score": 0.7,
+      "raw_content": null
+    },
+    {
+      "title": "Outdoor chess and checkers in the park",
+      "url": "https://events.example.com/park-chess-checkers-saturday",
+      "content": "Boards and clocks provided at the south tables, Saturday 7 November, 12 to 4pm. Everyone is welcome to sit in.",
+      "score": 0.68,
+      "raw_content": null
+    }
+  ],
+  "response_time": 0.87,
+  "request_id": "b7d40e2f-6c19-4f3a-9b58-1e8a5d2c7f04"
+}

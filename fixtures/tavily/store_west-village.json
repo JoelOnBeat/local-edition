@@ -1,0 +1,38 @@
+{
+  "query": "events this week near Bleecker St & Christopher St, West Village, New York",
+  "follow_up_questions": null,
+  "answer": null,
+  "images": [],
+  "results": [
+    {
+      "title": "Stoop book swap on Bleecker",
+      "url": "https://events.example.com/bleecker-stoop-book-swap",
+      "content": "Swap paperbacks on the step of a corner bookshop, Saturday 7 November, 11am to 2pm. Bring up to five books.",
+      "score": 0.78,
+      "raw_content": null
+    },
+    {
+      "title": "Walk through the old printing blocks",
+      "url": "https://events.example.com/printing-blocks-architecture-walk",
+      "content": "Guided walk through the blocks around Christopher Street, Sunday 8 November, 10am. Meets outside the library, $15.",
+      "score": 0.71,
+      "raw_content": null
+    },
+    {
+      "title": "Drawing night with a live model",
+      "url": "https://events.example.com/live-model-drawing-night",
+      "content": "Drawing session at a Greenwich Avenue studio, Thursday 5 November, 7:30pm. Materials provided.",
+      "score": 0.75,
+      "raw_content": null
+    },
+    {
+      "title": "Lunchtime chamber trio",
+      "url": "https://events.example.com/lunchtime-chamber-trio",
+      "content": "Free concert, Wednesday 4 November, 12:30pm. Forty minutes of Haydn and Piazzolla in a church hall.",
+      "score": 0.62,
+      "raw_content": null
+    }
+  ],
+  "response_time": 0.87,
+  "request_id": "2a6f8c0d-4e97-4b12-a3d5-9c1e7b8f6a20"
+}

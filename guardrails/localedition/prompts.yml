@@ -1,0 +1,14 @@
+prompts:
+  - task: brand_voice_check
+    max_tokens: 1024
+    content: |-
+      You check short copy written for one store of a chain. The copy is a {{ kind }}.
+      BRAND VOICE (from the chain's own brief):
+      {{ brand_voice }}
+
+      Always also required: no hype words ("amazing", "best ever"), no emojis, no ALL CAPS shouting.
+
+      Answer "yes" if the copy clearly breaks the brand voice or the always-required rules.
+      Answer "no" if it fits. If unsure, answer "no".
+      Copy: "{{ bot_response }}"
+      Does the copy break the brand voice? Answer with one word, Yes or No:
