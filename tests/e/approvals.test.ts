@@ -20,8 +20,15 @@ async function setup(check?: CheckCopy) {
   edition = { ...cleanEdition(), id: "ed_mine", storeId: body.stores[0].id };
   await repo.putEdition(edition);
 }
-const patch = (itemId: string, body: unknown, headers: Record<string, string> = {}) =>
-  patchItem(req("/x", { cookie, ...json(body, { method: "PATCH", headers }) }), params({ id: edition.id, itemId }));
+/** PATCH as the UI does: `If-Match` is the item's stored version unless the test sends its own (or `null` for none). */
+async function patch(itemId: string, body: unknown, headers: Record<string, string | null> = {}) {
+  const current = (await repo.getEdition(edition.id))?.items.find((i) => i.id === itemId)?.version ?? 0;
+  const sent: Record<string, string> = { "if-match": String(current) };
+  for (const [k, v] of Object.entries(headers)) { if (v === null) delete sent[k]; else sent[k] = v; }
+  return patchItem(req("/x", { cookie, ...json(body, { method: "PATCH", headers: sent }) }), params({ id: edition.id, itemId }));
+}
+/** Puts the edition mid-build: `drafting` and started just now (an old one would be reaped as dead). */
+const startBuilding = () => repo.updateEdition(edition.id, (cur) => ({ ...cur, status: "drafting", createdAt: new Date().toISOString() }));
 const stored = async () => (await repo.getEdition(edition.id))!;
 const special = () => edition.items.find((i) => i.kind === "special")!;
 
@@ -57,7 +64,7 @@ describe("T2 approve and reject", () => {
 
   it("rejects an edition that is still drafting, and unknown items", async () => {
     expect((await patch("item_nope", { action: "approve" })).status).toBe(404);
-    await repo.setEditionStatus(edition.id, "drafting");
+    await startBuilding();
     const res = await patch(special().id, { action: "approve" });
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ code: "edition_drafting" });
@@ -158,7 +165,7 @@ describe("T2 approve-all", () => {
   });
 
   it("is refused for an edition still drafting and 404 for someone else's", async () => {
-    await repo.setEditionStatus(edition.id, "drafting");
+    await startBuilding();
     expect((await approveAll(req("/x", { cookie, method: "POST" }), params({ id: edition.id }))).status).toBe(409);
     expect((await approveAll(req("/x", { method: "POST", ip: "10.9.9.9" }), params({ id: edition.id }))).status).toBe(404);
   });
@@ -178,6 +185,7 @@ describe("T2 deriveEditionStatus", () => {
 describe("T2 public staff card", () => {
   const card = (): StaffCard => cardFor(edition, "tok_public_card_000001");
   it("serves the card with its store and chain name to anyone holding the token, without a cookie", async () => {
+    await repo.setEditionStatus(edition.id, "approved");
     await repo.putStaffCard(card());
     const res = await getPublicCard(req("/api/card/x"), params({ token: "tok_public_card_000001" }));
     expect(res.status).toBe(200);

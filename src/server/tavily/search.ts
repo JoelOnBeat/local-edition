@@ -25,6 +25,8 @@ export interface TavilyOptions {
   /** Defaults to the parsed server env. Tests pass their own. */
   env?: Pick<ServerEnv, "TAVILY_MODE" | "TAVILY_API_KEY">;
   recorder?: Recorder;
+  /** The chain's city, added to the query so it searches the right town. */
+  city?: string;
   // Test seams, passed through to fetchJson.
   fetchImpl?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
@@ -97,7 +99,8 @@ function evidenceFor(
 export async function eventsThisWeek(store: Store, opts: TavilyOptions = {}): Promise<EventsThisWeek> {
   const env = opts.env ?? serverEnv();
   const { run } = tavilyModeFor(env);
-  const body = buildTavilyBody(store);
+  const clock = opts.clock ?? (() => new Date());
+  const body = buildTavilyBody(store, opts.city, clock());
   const headers = run === "live" && env.TAVILY_API_KEY ? { authorization: `Bearer ${env.TAVILY_API_KEY}` } : undefined;
 
   const { data, mode } = await fetchJson<TavilyResponse>({
@@ -117,6 +120,6 @@ export async function eventsThisWeek(store: Store, opts: TavilyOptions = {}): Pr
   });
 
   const events = toEvents(data.results);
-  const evidence = evidenceFor(store, body, data.results, events, mode, (opts.clock ?? (() => new Date()))());
+  const evidence = evidenceFor(store, body, data.results, events, mode, clock());
   return { events, evidence };
 }

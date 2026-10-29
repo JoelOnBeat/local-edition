@@ -45,20 +45,20 @@ describe("T3 rebuild.py against the real /api/jobs/monday handler", () => {
       yield { type: "run_done", runId, editionIds: stores.map((s) => `ed_${s.id}`) };
     };
     const pending: Promise<unknown>[] = [];
-    const repo = freshApp({ LE_JOB_SECRET: "interop-secret-not-real" }, fakePorts({ buildEditions: build, background: (p) => { pending.push(p); } }));
+    const repo = freshApp({ LE_JOB_SECRET: "interop-secret-not-real-0123456789abcdef" }, fakePorts({ buildEditions: build, background: (p) => { pending.push(p); } }));
     server = await serve();
-    const { code, out } = await runScript((server.address() as AddressInfo).port, { LE_JOB_SECRET: "interop-secret-not-real", TRIGGER: "manual", JOB_NAME: "edition-2026w44-7" });
+    const { code, out } = await runScript((server.address() as AddressInfo).port, { LE_JOB_SECRET: "interop-secret-not-real-0123456789abcdef", TRIGGER: "manual", JOB_NAME: "edition-2026w44-7" });
     expect(code, out).toBe(0);
     expect(out).toContain("status=done");
     const run = await repo.latestJobRun();
     expect(run).toMatchObject({ status: "done", trigger: "manual", nebiusJobId: "edition-2026w44-7" });
-    expect(out).not.toContain("interop-secret-not-real");
+    expect(out).not.toContain("interop-secret-not-real-0123456789abcdef");
   }, 30_000);
 
   it("exits 3 when the secret does not match the server's", async () => {
-    freshApp({ LE_JOB_SECRET: "server-secret" }, fakePorts());
+    freshApp({ LE_JOB_SECRET: "server-secret-not-real-0123456789abcdef" }, fakePorts());
     server = await serve();
-    const { code, out } = await runScript((server.address() as AddressInfo).port, { LE_JOB_SECRET: "other-secret" });
+    const { code, out } = await runScript((server.address() as AddressInfo).port, { LE_JOB_SECRET: "other-secret-not-real-0123456789abcdef" });
     expect(code).toBe(3);
     expect(out).toContain("bad_signature");
   }, 30_000);

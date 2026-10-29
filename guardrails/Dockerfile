@@ -1,6 +1,7 @@
 # Local Edition guardrails sidecar (NeMo Guardrails 0.24.1). Port 8000, non-root.
 # Fits Cloudflare Containers or Fly.io (1 GB machine). Secrets come from the platform environment:
-#   NEBIUS_API_KEY (optional, enables the brand-voice rail), GUARDRAILS_TOKEN (optional shared secret).
+#   NEBIUS_API_KEY (optional, enables the brand-voice rail), GUARDRAILS_TOKEN (shared secret; the server refuses
+#   to start when NEBIUS_API_KEY is set without it). Only GET /v1/health is open.
 FROM python:3.11-slim AS build
 COPY --from=ghcr.io/astral-sh/uv:0.8.5 /uv /usr/local/bin/uv
 WORKDIR /app

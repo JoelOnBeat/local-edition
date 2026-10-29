@@ -4,7 +4,8 @@ import { z } from "zod";
 
 export const isoDateTime = z.iso.datetime({ offset: true });
 export const isoDate = z.iso.date();
-const id = z.string().min(1);
+/** Every id is at most 64 characters (KV keys are limited and ids reach Qloo params). */
+const id = z.string().min(1).max(64);
 
 export const DataMode = z.enum(["live", "replay", "fixture", "cache"]);
 export type DataMode = z.infer<typeof DataMode>;
@@ -13,8 +14,8 @@ export type ProviderMode = z.infer<typeof ProviderMode>;
 
 export const QlooEntityRef = z.object({
   entityId: id,
-  name: z.string().min(1),
-  type: z.string().min(1), // urn:entity:...
+  name: z.string().min(1).max(120),
+  type: z.string().min(1).max(80), // urn:entity:...
 });
 export type QlooEntityRef = z.infer<typeof QlooEntityRef>;
 
@@ -23,11 +24,11 @@ export type ChainCategory = z.infer<typeof ChainCategory>;
 
 export const Chain = z.object({
   id,
-  name: z.string().min(1),
+  name: z.string().min(1).max(80),
   category: ChainCategory,
   brandVoice: z.array(z.string().min(1).max(140)).min(1).max(3),
   anchors: z.array(QlooEntityRef).min(1).max(3),
-  city: z.object({ name: z.string().min(1), lat: z.number().min(-90).max(90), lon: z.number().min(-180).max(180) }),
+  city: z.object({ name: z.string().min(1).max(80), lat: z.number().min(-90).max(90), lon: z.number().min(-180).max(180) }),
   isSample: z.boolean(),
 });
 export type Chain = z.infer<typeof Chain>;
@@ -35,8 +36,8 @@ export type Chain = z.infer<typeof Chain>;
 export const Store = z.object({
   id,
   chainId: id,
-  name: z.string().min(1), // neighbourhood
-  addressLabel: z.string().min(1), // "Bedford Ave & N 7th St"
+  name: z.string().min(1).max(80), // neighbourhood
+  addressLabel: z.string().min(1).max(160), // "Bedford Ave & N 7th St"
   lat: z.number().min(-90).max(90),
   lon: z.number().min(-180).max(180),
   colorIndex: z.number().int().min(1).max(8),
@@ -48,11 +49,11 @@ export type MenuCategory = z.infer<typeof MenuCategory>;
 
 export const MenuItem = z.object({
   id,
-  name: z.string().min(1),
+  name: z.string().min(1).max(80),
   category: MenuCategory,
   price: z.number().nonnegative().nullable(),
   currency: z.literal("USD"),
-  description: z.string().nullable(),
+  description: z.string().max(240).nullable(),
   source: z.enum(["vl", "manual"]),
 });
 export type MenuItem = z.infer<typeof MenuItem>;
@@ -87,7 +88,7 @@ export const TagKind = z.enum(["cuisine", "flavour", "ambience", "music", "activ
 export type TagKind = z.infer<typeof TagKind>;
 
 export const BlockTag = z.object({
-  tagId: id,
+  tagId: z.string().min(1).max(200), // a tag urn, longer than an id
   name: z.string().min(1),
   kind: TagKind,
   affinity: z.number(),

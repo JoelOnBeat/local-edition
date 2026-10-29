@@ -47,3 +47,16 @@ describe("T2 rerank", () => {
     expect(r.results).toHaveLength(3);
   });
 });
+
+describe("T2 rerank availability memo", () => {
+  it("after a 404 it skips /v1/rerank and goes straight to embeddings", async () => {
+    const { tf, calls } = scriptedTf((url, body) => {
+      if (url.endsWith("/rerank")) return jsonRes({ error: { code: "model_not_found" } }, 404);
+      const input = body.input as string[];
+      return jsonRes({ data: input.map((_, index) => ({ index, embedding: [1, index] })), usage: { prompt_tokens: 5 } });
+    });
+    await tf.rerank("coffee", docs);
+    await tf.rerank("coffee", docs);
+    expect(calls.map((c) => c.url.split("/v1/")[1])).toEqual(["rerank", "embeddings", "embeddings"]);
+  });
+});

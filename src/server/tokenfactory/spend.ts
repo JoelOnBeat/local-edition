@@ -1,62 +1,86 @@
-import { UpstreamError } from "../http/errors";
-import { setSpendMeter, type Price, type SpendMeter } from "../http/spend";
 import { serverEnv } from "@/lib/env";
+import {
+  currentSpendMeter,
+  priceOf,
+  PricedSpendMeter,
+  ResilientSpendStore,
+  setSpendMeter,
+  type LedgerState,
+  type Price,
+  type SpendStore,
+  type SpendTicket,
+} from "../http/spend";
+import { getRepo } from "../store";
 import { MODELS } from "./models";
 
-/** List prices in USD per million tokens (Token Factory public catalog, 29 Oct 2026). */
-export const TF_PRICES: Record<string, Price> = {
-  [MODELS.agent]: { inPerMTok: 0.3, outPerMTok: 0.9 },
-  [MODELS.vision]: { inPerMTok: 0.3, outPerMTok: 0.9 },
-  [MODELS.copy]: { inPerMTok: 0.06, outPerMTok: 0.24 },
-  [MODELS.embedding]: { inPerMTok: 0.01, outPerMTok: 0 },
+export type { SpendTicket } from "../http/spend";
+
+/**
+ * List prices in USD per million tokens (Token Factory public catalog, 29 Oct 2026). Built from entries so two
+ * roles that share a model id (agent and vision are both Super-VL) cannot collide as object keys.
+ */
+export const TF_PRICES: Record<string, Price> = Object.fromEntries<Price>([
+  [MODELS.agent, { inPerMTok: 0.3, outPerMTok: 0.9 }],
+  [MODELS.vision, { inPerMTok: 0.3, outPerMTok: 0.9 }],
+  // Ultra is the dearest model and its price is not confirmed: priced high so the cap errs on the safe side.
+  [MODELS.reviewer, { inPerMTok: 0.8, outPerMTok: 2.4 }],
+  [MODELS.copy, { inPerMTok: 0.06, outPerMTok: 0.24 }],
+  [MODELS.embedding, { inPerMTok: 0.01, outPerMTok: 0 }],
   // Rerank pricing is unpublished; priced like embeddings until confirmed.
-  [MODELS.rerank]: { inPerMTok: 0.01, outPerMTok: 0 },
-};
-/** Unknown model: charge like the dearest known one so the cap errs on the safe side. */
-const UNKNOWN_MODEL_PRICE: Price = { inPerMTok: 0.3, outPerMTok: 0.9 };
+  [MODELS.rerank, { inPerMTok: 0.01, outPerMTok: 0 }],
+]);
 
 export function priceUsd(model: string, inTokens: number, outTokens: number, prices: Record<string, Price> = TF_PRICES): number {
-  const p = prices[model] ?? UNKNOWN_MODEL_PRICE;
-  return (Math.max(0, inTokens) * p.inPerMTok + Math.max(0, outTokens) * p.outPerMTok) / 1_000_000;
+  return priceOf(prices, model, inTokens, outTokens);
 }
 
-/** Counts Token Factory spend and refuses calls (code `spend_cap`) once SPEND_CAP_USD is reached. */
-export class TokenFactorySpendMeter implements SpendMeter {
-  private usd = 0;
+const LEDGER_KEY = "spend:ledger";
+const LEDGER_TTL_SECONDS = 35 * 24 * 3600;
 
-  constructor(
-    private readonly capUsd: number,
-    private readonly prices: Record<string, Price> = TF_PRICES,
-  ) {}
-
-  record(model: string, inTokens: number, outTokens: number): void {
-    this.usd += priceUsd(model, inTokens, outTokens, this.prices);
+/** The shared ledger: one row in the repo cache (KV on Workers), so every isolate reads the same total. */
+class RepoSpendStore implements SpendStore {
+  async load(): Promise<LedgerState> {
+    const row = await (await getRepo()).cacheGet<LedgerState>(LEDGER_KEY);
+    return row && typeof row.usd === "number" && row.open ? row : { usd: 0, open: {} };
   }
-
-  assertUnderCap(): void {
-    if (this.usd >= this.capUsd) {
-      throw new UpstreamError("spend_cap", "tokenfactory", "Spend cap reached; model calls are paused.");
-    }
-  }
-
-  totals() {
-    return { usd: Number(this.usd.toFixed(6)), capUsd: this.capUsd };
+  async save(state: LedgerState): Promise<void> {
+    await (await getRepo()).cachePut(LEDGER_KEY, state, LEDGER_TTL_SECONDS);
   }
 }
 
-let installed: TokenFactorySpendMeter | undefined;
+/**
+ * Token Factory spend meter. `new TokenFactorySpendMeter(cap)` keeps an in-process ledger (tests);
+ * `tokenFactoryMeter()` is the shared, repo-backed one that enforces SPEND_CAP_USD across isolates.
+ */
+export class TokenFactorySpendMeter extends PricedSpendMeter {
+  constructor(capUsd: number | (() => number), prices: Record<string, Price> = TF_PRICES, store?: SpendStore) {
+    super(capUsd, prices, store);
+  }
+}
 
 /** Process-wide meter, also registered as the shared http meter so /api/status reads the same totals. */
 export function tokenFactoryMeter(): TokenFactorySpendMeter {
-  if (!installed) {
-    installed = new TokenFactorySpendMeter(serverEnv().SPEND_CAP_USD);
-    setSpendMeter(installed);
-  }
-  return installed;
+  const current = currentSpendMeter();
+  if (current instanceof TokenFactorySpendMeter) return current;
+  const meter = new TokenFactorySpendMeter(() => serverEnv().SPEND_CAP_USD, TF_PRICES, new ResilientSpendStore(new RepoSpendStore()));
+  setSpendMeter(meter);
+  return meter;
+}
+
+/**
+ * Reserve `estimateUsd` against the shared cap before a paid call. Throws UpstreamError `spend_cap`
+ * when the cap would be exceeded. Always pass the ticket to `settleSpend`, including when the call fails.
+ */
+export function reserveSpend(estimateUsd: number): Promise<SpendTicket> {
+  return tokenFactoryMeter().reserveUsd(estimateUsd);
+}
+
+/** Settle a reservation at the real cost. A failed or timed-out call settles at `ticket.estimateUsd`. */
+export function settleSpend(ticket: SpendTicket, actualUsd: number): Promise<void> {
+  return tokenFactoryMeter().settleUsd(ticket, actualUsd);
 }
 
 /** Tests only. */
 export function resetTokenFactoryMeter(): void {
-  installed = undefined;
   setSpendMeter(undefined);
 }

@@ -11,7 +11,7 @@ import { DEMO_WORKSPACE_ID } from "@/server/session";
 import type { Repo } from "@/server/store";
 import { fakePorts, freshApp, req } from "./helpers";
 
-const SECRET = "test-secret-not-real-0001";
+const SECRET = "test-secret-not-real-0001-0123456789abcdef";
 let repo: Repo;
 const bg: Promise<unknown>[] = [];
 const drain = () => Promise.all(bg.splice(0));
@@ -34,8 +34,11 @@ function setup(build: BuildEditions = goodBuild, env: Record<string, string | un
 }
 beforeEach(() => { bg.length = 0; setup(); });
 
+/** Each default-signed body gets a distinct ts so identical bodies are not replays of one signature. */
+let tsOffset = 0;
 async function post(body: unknown, opts: { secret?: string; signature?: string; raw?: string } = {}) {
-  const raw = opts.raw ?? JSON.stringify(body);
+  const withTs = body && typeof body === "object" && !("ts" in body) ? { ...body, ts: Math.floor(Date.now() / 1000) - tsOffset++ } : body;
+  const raw = opts.raw ?? JSON.stringify(withTs);
   const signature = opts.signature ?? (await signBody(opts.secret ?? SECRET, raw));
   return runMondayJob(req("/api/jobs/monday", { method: "POST", headers: { "content-type": "application/json", "x-le-signature": signature }, body: raw }));
 }

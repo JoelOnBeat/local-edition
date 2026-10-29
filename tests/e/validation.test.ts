@@ -20,10 +20,10 @@ const bad: Partial<Record<RouteId, { h: Handler; r: () => Request; a?: ReturnTyp
   patchItem: { h: editions.patchItem, r: () => req("/x", json({ action: "delete" }, { method: "PATCH" })), a: p({ id: "e", itemId: "i" }), status: 400, code: "invalid_input" },
   approveAll: { h: editions.approveAll, r: () => req("/x", { method: "POST" }), a: p({ id: "ed_nope" }), status: 404, code: "not_found" },
   getPublicCard: { h: editions.getPublicCard, r: () => req("/x"), a: p({ token: "nope" }), status: 404, code: "not_found" },
-  runMondayJob: { h: jobs.runMondayJob, r: () => req("/api/jobs/monday", { ...json({ storeIds: "all" }), headers: { "content-type": "application/json", "x-le-signature": "ab" } }), status: 400, code: "invalid_input" },
+  runMondayJob: { h: jobs.runMondayJob, r: () => req("/api/jobs/monday", { ...json({ storeIds: "all" }), headers: { "content-type": "application/json" } }), status: 400, code: "invalid_input" },
 };
 
-beforeEach(() => { freshApp({ LE_JOB_SECRET: "s" }, fakePorts()); });
+beforeEach(() => { freshApp({ LE_JOB_SECRET: "validation-secret-not-real-0123456789ab" }, fakePorts()); });
 
 describe("T4 input validation on every stream E route", () => {
   const eRoutes = routeTable.filter((r) => r.stream === "E");

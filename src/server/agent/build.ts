@@ -1,7 +1,9 @@
 import type { AgentEvent, Edition, EditionItem, Store } from "@/contract";
 import { newId } from "@/lib/ids";
 import { createLogger } from "../log";
-import { UpstreamError } from "../http/errors";
+import { HttpError, UpstreamError } from "../http/errors";
+import { reapStaleDrafts } from "../store/reaper";
+import { acquireBuildLock, ApprovalsAppeared, hasApprovals, releaseBuildLock, type BuildLock } from "./build-lock";
 import { evidenceCheck, produceItem } from "./items";
 import { runStoreAgent } from "./loop";
 import { AGENT_MODEL, COPY_MODEL, FALLBACK_AGENT_LABEL, type AgentDeps, type StoreContext } from "./ports";
@@ -18,6 +20,10 @@ export interface BuildParams {
   weekOf?: string;
   /** Reuse a run id minted by the caller (the Monday job). */
   runId?: string;
+  /** Rebuild stores whose current edition has approved or edited items (their work is replaced). */
+  force?: boolean;
+  /** A build lock the caller already took (the route does, to answer 409 before streaming). */
+  lock?: BuildLock;
 }
 
 const err = (code: string, message: string, storeId?: string): AgentEvent => ({ type: "error", ...(storeId ? { storeId } : {}), code, message });
@@ -28,6 +34,25 @@ const err = (code: string, message: string, storeId?: string): AgentEvent => ({ 
  * stream reads as a story; a failing store reports an error and the run carries on.
  */
 export async function* buildEditions(params: BuildParams, deps: AgentDeps): AsyncGenerator<AgentEvent> {
+  const { repo } = deps;
+  let lock = params.lock;
+  if (!lock) {
+    try {
+      lock = await acquireBuildLock(repo, params.workspaceId);
+    } catch (e) {
+      if (!(e instanceof HttpError)) throw e;
+      yield err(e.code, e.message);
+      return;
+    }
+  }
+  try {
+    yield* runBuild(params, deps);
+  } finally {
+    await releaseBuildLock(repo, lock);
+  }
+}
+
+async function* runBuild(params: BuildParams, deps: AgentDeps): AsyncGenerator<AgentEvent> {
   const { repo } = deps;
   const workspace = await repo.getWorkspace(params.workspaceId);
   const chain = workspace && (await repo.getChain(workspace.chainId));
@@ -43,6 +68,8 @@ export async function* buildEditions(params: BuildParams, deps: AgentDeps): Asyn
     return;
   }
   const stores = wanted ? all.filter((s) => wanted.includes(s.id)) : all;
+  // A build killed mid-store leaves its edition `drafting`; flag those before looking at what exists.
+  await reapStaleDrafts(repo, await repo.listEditions({ storeIds: all.map((s) => s.id) }), deps.now());
   const menu = await repo.listMenu(chain.id);
   const weekOf = params.weekOf ?? mondayOf(deps.now());
   const runId = params.runId ?? newId("run");
@@ -51,8 +78,8 @@ export async function* buildEditions(params: BuildParams, deps: AgentDeps): Asyn
   const editionIds: string[] = [];
   for (const store of stores) {
     try {
-      const id = yield* buildStore(deps, { chain, store, menu, weekOf }, runId);
-      editionIds.push(id);
+      const id = yield* buildStore(deps, { chain, store, menu, weekOf }, runId, params.force === true);
+      if (id) editionIds.push(id);
     } catch (e) {
       if (e instanceof UpstreamError && e.code === "spend_cap") {
         yield err("spend_cap", "The model spend cap has been reached, so the build stopped.", store.id);
@@ -65,18 +92,25 @@ export async function* buildEditions(params: BuildParams, deps: AgentDeps): Asyn
   yield { type: "run_done", runId, editionIds };
 }
 
-async function* buildStore(deps: AgentDeps, sc: StoreContext, runId: string): AsyncGenerator<AgentEvent, string> {
+const KEPT_APPROVALS = (name: string) => `Kept ${name} as it is: it has approved or edited items. Rebuild with force to replace them.`;
+
+/** Returns the edition id, or null when the store was left alone because head office already worked on it. */
+async function* buildStore(deps: AgentDeps, sc: StoreContext, runId: string, force: boolean): AsyncGenerator<AgentEvent, string | null> {
   const { repo } = deps;
   const { store, weekOf } = sc;
+  const existing = await repo.getEditionForWeek(store.id, weekOf);
+  if (existing && !force && hasApprovals(existing)) {
+    yield err("has_approvals", KEPT_APPROVALS(store.name), store.id);
+    return null;
+  }
   yield { type: "store_started", storeId: store.id };
 
-  const existing = await repo.getEditionForWeek(store.id, weekOf);
   const issueNo = existing?.issueNo ?? (await nextIssueNo(deps, store, weekOf));
   const { set, mem, usedFallback } = yield* runStoreAgent({ sc, deps });
   const { kept, dropped } = evidenceCheck(set, mem);
   for (const d of dropped) yield err("item_dropped", `The ${d.kind} item was dropped: ${d.reason === "no_evidence" ? "no evidence supports it" : "fewer than 8 artists were found"}.`, store.id);
 
-  const edition: Edition = {
+  const fresh: Edition = {
     id: existing?.id ?? newId("ed"),
     storeId: store.id,
     weekOf,
@@ -87,8 +121,23 @@ async function* buildStore(deps: AgentDeps, sc: StoreContext, runId: string): As
     generatedBy: { agentModel: usedFallback ? FALLBACK_AGENT_LABEL : AGENT_MODEL, copyModel: COPY_MODEL, runId },
     createdAt: deps.now().toISOString(),
   };
-  await repo.putEdition(edition);
-  if (existing) await invalidateCard(repo, edition.id);
+  let edition: Edition;
+  if (existing) {
+    // Version-checked: refuse if approvals landed while the agent was working (unless forced).
+    try {
+      edition = await repo.updateEdition(existing.id, (cur) => {
+        if (!force && hasApprovals(cur)) throw new ApprovalsAppeared();
+        return { ...fresh, id: cur.id };
+      });
+    } catch (e) {
+      if (!(e instanceof ApprovalsAppeared)) throw e;
+      yield err("has_approvals", KEPT_APPROVALS(store.name), store.id);
+      return null;
+    }
+    await invalidateCard(repo, edition.id);
+  } else {
+    edition = await repo.putEdition(fresh);
+  }
 
   try {
     // Copy and guardrails for the kept items run concurrently; events still go out in item order.
@@ -106,22 +155,19 @@ async function* buildStore(deps: AgentDeps, sc: StoreContext, runId: string): As
         yield err("item_dropped", `The ${kept[i].kind} item was dropped: it did not fit the edition format.`, store.id);
         continue;
       }
-      edition.items.push(item);
-      edition.evidence = mem.evidenceFor([...new Set(edition.items.flatMap((x) => x.evidenceIds))]);
-      await repo.putEdition(edition);
+      edition = await repo.updateEdition(edition.id, (cur) => {
+        const items = [...cur.items, item];
+        return { ...cur, items, evidence: mem.evidenceFor([...new Set(items.flatMap((x) => x.evidenceIds))]) };
+      });
       yield { type: "item_drafted", storeId: store.id, item };
       yield { type: "guardrail", storeId: store.id, itemId: item.id, result: item.guardrail };
     }
 
     if (!edition.items.length) yield err("no_items", `No items could be built for ${store.name}.`, store.id);
-    edition.status = edition.items.length === 0 || edition.items.some(isFlagged) ? "flagged" : "draft";
-    await repo.putEdition(edition);
+    edition = await repo.updateEdition(edition.id, (cur) => ({ ...cur, status: cur.items.length === 0 || cur.items.some(isFlagged) ? "flagged" : "draft" }));
   } finally {
     // A closed stream (client left) or a thrown error must not leave the edition 'drafting' forever.
-    if (edition.status === "drafting") {
-      edition.status = "flagged";
-      await repo.putEdition(edition).catch(() => undefined);
-    }
+    await repo.updateEdition(edition.id, (cur) => (cur.status === "drafting" ? { ...cur, status: "flagged" } : cur)).catch(() => undefined);
   }
   yield { type: "store_done", storeId: store.id, editionId: edition.id };
   return edition.id;

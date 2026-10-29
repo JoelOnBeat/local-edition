@@ -70,8 +70,8 @@ function qlooPort(repo: Repo): QlooPort {
 }
 
 const tavilyPort: TavilyPort = {
-  async eventsThisWeek(store: Store) {
-    const r = await eventsThisWeek(store);
+  async eventsThisWeek(store: Store, chain: Chain) {
+    const r = await eventsThisWeek(store, { city: chain.city.name });
     const items: EventCandidate[] = r.events.map((e) => ({
       title: e.title, url: e.url, startsAt: e.date ?? null, snippet: e.snippet, evidenceIds: [r.evidence.id],
     }));

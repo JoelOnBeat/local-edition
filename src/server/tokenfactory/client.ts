@@ -8,11 +8,13 @@ import type { SpendMeter } from "../http/spend";
 import { serverEnv } from "@/lib/env";
 import { chatFixture, embeddingsFixture, rerankFixture } from "./fixtures";
 import { MODELS, TF_BASE_URL } from "./models";
-import { rerankDocuments, type RerankOutcome } from "./rerank";
+import { defaultReasoning, reasoningBody, type Reasoning } from "./reasoning";
+import { rerankDocuments, rerankUnavailableMemo, type RerankOutcome } from "./rerank";
 import { ChatCompletion, EmbeddingsResponse, RerankResponse } from "./schemas";
 import { tokenFactoryMeter } from "./spend";
 
 export { MODELS, TF_BASE_URL };
+export type { Reasoning };
 export type TfMode = ProviderRunMode;
 
 export type ResponseFormat =
@@ -27,6 +29,11 @@ export interface ChatOptions {
   responseFormat?: ResponseFormat;
   maxTokens: number;
   temperature?: number;
+  /**
+   * Thinking control: `off`, `low` or `default` (the provider's own). Omitted means the model's tuned default
+   * (`defaultReasoning`: off for Lightning copy). `extraBody` still wins over it.
+   */
+  reasoning?: Reasoning;
   /** Provider-specific passthrough fields (unverified for some models). */
   extraBody?: Record<string, unknown>;
 }
@@ -46,7 +53,8 @@ export interface ChatResult {
   toolCalls: ParsedToolCall[];
   finishReason: string | null;
   model: string;
-  usage: { inTokens: number; outTokens: number };
+  /** `outTokens` is the provider's completion_tokens, which already includes `reasoningTokens`. */
+  usage: { inTokens: number; outTokens: number; reasoningTokens: number };
   mode: TfMode;
   /** The assistant turn, ready to append to `messages` before sending tool results. */
   message: ChatCompletionMessageParam;
@@ -190,6 +198,7 @@ export function createTokenFactory(opts: TokenFactoryOptions = {}): TokenFactory
       ...(o.tools?.length ? { tools: o.tools } : {}),
       ...(o.toolChoice !== undefined && o.tools?.length ? { tool_choice: o.toolChoice } : {}),
       ...(o.responseFormat ? { response_format: o.responseFormat } : {}),
+      ...reasoningBody(o.model, o.reasoning ?? defaultReasoning(o.model, Boolean(o.tools?.length))),
       ...o.extraBody,
     } as unknown as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming;
     try {
@@ -203,7 +212,11 @@ export function createTokenFactory(opts: TokenFactoryOptions = {}): TokenFactory
         toolCalls,
         finishReason: m.finish_reason ?? null,
         model: parsed.model ?? o.model,
-        usage: { inTokens: parsed.usage?.prompt_tokens ?? 0, outTokens: parsed.usage?.completion_tokens ?? 0 },
+        usage: {
+          inTokens: parsed.usage?.prompt_tokens ?? 0,
+          outTokens: parsed.usage?.completion_tokens ?? 0,
+          reasoningTokens: parsed.usage?.completion_tokens_details?.reasoning_tokens ?? 0,
+        },
         mode: modeOf(response),
         message: {
           role: "assistant",
@@ -253,12 +266,14 @@ export function createTokenFactory(opts: TokenFactoryOptions = {}): TokenFactory
     return { scores, mode: r.mode };
   }
 
+  const probedRerank = rerankUnavailableMemo(rawRerank);
+
   const tf: TokenFactory = {
     mode,
     chat,
     embeddings,
     rawRerank,
-    rerank: (query, documents) => rerankDocuments(tf, query, documents),
+    rerank: (query, documents) => rerankDocuments({ mode, embeddings, rawRerank: probedRerank }, query, documents),
   };
   return tf;
 }

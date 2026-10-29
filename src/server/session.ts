@@ -1,6 +1,7 @@
 import type { Edition, StaffCard, Workspace } from "@/contract";
 import { newId, newToken } from "@/lib/ids";
 import { HttpError } from "./http/errors";
+import { clientIp } from "./limits";
 import { sampleSeed } from "./sample/chain";
 import { getRepo, remapId, workspaceSuffix, WorkspaceExistsError, type Repo, type SeedWithId } from "./store";
 
@@ -34,7 +35,13 @@ export function readCookie(request: Request, name: string): string | null {
   if (!header) return null;
   for (const part of header.split(";")) {
     const at = part.indexOf("=");
-    if (at !== -1 && part.slice(0, at).trim() === name) return decodeURIComponent(part.slice(at + 1).trim());
+    if (at !== -1 && part.slice(0, at).trim() === name) {
+      try {
+        return decodeURIComponent(part.slice(at + 1).trim());
+      } catch {
+        return null; // a malformed %-sequence is a cookie we did not issue: treat it as absent
+      }
+    }
   }
   return null;
 }
@@ -45,13 +52,10 @@ export function buildSetCookie(workspaceId: string, secure: boolean): string {
   return attrs.join("; ");
 }
 
+/** Always Secure in production; elsewhere only when the request itself came over https. */
 function isSecure(request: Request): boolean {
+  if (process.env.NODE_ENV === "production") return true;
   return new URL(request.url).protocol === "https:" || request.headers.get("x-forwarded-proto") === "https";
-}
-
-function clientIp(request: Request): string {
-  const h = request.headers;
-  return h.get("cf-connecting-ip") ?? h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? h.get("x-real-ip") ?? "unknown";
 }
 
 async function ipKey(ip: string): Promise<string> {
@@ -89,7 +93,11 @@ function copyEdition(edition: Edition, suffix: string): Edition {
   return { ...structuredClone(edition), id: remapId(edition.id, suffix), storeId: remapId(edition.storeId, suffix) };
 }
 
-/** Creates a seeded visitor workspace. The workspace record is written before the demo editions are copied. */
+/**
+ * Creates a seeded visitor workspace. The workspace record is written before the demo editions are
+ * copied. Only each store's newest finished edition is copied: an edition that is still `drafting`
+ * (the weekly build is running) would stay stuck in the visitor's workspace, where nothing finishes it.
+ */
 export async function createVisitorWorkspace(repo: Repo): Promise<Workspace> {
   const workspaceId = newId("ws");
   const suffix = workspaceSuffix(workspaceId);
@@ -101,7 +109,7 @@ export async function createVisitorWorkspace(repo: Repo): Promise<Workspace> {
   const demo = await repo.getWorkspace(DEMO_WORKSPACE_ID);
   if (demo) {
     const demoStores = await repo.listStores(demo.chainId);
-    for (const edition of await repo.listEditions({ storeIds: demoStores.map((s) => s.id) })) {
+    for (const edition of await repo.listEditions({ storeIds: demoStores.map((s) => s.id), finishedOnly: true })) {
       const copy = copyEdition(edition, suffix);
       await repo.putEdition(copy);
       const card = await repo.getStaffCardByEdition(edition.id);

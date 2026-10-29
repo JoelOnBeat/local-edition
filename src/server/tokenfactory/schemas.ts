@@ -6,6 +6,7 @@ const Usage = z.looseObject({
   prompt_tokens: z.number().nonnegative().optional(),
   completion_tokens: z.number().nonnegative().optional(),
   total_tokens: z.number().nonnegative().optional(),
+  completion_tokens_details: z.looseObject({ reasoning_tokens: z.number().nonnegative().nullish() }).nullish(),
 });
 
 export const ToolCall = z.looseObject({

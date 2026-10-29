@@ -19,14 +19,22 @@ export class UpstreamError extends Error {
   readonly provider: string;
   readonly status?: number;
   readonly retryable: boolean;
+  /** Machine hint derived from the upstream error body (never the body itself): the provider rejected `response_format`. */
+  readonly hint?: "response_format_unsupported";
 
-  constructor(code: UpstreamErrorCode, provider: string, message: string, opts: { status?: number; retryable?: boolean } = {}) {
+  constructor(
+    code: UpstreamErrorCode,
+    provider: string,
+    message: string,
+    opts: { status?: number; retryable?: boolean; hint?: "response_format_unsupported" } = {},
+  ) {
     super(message);
     this.name = "UpstreamError";
     this.code = code;
     this.provider = provider;
     this.status = opts.status;
     this.retryable = opts.retryable ?? false;
+    this.hint = opts.hint;
   }
 }
 

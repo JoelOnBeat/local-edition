@@ -62,3 +62,17 @@ export function parseStoreCsv(text: string): StoreInput[] {
   }
   return stores;
 }
+
+const nameKey = (s: Pick<StoreInput, "name" | "addressLabel">) =>
+  `${s.name}|${s.addressLabel}`.toLowerCase().replace(/\s+/g, " ").trim();
+
+/** Drops rows whose name and address match a store the chain already has, or an earlier row. */
+export function dedupeStores(rows: StoreInput[], existing: Pick<StoreInput, "name" | "addressLabel">[]): StoreInput[] {
+  const seen = new Set(existing.map(nameKey));
+  return rows.filter((row) => {
+    const key = nameKey(row);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}

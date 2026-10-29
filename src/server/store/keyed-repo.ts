@@ -1,5 +1,7 @@
 import type { Chain, Edition, EditionItem, EditionStatus, Evidence, JobRun, MenuItem, StaffCard, Store, Workspace } from "@/contract";
-import { newId } from "@/lib/ids";
+import { newId, newToken } from "@/lib/ids";
+import { isVisitorId, VISITOR_TTL_SECONDS } from "./ids";
+import { purgeStoreCaches } from "./purge";
 import {
   NotFoundError,
   VersionConflictError,
@@ -12,9 +14,13 @@ import {
  * One Repo implementation over a tiny JSON key-value interface. Memory, file and Cloudflare KV are
  * three backings of the same logic, so all drivers behave identically (and share one contract test).
  *
- * Key layout: ws:<id> · idx:ws · chain:<id> · store:<id> · stores:<chainId> · menu:<chainId> ·
+ * Key layout: ws:<id> · chain:<id> · store:<id> · stores:<chainId> · menu:<chainId> ·
  * ed:<id> · edix:<storeId> ({weekOf: editionId}) · card:<editionId> · cardtok:<token> · ev:<id> ·
- * job:<id> · job:latest · cache:<key>.
+ * job:<id> · job:latest · cache:<key> · lock:<name>.
+ *
+ * Rows that belong to a visitor workspace (ids `ws_…` or `…~suffix`) get a TTL, so abandoned visitors
+ * clean themselves up; the demo workspace never expires. There is no workspace index key (a single hot
+ * key cannot take bursts of new visitors on KV): `listWorkspaces` scans `ws:`.
  */
 
 export interface KvLike {
@@ -57,18 +63,24 @@ export class KeyedRepo implements Repo {
     return ((await this.kv.get(key)) as T | null) ?? null;
   }
 
-  private async addToIndex(key: string, ...ids: string[]): Promise<void> {
+  /** Writes a row; rows owned by a visitor workspace expire (`owner` is the id the row hangs off). */
+  private put(key: string, value: unknown, owner?: string): Promise<void> {
+    const ttlSeconds = owner !== undefined && isVisitorId(owner) ? VISITOR_TTL_SECONDS : undefined;
+    return this.kv.put(key, value, ttlSeconds === undefined ? undefined : { ttlSeconds });
+  }
+
+  private async addToIndex(key: string, owner: string, ...ids: string[]): Promise<void> {
     await this.locked(key, async () => {
       const list = (await this.read<string[]>(key)) ?? [];
       const next = [...list, ...ids.filter((i) => !list.includes(i))];
-      if (next.length !== list.length) await this.kv.put(key, next);
+      if (next.length !== list.length) await this.put(key, next, owner);
     });
   }
 
-  private async removeFromIndex(key: string, id: string): Promise<void> {
+  private async removeFromIndex(key: string, owner: string, id: string): Promise<void> {
     await this.locked(key, async () => {
       const list = (await this.read<string[]>(key)) ?? [];
-      if (list.includes(id)) await this.kv.put(key, list.filter((i) => i !== id));
+      if (list.includes(id)) await this.put(key, list.filter((i) => i !== id), owner);
     });
   }
 
@@ -76,24 +88,24 @@ export class KeyedRepo implements Repo {
   async createWorkspace(seed: SeedWithId): Promise<Workspace> {
     const id = seed.workspaceId ?? newId("ws");
     if (await this.kv.get(`ws:${id}`)) throw new WorkspaceExistsError(id);
-    await this.kv.put(`chain:${seed.chain.id}`, seed.chain);
+    await this.put(`chain:${seed.chain.id}`, seed.chain, seed.chain.id);
     await this.putStores(seed.stores);
-    await this.kv.put(`menu:${seed.chain.id}`, seed.menu);
+    await this.put(`menu:${seed.chain.id}`, seed.menu, seed.chain.id);
     const workspace: Workspace = { id, chainId: seed.chain.id, createdAt: new Date().toISOString() };
-    await this.kv.put(`ws:${id}`, workspace); // last: a half-created workspace is unreachable
-    await this.addToIndex("idx:ws", id);
+    // Last, so a half-created workspace is unreachable; it also expires first, an hour before its rows.
+    await this.kv.put(`ws:${id}`, workspace, isVisitorId(id) ? { ttlSeconds: VISITOR_TTL_SECONDS - 3600 } : undefined);
     return workspace;
   }
   getWorkspace(id: string) { return this.read<Workspace>(`ws:${id}`); }
   async listWorkspaces(): Promise<Workspace[]> {
-    const ids = (await this.read<string[]>("idx:ws")) ?? [];
-    const rows = await Promise.all(ids.map((i) => this.getWorkspace(i)));
+    const keys = await this.kv.list("ws:");
+    const rows = await Promise.all(keys.map((k) => this.getWorkspace(k.slice(3))));
     return rows.filter((w): w is Workspace => w !== null);
   }
 
   // ---- Chains
   getChain(id: string) { return this.read<Chain>(`chain:${id}`); }
-  async putChain(chain: Chain): Promise<Chain> { await this.kv.put(`chain:${chain.id}`, chain); return chain; }
+  async putChain(chain: Chain): Promise<Chain> { await this.put(`chain:${chain.id}`, chain, chain.id); return chain; }
 
   // ---- Stores
   async listStores(chainId: string): Promise<Store[]> {
@@ -104,10 +116,10 @@ export class KeyedRepo implements Repo {
   getStore(id: string) { return this.read<Store>(`store:${id}`); }
   async putStore(store: Store): Promise<Store> { await this.putStores([store]); return store; }
   async putStores(stores: Store[]): Promise<Store[]> {
-    for (const s of stores) await this.kv.put(`store:${s.id}`, s);
+    for (const s of stores) await this.put(`store:${s.id}`, s, s.id);
     const byChain = new Map<string, string[]>();
     for (const s of stores) byChain.set(s.chainId, [...(byChain.get(s.chainId) ?? []), s.id]);
-    for (const [chainId, ids] of byChain) await this.addToIndex(`stores:${chainId}`, ...ids);
+    for (const [chainId, ids] of byChain) await this.addToIndex(`stores:${chainId}`, chainId, ...ids);
     return stores;
   }
   async deleteStore(id: string): Promise<boolean> {
@@ -116,8 +128,8 @@ export class KeyedRepo implements Repo {
     const index = (await this.read<Record<string, string>>(`edix:${id}`)) ?? {};
     for (const editionId of new Set(Object.values(index))) await this.dropEdition(editionId);
     await this.kv.delete(`edix:${id}`);
-    for (const key of await this.kv.list("cache:")) if (key.includes(id)) await this.kv.delete(key);
-    await this.removeFromIndex(`stores:${store.chainId}`, id);
+    await purgeStoreCaches(this.kv, id);
+    await this.removeFromIndex(`stores:${store.chainId}`, store.chainId, id);
     await this.kv.delete(`store:${id}`);
     return true;
   }
@@ -130,15 +142,15 @@ export class KeyedRepo implements Repo {
 
   // ---- Menu
   async listMenu(chainId: string): Promise<MenuItem[]> { return (await this.read<MenuItem[]>(`menu:${chainId}`)) ?? []; }
-  async replaceMenu(chainId: string, items: MenuItem[]): Promise<MenuItem[]> { await this.kv.put(`menu:${chainId}`, items); return items; }
+  async replaceMenu(chainId: string, items: MenuItem[]): Promise<MenuItem[]> { await this.put(`menu:${chainId}`, items, chainId); return items; }
 
   // ---- Editions
   putEdition(edition: Edition): Promise<Edition> {
     return this.locked(`ed:${edition.id}`, async () => {
-      await this.kv.put(`ed:${edition.id}`, edition);
+      await this.put(`ed:${edition.id}`, edition, edition.id);
       await this.locked(`edix:${edition.storeId}`, async () => {
         const index = (await this.read<Record<string, string>>(`edix:${edition.storeId}`)) ?? {};
-        await this.kv.put(`edix:${edition.storeId}`, { ...index, [edition.weekOf]: edition.id });
+        await this.put(`edix:${edition.storeId}`, { ...index, [edition.weekOf]: edition.id }, edition.storeId);
       });
       return edition;
     });
@@ -152,8 +164,12 @@ export class KeyedRepo implements Repo {
     const found = await Promise.all(
       query.storeIds.map(async (storeId) => {
         const index = (await this.read<Record<string, string>>(`edix:${storeId}`)) ?? {};
-        const weekOf = query.weekOf ?? Object.keys(index).sort().at(-1);
-        return weekOf && index[weekOf] ? this.getEdition(index[weekOf]) : null;
+        const weeks = query.weekOf ? [query.weekOf] : Object.keys(index).sort().reverse();
+        for (const weekOf of query.finishedOnly ? weeks : weeks.slice(0, 1)) {
+          const edition = index[weekOf] ? await this.getEdition(index[weekOf]) : null;
+          if (edition && !(query.finishedOnly && edition.status === "drafting")) return edition;
+        }
+        return null;
       }),
     );
     return found.filter((e): e is Edition => e !== null);
@@ -169,7 +185,7 @@ export class KeyedRepo implements Repo {
       const stored = { ...item, version: expectedVersion + 1 } as EditionItem;
       const items = edition.items.slice();
       items[at] = stored;
-      await this.kv.put(`ed:${editionId}`, { ...edition, items });
+      await this.put(`ed:${editionId}`, { ...edition, items }, editionId);
       return stored;
     });
   }
@@ -178,13 +194,24 @@ export class KeyedRepo implements Repo {
       const edition = await this.getEdition(editionId);
       if (!edition) throw new NotFoundError("Edition", editionId);
       const next = { ...edition, status };
-      await this.kv.put(`ed:${editionId}`, next);
+      await this.put(`ed:${editionId}`, next, editionId);
+      return next;
+    });
+  }
+  updateEdition(editionId: string, mutate: (current: Edition) => Edition): Promise<Edition> {
+    return this.locked(`ed:${editionId}`, async () => {
+      const current = await this.getEdition(editionId);
+      if (!current) throw new NotFoundError("Edition", editionId);
+      const next: Edition = { ...mutate(structuredClone(current)), id: current.id, storeId: current.storeId, weekOf: current.weekOf };
+      await this.put(`ed:${editionId}`, next, editionId);
       return next;
     });
   }
 
   // ---- Evidence
-  async putEvidence(items: Evidence[]): Promise<void> { for (const e of items) await this.kv.put(`ev:${e.id}`, e); }
+  async putEvidence(items: Evidence[]): Promise<void> {
+    for (const e of items) await this.kv.put(`ev:${e.id}`, e, { ttlSeconds: VISITOR_TTL_SECONDS });
+  }
   async getEvidence(ids: string[]): Promise<Evidence[]> {
     const rows = await Promise.all(ids.map((i) => this.read<Evidence>(`ev:${i}`)));
     return rows.filter((e): e is Evidence => e !== null);
@@ -194,9 +221,18 @@ export class KeyedRepo implements Repo {
   async putStaffCard(card: StaffCard): Promise<StaffCard> {
     const previous = await this.getStaffCardByEdition(card.editionId);
     if (previous && previous.token !== card.token) await this.kv.delete(`cardtok:${previous.token}`);
-    await this.kv.put(`card:${card.editionId}`, card);
-    await this.kv.put(`cardtok:${card.token}`, card.editionId);
+    await this.put(`card:${card.editionId}`, card, card.editionId);
+    await this.put(`cardtok:${card.token}`, card.editionId, card.editionId);
     return card;
+  }
+  putStaffCardIfAbsent(card: StaffCard): Promise<StaffCard> {
+    return this.locked(`card:${card.editionId}`, async () => {
+      const existing = await this.getStaffCardByEdition(card.editionId);
+      if (existing) return existing;
+      await this.put(`card:${card.editionId}`, card, card.editionId);
+      await this.put(`cardtok:${card.token}`, card.editionId, card.editionId);
+      return card;
+    });
   }
   getStaffCardByEdition(editionId: string) { return this.read<StaffCard>(`card:${editionId}`); }
   async getStaffCardByToken(token: string): Promise<StaffCard | null> {
@@ -216,6 +252,22 @@ export class KeyedRepo implements Repo {
   async latestJobRun(): Promise<JobRun | null> {
     const id = await this.read<string>("job:latest");
     return id ? this.getJobRun(id) : null;
+  }
+
+  // ---- Locks
+  acquireLock(name: string, ttlSeconds: number): Promise<string | null> {
+    return this.locked(`lock:${name}`, async () => {
+      if (await this.read(`lock:${name}`)) return null;
+      const token = newToken();
+      await this.kv.put(`lock:${name}`, { token }, { ttlSeconds });
+      return token;
+    });
+  }
+  releaseLock(name: string, token: string): Promise<void> {
+    return this.locked(`lock:${name}`, async () => {
+      const held = await this.read<{ token: string }>(`lock:${name}`);
+      if (held?.token === token) await this.kv.delete(`lock:${name}`);
+    });
   }
 
   // ---- Cache

@@ -25,7 +25,8 @@ describe("T4 jsonOutput", () => {
     const r = await jsonOutput(Pick, call(tf));
     expect(r).toMatchObject({ data: { title: "Oat flat white", score: 8 }, calls: 1, repaired: false });
     expect(calls[0].body.response_format).toMatchObject({ type: "json_schema", json_schema: { name: "result", schema: { type: "object", properties: { title: { type: "string" } } } } });
-    expect(r.usage).toEqual({ inTokens: 100, outTokens: 50 });
+    expect(r.usage).toEqual({ inTokens: 100, outTokens: 50, reasoningTokens: 0 });
+    expect(calls[0].body).toMatchObject({ reasoning_effort: "none", chat_template_kwargs: { enable_thinking: false } });
   });
 
   it("falls back to schema-in-prompt when the provider rejects response_format, and remembers it", async () => {
@@ -44,6 +45,12 @@ describe("T4 jsonOutput", () => {
     await jsonOutput(Pick, call(tf)); // second run skips the doomed json_schema attempt
     expect(calls).toHaveLength(3);
     expect(calls[2].body.response_format).toBeUndefined();
+  });
+
+  it("a 400 that is not about response_format (a bad image, a long prompt) is rethrown and does NOT switch structured output off", async () => {
+    const { tf, calls } = scriptedTf(() => jsonRes({ error: { message: "image is too large" } }, 400));
+    await expect(jsonOutput(Pick, call(tf))).rejects.toMatchObject({ code: "upstream_4xx" });
+    expect(calls).toHaveLength(1);
   });
 
   it("repairs malformed JSON exactly once, using the repair model", async () => {

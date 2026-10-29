@@ -16,7 +16,7 @@ import type { Repo } from "../store/repo";
  * fakes here and a signature change in another stream touches one adapter.
  */
 
-export const AGENT_MODEL = "nvidia/nemotron-3-super-120b-a12b";
+export const AGENT_MODEL = "nvidia/Nemotron-3.5-Super-VL";
 export const COPY_MODEL = "nvidia/Nemotron-3_5-Lightning";
 export const FALLBACK_AGENT_LABEL = "deterministic-plan";
 

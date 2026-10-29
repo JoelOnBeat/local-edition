@@ -53,6 +53,7 @@ async function writeLines(deps: AgentDeps, sc: StoreContext, items: EditionItem[
 export async function getOrCreateCard(deps: AgentDeps, workspaceId: string, editionId: string): Promise<StaffCard> {
   const { repo } = deps;
   const { edition, store, chain } = await loadEditionAccess(repo, workspaceId, editionId);
+  if (edition.status === "drafting") throw new HttpError(409, "edition_drafting", "This edition is still being built.");
   const existing = await repo.getStaffCardByEdition(editionId);
   if (existing && existing.lines.length) return existing;
 
@@ -80,5 +81,7 @@ export async function getOrCreateCard(deps: AgentDeps, workspaceId: string, edit
     lines: usable.map((c) => c.line),
     guardrail,
   };
-  return repo.putStaffCard(card);
+  // A blanked card keeps its share token. A first card is set-if-absent: of two requests racing to write
+  // it, one wins and the other returns the winner's card, so a token already handed out never dies.
+  return existing ? repo.putStaffCard(card) : repo.putStaffCardIfAbsent(card);
 }

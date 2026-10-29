@@ -12,15 +12,24 @@ summarised here.
 | Menu photos | R2, key `ws/<id>/<uuid>.<ext>` | Read back in the Worker and base64 it into the VL call. |
 | Long builds | Cloudflare Workflow in a second Worker `local-edition-ops` | One retried step per store; progress written to D1; the SSE route replays progress from D1 so a disconnect loses nothing. Next worker calls it through a service binding. |
 | SSE | Send `: open` immediately, heartbeat every 15 s | OpenNext #1468: a stream that errors before its first chunk hangs. `request.signal` abort is unreliable (#691). Headers: text/event-stream, no-cache, no-transform, X-Accel-Buffering: no. Max 6 simultaneous outbound connections waiting for headers per invocation, so stream LLM calls or fan out via Workflow steps. |
-| Guardrails | Cloudflare Container, instance `basic` (1 GiB), `sleepAfter` 30-60 min, reached only via its Durable Object binding (no public URL) | Build the image `--platform linux/amd64` (this Mac is arm64). Pass NEBIUS_API_KEY from Worker secrets at container start (`this.env` / `startOptions.envVars`), not as a class field. Bake any fastembed model into the image (disk resets after sleep). Warm-up ping before demos. Fallback: Fly.io 1 GB, same `/v1/checks` contract; the TS regex rail always runs first. |
-| Weekly job | Workflow `schedules: ["0 0 * * MON"]` (Cloudflare cron weekday `1` is Sunday, so never `* * 1`) -> mint Nebius service-account JWT (RS256 via WebCrypto, PKCS#8 key) -> `POST https://api.nebius.cloud/ai/v1/jobs` (python:3.12-slim, cpu-d3, 2vcpu-8gb, rebuild.py via `injectedFiles`) -> poll `GET /ai/v1/jobs/{id}` -> the job calls `/api/jobs/monday`. | GitHub `workflow_dispatch` -> `nebius ai job run` stays as a coded fallback behind `JOB_TRIGGER=github`. Needs a Nebius AI Cloud project + service account (the owner's account). |
+| Guardrails | NO Cloudflare Container (owner, 29 Oct 22:15: Workers Paid quotas only). Live path (a head-office edit, a build in a Workflow): the TS mirror of the NeMo regex catalogue plus a Lightning self-check that uses NeMo's own `self check output` prompt, called directly from the Worker -> status `passed`/`rewritten`/`blocked`. Batch path: the real NeMo Guardrails library (nemoguardrails 0.24.1) runs inside a **Nebius Serverless Job** (`certify` mode) over every item of the week's editions and posts signed results back; items gain `certifiedBy: 'nemo-guardrails@nebius-job'`. If certification blocks an approved item, it flips to `flagged` and head office sees why. The same job's `eval` mode runs the 40+10 red-team set and publishes catch and false-positive rates. | Python never runs in a Worker; the job is batch only, never on a user's request path. |
+| Weekly job | Cloudflare cron `0 0 * * MON` (weekday 1 is Sunday on Cloudflare) -> Workflow `WeeklyRebuild` builds every store, one retried step per store, progress in D1 -> last step starts the Nebius Serverless Job (`certify` mode, then `eval` weekly) via GitHub `workflow_dispatch` -> `nebius ai job run jobs/certify.py` (python:3.12-slim, cpu-d3 2vcpu-8gb, about $0.01 a run from the $25 AI Cloud balance). The job reads pending items from `/api/jobs/pending` and posts results to `/api/jobs/results` (HMAC). Direct Worker -> Nebius REST job creation is the later upgrade. | Never an always-on Serverless Endpoint, VM or GPU. |
 | Secrets | Worker secrets; local `.env.local` via the secret store | Never `.dev.vars` for Next; `next dev` reads `.env*`. |
 | Local dev | `next dev` for UI; `opennextjs-cloudflare preview` + `wrangler dev` (Docker/colima running) for SSE, Workflow, cron, container | `getPlatformProxy` simulates KV/D1/R2 but not Workflows or workerd limits. |
-| Cost | ~$0-12 for 29 Oct-16 Dec on top of Workers Paid | Assumes the account is on Workers Paid: confirm before deploy. |
+| Cost | $0 beyond the $5 Workers Paid plan (Workers, D1, KV, R2, Durable Objects, Workflows, Queues, cron only, within quotas); Nebius job cents per run from the $25 AI Cloud balance | Durable Object holds the shared spend meter and the per-workspace build lock. |
 
 Open risks to test first: (1) guardrails image fits 1 GiB and answers `/v1/checks`, cold start
 time; (2) Nebius JWT mint + job create from workerd; (3) SSE > 2 minutes with heartbeats on
 Workers; (4) bundle size via `wrangler deploy --dry-run`.
+
+Shared limits (checked live 29 Oct 21:55): Token Factory 1,000 requests/min and 2M
+tokens/min, shared. Tavily: ONE free key, 1,000 credits/month, shared for development and for judges until 15 Dec. Local Edition's Tavily budget: at most
+~80 credits through 15 Dec. Rules: every Tavily result is cached server-side (KV, key = hash of the
+normalised query + time_range; 7-day TTL); Tavily is called only by a build (the Monday job, a
+head-office "build", or setup), never on page load and never by regenerate (it reuses the week's
+cached events); one search per store per week plus one batched extract of at most 1 URL per store;
+brand-voice crawl at most once per chain; a per-workspace cap of 10 Tavily credits per day with a
+clear "using this week's saved events" fallback; tests use recordings only.
 
 Spend: one 8-store run is about $0.09 on Token Factory (pessimistic $0.20). The $1 first-sign-up
 trial covers development; the two $25 promo credits may take days to arrive. Serve judges

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { HttpError } from "@/server/http/errors";
 
 /** Server env, parsed once from process.env. Every key is optional; secrets never leave the server. */
 
@@ -13,15 +14,28 @@ export const ServerEnv = z.object({
   TF_MODE: providerMode,
   TAVILY_MODE: providerMode,
   SPEND_CAP_USD: z.coerce.number().nonnegative().default(5),
+  /** HMAC key for /api/jobs/monday. At least MIN_JOB_SECRET_LENGTH characters or the route refuses (503). */
   LE_JOB_SECRET: optionalString,
   GUARDRAILS_URL: z.string().url().default("http://127.0.0.1:8000"),
-  STORE_DRIVER: z.enum(["memory", "file", "kv"]).default("file"),
+  /** Shared secret for the guardrails sidecar (header x-le-guard-token). */
+  GUARDRAILS_TOKEN: optionalString,
+  STORE_DRIVER: z.enum(["memory", "file", "kv", "d1"]).default("file"),
   APP_URL: optionalString,
 });
 export type ServerEnv = z.infer<typeof ServerEnv>;
 
+/** Shortest accepted LE_JOB_SECRET. Enforced by the jobs route (a short secret refuses with 503, it does not crash other routes). */
+export const MIN_JOB_SECRET_LENGTH = 32;
+
+/** In production only durable shared stores are allowed: `memory` and `file` would silently lose or split state. */
+const PRODUCTION_DRIVERS: ReadonlyArray<ServerEnv["STORE_DRIVER"]> = ["kv", "d1"];
+
 export function parseServerEnv(source: Record<string, string | undefined>): ServerEnv {
-  return ServerEnv.parse(source);
+  const env = ServerEnv.parse(source);
+  if ((source.NODE_ENV ?? process.env.NODE_ENV) === "production" && !PRODUCTION_DRIVERS.includes(env.STORE_DRIVER)) {
+    throw new HttpError(503, "config_error", "The server is misconfigured: STORE_DRIVER must be kv or d1 in production.");
+  }
+  return env;
 }
 
 let cached: ServerEnv | undefined;

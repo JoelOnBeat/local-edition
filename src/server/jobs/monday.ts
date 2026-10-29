@@ -92,10 +92,14 @@ export async function executeJob(run: JobRun, ctx: { repo: Repo; ports: JobPorts
   } catch (e) {
     errors.push(failureCode(e));
   }
-  const ok = finished && editionIds.length > 0;
+  // A store kept because head office already approved or edited it is a normal outcome, not a failure.
+  const kept = errors.filter((c) => c === "has_approvals").length;
+  const problems = errors.filter((c) => c !== "has_approvals");
+  const codes = [...new Set(problems)].join(", ");
+  const ok = finished && (editionIds.length > 0 || kept > 0);
   const note = ok
-    ? `Built ${editionIds.length} of ${run.storeIds.length} editions${errors.length ? `; ${errors.length} error(s): ${[...new Set(errors)].join(", ")}` : ""}. Drafts await approval.`
-    : `Build failed${errors.length ? ` (${[...new Set(errors)].join(", ")})` : ""}.`;
+    ? `Built ${editionIds.length} of ${run.storeIds.length} editions${kept ? `, kept ${kept} with approvals` : ""}${problems.length ? `; ${problems.length} error(s): ${codes}` : ""}. Drafts await approval.`
+    : `Build failed${problems.length ? ` (${codes})` : ""}.`;
   const done: JobRun = { ...run, status: ok ? "done" : "failed", finishedAt: ctx.now().toISOString(), note };
   await repo.putJobRun(done);
   return done;

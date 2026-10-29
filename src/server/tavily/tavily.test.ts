@@ -3,7 +3,7 @@ import { UpstreamError, upstreamHttpStatus } from "../http/errors";
 import { MemoryRecorder } from "../http/recorder";
 import { SAMPLE_STORES } from "../sample/chain";
 import { eventsThisWeek, toEvents, type TavilyOptions } from "./search";
-import { buildTavilyBody, TAVILY_SEARCH_URL } from "./request";
+import { buildTavilyBody, TAVILY_SEARCH_URL, weekPhrase } from "./request";
 import { tavilyModeFor } from "./mode";
 import { TAVILY_FIXTURE_STORE_IDS, tavilyFixture } from "./fixtures";
 import { TavilyResponse } from "./schema";
@@ -33,15 +33,32 @@ const oneResult = {
 };
 
 describe("T2 request body", () => {
-  it("builds the fixed search body from the store corner and neighbourhood", () => {
-    expect(buildTavilyBody(williamsburg)).toEqual({
-      query: "events this week near Bedford Ave & N 7th St, Williamsburg, New York",
+  it("builds the fixed search body from the neighbourhood, city and the week's dates", () => {
+    expect(buildTavilyBody(williamsburg, "New York", clock())).toEqual({
+      query: "Williamsburg New York events things to do this week October 26 to November 1 2026",
       topic: "general",
       time_range: "week",
       max_results: 6,
       search_depth: "basic",
     });
     expect(TAVILY_SEARCH_URL).toBe("https://api.tavily.com/search");
+  });
+
+  it("names the chain's city in the query and leaves the town out when there is none", () => {
+    expect(buildTavilyBody(williamsburg, "London").query).toBe("Williamsburg London events things to do this week");
+    expect(buildTavilyBody(williamsburg).query).toBe("Williamsburg events things to do this week");
+  });
+
+  it("falls back to the corner when the store has no name, and keeps the corner out otherwise", () => {
+    expect(buildTavilyBody({ name: "", addressLabel: "Main St & 1st Ave" }).query).toBe("Main St & 1st Ave events things to do this week");
+    expect(buildTavilyBody(williamsburg, "New York").query).not.toContain("Bedford");
+  });
+
+  it("dates the week Monday to Sunday, the same on every day of it and across a year end", () => {
+    for (const day of ["2026-10-26T00:00:00Z", "2026-10-29T04:00:00Z", "2026-11-01T23:59:00Z"]) {
+      expect(weekPhrase(new Date(day))).toBe("October 26 to November 1 2026");
+    }
+    expect(weekPhrase(new Date("2026-12-30T10:00:00Z"))).toBe("December 28 to January 3 2027");
   });
 
   it("posts the body with the key only in the Authorization header", async () => {
@@ -51,7 +68,7 @@ describe("T2 request body", () => {
     expect(url).toBe(TAVILY_SEARCH_URL);
     expect(init.method).toBe("POST");
     expect((init.headers as Record<string, string>).authorization).toBe(`Bearer ${KEY}`);
-    expect(JSON.parse(String(init.body))).toEqual(buildTavilyBody(williamsburg));
+    expect(JSON.parse(String(init.body))).toEqual(buildTavilyBody(williamsburg, undefined, clock()));
     expect(String(init.body)).not.toContain(KEY);
   });
 });
@@ -110,7 +127,7 @@ describe("T2 response parsing", () => {
     });
     expect(evidence.id).toMatch(/^ev_tv_/);
     expect(evidence.params).toEqual({
-      query: buildTavilyBody(williamsburg).query,
+      query: buildTavilyBody(williamsburg, undefined, clock()).query,
       topic: "general",
       time_range: "week",
       max_results: "6",
@@ -183,8 +200,8 @@ describe("T3 fixtures", () => {
   it("has a valid fixture for every sample store, answering that store's own query", () => {
     expect(TAVILY_FIXTURE_STORE_IDS.sort()).toEqual(SAMPLE_STORES.map((s) => s.id).sort());
     for (const store of SAMPLE_STORES) {
-      const fixture = tavilyFixture(store.id, buildTavilyBody(store).query);
-      expect(TavilyResponse.parse(fixture).query).toBe(buildTavilyBody(store).query);
+      const fixture = tavilyFixture(store.id, buildTavilyBody(store, "New York").query);
+      expect(TavilyResponse.parse(fixture).query).toBe(buildTavilyBody(store, "New York").query);
       expect(fixture.results.length).toBeGreaterThanOrEqual(3);
     }
   });

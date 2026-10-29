@@ -17,17 +17,27 @@ async function key(secret: string, usage: "sign" | "verify"): Promise<CryptoKey>
   return crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, [usage]);
 }
 
+/** A string is signed as its UTF-8 bytes; bytes are signed as they are (what a server receives). */
+export type SignedBody = string | Uint8Array;
+const bytesOf = (body: SignedBody): BufferSource => (typeof body === "string" ? encoder.encode(body) : (body as Uint8Array<ArrayBuffer>));
+
 /** Hex signature of `body`, as the job script sends it in `x-le-signature`. */
-export async function signBody(secret: string, body: string): Promise<string> {
-  return hex(await crypto.subtle.sign("HMAC", await key(secret, "sign"), encoder.encode(body)));
+export async function signBody(secret: string, body: SignedBody): Promise<string> {
+  return hex(await crypto.subtle.sign("HMAC", await key(secret, "sign"), bytesOf(body)));
+}
+
+/** Hex sha256 of the (normalised) signature: the replay-cache key. The signature itself is never stored. */
+export async function signatureDigest(signature: string): Promise<string> {
+  const normal = signature.trim().replace(/^sha256=/i, "").toLowerCase();
+  return hex(await crypto.subtle.digest("SHA-256", encoder.encode(normal)));
 }
 
 /**
  * Constant-time check (`subtle.verify` compares MACs in constant time). Accepts hex, optionally
  * prefixed `sha256=`. Malformed input is simply false.
  */
-export async function verifySignature(secret: string, body: string, signature: string): Promise<boolean> {
+export async function verifySignature(secret: string, body: SignedBody, signature: string): Promise<boolean> {
   const sig = fromHex(signature.trim().replace(/^sha256=/i, ""));
   if (!sig || sig.length !== 32) return false;
-  return crypto.subtle.verify("HMAC", await key(secret, "verify"), sig, encoder.encode(body));
+  return crypto.subtle.verify("HMAC", await key(secret, "verify"), sig, bytesOf(body));
 }

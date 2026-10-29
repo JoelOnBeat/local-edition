@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { GuardrailResult } from "@/contract";
 import { serverEnv } from "@/lib/env";
+import { HttpError } from "../http/errors";
 import { createLogger } from "../log";
 import { findHits, reasonsFor } from "./catalogue";
 
@@ -29,7 +30,8 @@ export interface CheckCopyOptions {
 }
 
 export const LOCAL_RAIL = "local:claims";
-const MAX_TEXT = 8000;
+/** Longest copy the checker accepts. Longer text is refused with 413, never waved through as "unchecked". */
+export const MAX_TEXT = 8000;
 const BREAKER_MS = 10_000;
 
 /** What POST /v1/checks answers (NeMo Guardrails 0.24.1). */
@@ -73,14 +75,17 @@ export function resetGuardrailsBreaker(): void {
 
 function resolveConfig(o: CheckCopyOptions): { url: string; token: string | undefined } {
   let url = o.url;
-  if (!url) {
+  let token = o.token;
+  if (!url || token === undefined) {
     try {
-      url = serverEnv().GUARDRAILS_URL;
+      const env = serverEnv();
+      url ||= env.GUARDRAILS_URL;
+      token ??= env.GUARDRAILS_TOKEN;
     } catch {
-      url = "http://127.0.0.1:8000";
+      url ||= "http://127.0.0.1:8000";
+      token ??= typeof process !== "undefined" ? process.env?.GUARDRAILS_TOKEN : undefined;
     }
   }
-  const token = o.token ?? (typeof process !== "undefined" ? process.env?.GUARDRAILS_TOKEN : undefined);
   return { url: url.replace(/\/+$/, ""), token: token || undefined };
 }
 
@@ -100,6 +105,7 @@ async function callSidecar(
       method: "POST",
       headers,
       signal: ac.signal,
+      redirect: "error",
       body: JSON.stringify({
         model: "nvidia/Nemotron-3_5-Lightning",
         // NeMo 0.24.1 needs a user turn before the assistant turn once a context message is present.
@@ -141,7 +147,8 @@ const unique = (xs: string[]) => [...new Set(xs)];
  * Check generated copy. Never throws. Order: the local regex catalogue first (a hit is a block even if the
  * server is down or disagrees), then the NeMo Guardrails sidecar (regex rail again plus the brand-voice
  * self-check). Server down or timed out -> 'unchecked' (never auto-approvable), or 'blocked' with
- * rail 'local:claims' when the local catalogue already hit.
+ * rail 'local:claims' when the local catalogue already hit. Never throws, except HttpError 413
+ * `copy_too_long` for text over MAX_TEXT: length is a schema rule, not a reason to skip the rails.
  */
 export async function checkCopyDetailed(input: CheckCopyInput, options: CheckCopyOptions = {}): Promise<CheckedCopy> {
   const parsed = CheckCopyInput.safeParse(input);
@@ -150,7 +157,9 @@ export async function checkCopyDetailed(input: CheckCopyInput, options: CheckCop
   if (!parsed.success) return unchecked("The copy could not be checked: invalid input.");
   const value = parsed.data;
   if (!value.text.trim()) return unchecked("There is no copy to check.");
-  if (value.text.length > MAX_TEXT) return unchecked("The copy is too long to check.");
+  if (value.text.length > MAX_TEXT) {
+    throw new HttpError(413, "copy_too_long", `Copy can be at most ${MAX_TEXT} characters.`);
+  }
 
   const now = options.now ?? Date.now;
   const local = findHits(value.text);
@@ -220,7 +229,7 @@ export async function probeGuardrails(options: CheckCopyOptions = {}): Promise<"
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), options.timeoutMs ?? 2000);
   try {
-    const res = await (options.fetchImpl ?? fetch)(`${url}/v1/health`, { signal: ac.signal });
+    const res = await (options.fetchImpl ?? fetch)(`${url}/v1/health`, { signal: ac.signal, redirect: "error" });
     return res.ok ? "up" : "down";
   } catch {
     return "down";

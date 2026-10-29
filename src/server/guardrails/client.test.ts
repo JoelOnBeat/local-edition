@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GuardrailResult } from "@/contract";
-import { checkCopy, checkCopyDetailed, LOCAL_RAIL, parseRailsHeader, probeGuardrails, resetGuardrailsBreaker } from "./client";
+import { checkCopy, checkCopyDetailed, LOCAL_RAIL, MAX_TEXT, parseRailsHeader, probeGuardrails, resetGuardrailsBreaker } from "./client";
 
 const voice = ["warm", "short sentences"];
 const base = { url: "http://guard.test", token: "s3cret" };
@@ -157,14 +157,47 @@ describe("checkCopy: server down, never throws", () => {
 });
 
 describe("checkCopy: input boundaries", () => {
-  it("empty text, bad kind, too many voice lines and over-long text are unchecked, not thrown", async () => {
+  it("empty text, bad kind and too many voice lines are unchecked, not thrown", async () => {
     const fetchImpl = reply({ status: "passed", content: "x" });
     expect((await checkCopy({ text: "  ", kind: "special", brandVoice: voice }, { ...base, fetchImpl })).status).toBe("unchecked");
     expect((await checkCopy({ text: "ok", kind: "nope" as never, brandVoice: voice }, { ...base, fetchImpl })).status).toBe("unchecked");
     expect((await checkCopy({ text: "ok", kind: "card", brandVoice: ["a", "b", "c", "d"] }, { ...base, fetchImpl })).status).toBe("unchecked");
-    expect((await checkCopy({ text: "a".repeat(9000), kind: "card", brandVoice: voice }, { ...base, fetchImpl })).status).toBe("unchecked");
     expect((await checkCopy(null as never, { ...base, fetchImpl })).status).toBe("unchecked");
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+});
+
+describe("M7 length is a schema rule", () => {
+  it("copy over the cap is refused with 413, never reported 'unchecked', and never reaches the server", async () => {
+    const fetchImpl = reply({ status: "passed", content: "x" });
+    const over = await checkCopy({ text: "a".repeat(MAX_TEXT + 1), kind: "card", brandVoice: voice }, { ...base, fetchImpl }).catch((e: unknown) => e);
+    expect(over).toMatchObject({ status: 413, code: "copy_too_long" });
+    expect(fetchImpl).not.toHaveBeenCalled();
+    const edge = await checkCopy({ text: "a".repeat(MAX_TEXT), kind: "card", brandVoice: voice }, { ...base, fetchImpl: reply({ status: "passed", content: "x" }) });
+    expect(edge.status).toBe("passed");
+  });
+
+  it("an over-long text with a health claim is refused too (a padded claim cannot slip to 'unchecked')", async () => {
+    const padded = `${"Great coffee. ".repeat(700)}Boosts your immunity.`;
+    await expect(checkCopy({ text: padded, kind: "special", brandVoice: voice }, { ...base, fetchImpl: reply({ status: "passed", content: "x" }) })).rejects.toMatchObject({ status: 413 });
+  });
+});
+
+describe("H2 the client sends the shared secret and never follows redirects", () => {
+  it("reads GUARDRAILS_TOKEN from the server env when no token option is passed", async () => {
+    const { resetEnvCache } = await import("@/lib/env");
+    process.env.GUARDRAILS_TOKEN = "env-token-123";
+    resetEnvCache();
+    try {
+      const fetchImpl = reply({ status: "passed", content: "x" });
+      await checkCopy({ text: "Flat white.", kind: "special", brandVoice: voice }, { url: "http://guard.test", fetchImpl });
+      const init = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0][1] as RequestInit;
+      expect((init.headers as Record<string, string>)["x-le-guard-token"]).toBe("env-token-123");
+      expect(init.redirect).toBe("error");
+    } finally {
+      delete process.env.GUARDRAILS_TOKEN;
+      resetEnvCache();
+    }
   });
 });
 

@@ -10,7 +10,7 @@ const specs: Record<string, StoreEditionSpec> = { ...editionSpecsA, ...editionSp
 const passed: GuardrailResult = { status: "passed", reasons: [] };
 
 export const MOCK_MODELS = {
-  agentModel: "nvidia/nemotron-3-super-120b-a12b",
+  agentModel: "nvidia/Nemotron-3.5-Super-VL",
   copyModel: "nvidia/Nemotron-3_5-Lightning",
 };
 

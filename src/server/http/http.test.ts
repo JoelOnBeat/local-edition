@@ -3,7 +3,7 @@ import { z } from "zod";
 import { UpstreamError } from "./errors";
 import { fetchJson } from "./fetch-json";
 import { MemoryRecorder, canonicalUrl, recordKey } from "./recorder";
-import { InMemorySpendMeter } from "./spend";
+import { PricedSpendMeter } from "./spend";
 
 const noSleep = async () => {};
 const ok = (body: unknown, init: ResponseInit = {}) => new Response(JSON.stringify(body), { status: 200, ...init });
@@ -11,11 +11,11 @@ const base = { provider: "qloo", sleep: noSleep, random: () => 0.5 };
 
 describe("T2 recorder keys", () => {
   it("ignores secret params, param order and hash, but not real params or body", async () => {
-    const a = await recordKey({ method: "GET", url: "https://x.test/v2?b=2&a=1&api_key=SECRET" });
-    const b = await recordKey({ method: "get", url: "https://x.test/v2?a=1&b=2&apiKey=OTHER#frag" });
-    const c = await recordKey({ method: "GET", url: "https://x.test/v2?a=1&b=3" });
-    const d = await recordKey({ method: "POST", url: "https://x.test/v2?a=1&b=2", body: { z: 1, a: 2 } });
-    const e = await recordKey({ method: "POST", url: "https://x.test/v2?a=1&b=2", body: { a: 2, z: 1 } });
+    const a = await recordKey({ method: "GET", url: "https://x.test/v2?take=2&query=1&api_key=SECRET" });
+    const b = await recordKey({ method: "get", url: "https://x.test/v2?query=1&take=2&apiKey=OTHER#frag" });
+    const c = await recordKey({ method: "GET", url: "https://x.test/v2?query=1&take=3" });
+    const d = await recordKey({ method: "POST", url: "https://x.test/v2?query=1&take=2", body: { z: 1, a: 2 } });
+    const e = await recordKey({ method: "POST", url: "https://x.test/v2?query=1&take=2", body: { a: 2, z: 1 } });
     expect(a).toBe(b);
     expect(a).not.toBe(c);
     expect(d).toBe(e);
@@ -100,15 +100,15 @@ describe("T4 fetchJson failure paths", () => {
   });
 
   it("enforces the spend cap before a live call and meters usage after", async () => {
-    const meter = new InMemorySpendMeter(0.001, { m: { inPerMTok: 1000, outPerMTok: 1000 } });
+    const meter = new PricedSpendMeter(1.51, { m: { inPerMTok: 1000, outPerMTok: 1000 } });
     const fetchImpl = vi.fn(async () => ok({ usage: { i: 1000, o: 500 } }));
     const call = () => fetchJson({
-      ...base, provider: "tokenfactory", url: "https://x.test/chat", method: "POST", body: { p: Math.random() },
+      ...base, provider: "tokenfactory", url: "https://x.test/chat", method: "POST", body: { model: "m", max_tokens: 10, messages: [{ role: "user", content: "hi" }], p: Math.random() },
       recorder: new MemoryRecorder(), meter, fetchImpl: fetchImpl as never,
       usage: (d: { usage: { i: number; o: number } }) => ({ model: "m", inTokens: d.usage.i, outTokens: d.usage.o }),
     });
     await call();
-    expect(meter.totals().usd).toBeCloseTo(1.5, 5);
+    expect((await meter.totals()).usd).toBeCloseTo(1.5, 5);
     await expect(call()).rejects.toMatchObject({ code: "spend_cap" });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });

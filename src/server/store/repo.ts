@@ -48,6 +48,8 @@ export interface EditionQuery {
   storeIds: string[];
   /** ISO Monday; omit for the newest edition per store. */
   weekOf?: string;
+  /** Skip `drafting` editions: the newest finished one per store (what a new workspace is seeded from). */
+  finishedOnly?: boolean;
 }
 
 export interface Repo {
@@ -55,6 +57,7 @@ export interface Repo {
   /** Atomically create a workspace plus its seeded chain, stores and menu. */
   createWorkspace(seed: WorkspaceSeed): Promise<Workspace>;
   getWorkspace(id: string): Promise<Workspace | null>;
+  /** Scans the `ws:` keys (no hot index key); meant for tests and tooling, not a request path. */
   listWorkspaces(): Promise<Workspace[]>;
 
   // Chains
@@ -86,6 +89,12 @@ export interface Repo {
    */
   updateEditionItem(editionId: string, item: EditionItem, expectedVersion: number): Promise<EditionItem>;
   setEditionStatus(editionId: string, status: EditionStatus): Promise<Edition>;
+  /**
+   * Version-checked read-modify-write of a whole edition: `mutate` sees the stored row inside the
+   * edition's lock (so it can never overwrite a newer write) and may throw to abort. `id`, `storeId`
+   * and `weekOf` always keep their stored values. Throws NotFoundError.
+   */
+  updateEdition(editionId: string, mutate: (current: Edition) => Edition): Promise<Edition>;
 
   // Evidence (profile and compare evidence; edition evidence also lives inside the Edition)
   putEvidence(items: Evidence[]): Promise<void>;
@@ -95,11 +104,18 @@ export interface Repo {
   putStaffCard(card: StaffCard): Promise<StaffCard>;
   getStaffCardByEdition(editionId: string): Promise<StaffCard | null>;
   getStaffCardByToken(token: string): Promise<StaffCard | null>;
+  /** Set-if-absent: stores `card` only when the edition has none, and returns whichever card is stored. */
+  putStaffCardIfAbsent(card: StaffCard): Promise<StaffCard>;
 
   // Job runs
   putJobRun(run: JobRun): Promise<JobRun>;
   getJobRun(id: string): Promise<JobRun | null>;
   latestJobRun(): Promise<JobRun | null>;
+
+  // Locks (best effort: exact inside one process, eventually consistent on KV)
+  /** Takes the named lock for at most `ttlSeconds`; returns a token, or null when it is held. */
+  acquireLock(name: string, ttlSeconds: number): Promise<string | null>;
+  releaseLock(name: string, token: string): Promise<void>;
 
   // Generic TTL cache (Qloo profiles, anchor searches, Tavily results)
   cacheGet<T>(key: string): Promise<T | null>;

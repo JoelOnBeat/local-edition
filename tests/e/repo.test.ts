@@ -39,7 +39,7 @@ describe.each(drivers)("T1 repo contract: %s driver", (driver) => {
     const edition = cleanEdition();
     await repo.putEdition(edition);
     await repo.putStaffCard(cardFor(edition));
-    await repo.cachePut("profile:store_williamsburg:abc", { x: 1 }, 600);
+    await repo.cachePut("qloo:profile:v1:store_williamsburg:abc", { x: 1 }, 600);
     await repo.cachePut("anchors:coffee", { x: 2 }, 600);
     expect(await repo.deleteStore("store_williamsburg")).toBe(true);
     expect(await repo.getStore("store_williamsburg")).toBeNull();
@@ -47,7 +47,7 @@ describe.each(drivers)("T1 repo contract: %s driver", (driver) => {
     expect(await repo.getEdition(edition.id)).toBeNull();
     expect(await repo.getEditionForWeek("store_williamsburg", edition.weekOf)).toBeNull();
     expect(await repo.getStaffCardByToken("tok_test_card_0001")).toBeNull();
-    expect(await repo.cacheGet("profile:store_williamsburg:abc")).toBeNull();
+    expect(await repo.cacheGet("qloo:profile:v1:store_williamsburg:abc")).toBeNull();
     expect(await repo.cacheGet("anchors:coffee")).toEqual({ x: 2 });
     expect(await repo.deleteStore("store_williamsburg")).toBe(false);
   });

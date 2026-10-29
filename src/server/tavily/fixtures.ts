@@ -33,5 +33,5 @@ export function tavilyFixture(storeId: string, query: string): TavilyResponse {
   const raw = FIXTURES[canonicalId(storeId)];
   // Parsed on every use: a broken fixture fails loudly in tests, not silently in the UI.
   if (raw === undefined) return { query, results: [] };
-  return TavilyResponse.parse(raw);
+  return { ...TavilyResponse.parse(raw), query };
 }

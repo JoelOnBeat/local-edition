@@ -26,7 +26,9 @@ one-page staff card. Rebuilt every Monday.
   affinity: number, lift: number /* store affinity minus city baseline */ }
 - `BlockProfile` { storeId, tags: BlockTag[] (<= 12, by lift desc), evidenceIds: string[], computedAt }
 - `GuardrailResult` { status: 'passed'|'rewritten'|'blocked'|'unchecked', rail?: string,
-  reasons: string[], original?: string }
+  reasons: string[], original?: string, checkedBy: 'live'|'nemo-guardrails@nebius-job',
+  certifiedAt?: ISO string, jobId?: string }  (live = TS mirror + Lightning self-check in the
+  Worker; nemo = the NeMo Guardrails library in the Nebius Serverless Job; see CLOUDFLARE.md)
 - `EditionItem` = common { id, status: 'draft'|'flagged'|'approved'|'edited'|'rejected',
   evidenceIds: string[] (>= 1, else the item is dropped), guardrail: GuardrailResult,
   version: number } plus one of:
@@ -83,6 +85,26 @@ never a raw stack or upstream body.
 | POST /api/jobs/monday | header `x-le-signature` HMAC-SHA256 of body | JobRun | E |
 | GET /api/jobs/latest | — | JobRun | null | E |
 | GET /api/status | — | ProviderStatus | E |
+
+## Decisions after the data-path review (architect, 29 Oct)
+- PATCH /api/editions/:id/items/:itemId REQUIRES header `If-Match: <item.version>`: 428
+  `version_required` when absent, 409 `version_conflict` when stale. The UI always sends it.
+- Approving an item whose guardrail status is `unchecked` is refused (409 `guardrail_unchecked`)
+  unless the body has `override: true`; `flagged`/blocked items can never be approved.
+- POST /api/editions/build accepts `{ storeIds?: string[] (max 50), force?: boolean }`. A store
+  whose current-week edition has approved or edited items is skipped with an `error` event
+  code `has_approvals` unless `force` is true. One build per workspace at a time (409 `build_running`).
+- The public card (GET /api/card/:token) is served only when the edition is `approved` and the
+  card guardrail status is `passed` or `rewritten`; otherwise 404.
+- Spending routes (menu read, anchors search, build, regenerate, card, item edit) require the
+  workspace cookie and are rate limited per workspace and per IP; spend is metered in shared
+  storage with reserve-then-settle.
+- Length limits: ids <= 64 chars; Chain.name <= 80; MenuItem.name <= 80, description <= 240;
+  item patch strings <= 600; arrays get explicit max sizes; bodies over their limit get 413.
+
+- Model roles (deprecation notice, 9 Nov 2026): the agent loop runs on `nvidia/Nemotron-3.5-Super-VL`
+  (Nebius's named replacement for nemotron-3-super-120b-a12b); `nvidia/Nemotron-3-Ultra-550b-a55b` is
+  the reviewer; Lightning writes copy. Live tests and recordings use these ids only.
 
 ## Modes
 - `DATA_MODE=mock`: the UI's typed client returns `src/mocks/` data (generated from the contract,

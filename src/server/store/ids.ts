@@ -20,3 +20,11 @@ export function canonicalId(id: string): string {
 export function workspaceSuffix(workspaceId: string): string {
   return workspaceId.startsWith("ws_") ? workspaceId.slice(3) : workspaceId;
 }
+
+/** Visitor rows expire with their cookie (30 days) plus a day of margin; the demo workspace never expires. */
+export const VISITOR_TTL_SECONDS = 31 * 24 * 3600;
+
+/** True for ids minted for a visitor workspace (`ws_…`) or remapped into one (`…~suffix`). */
+export function isVisitorId(id: string): boolean {
+  return id.startsWith("ws_") || id.includes(WORKSPACE_ID_SEPARATOR);
+}

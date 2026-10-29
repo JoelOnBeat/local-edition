@@ -4,6 +4,7 @@ import { HttpError } from "../http/errors";
 import { withRoute, type RouteContext } from "../http/api";
 import { resolveWorkspace } from "../session";
 import { getRepo, type Repo } from "../store";
+import { reapStaleDrafts } from "../store/reaper";
 
 export interface WsContext extends RouteContext {
   repo: Repo;
@@ -48,11 +49,12 @@ export async function ownedStore(ctx: WsContext, storeId: string): Promise<Store
   return store;
 }
 
+/** An edition of this workspace, or 404. A build that died mid-store is flagged here rather than left `drafting`. */
 export async function ownedEdition(ctx: WsContext, editionId: string): Promise<Edition> {
   const edition = await ctx.repo.getEdition(editionId);
   if (!edition) throw new HttpError(404, "not_found", "Edition not found.");
   await ownedStore(ctx, edition.storeId).catch(() => {
     throw new HttpError(404, "not_found", "Edition not found.");
   });
-  return edition;
+  return (await reapStaleDrafts(ctx.repo, [edition]))[0];
 }

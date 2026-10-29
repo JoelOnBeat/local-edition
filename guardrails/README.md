@@ -54,7 +54,7 @@ curl -X POST http://127.0.0.1:8000/v1/checks -H 'content-type: application/json'
 | Variable | Effect |
 |---|---|
 | `NEBIUS_API_KEY` | Enables the brand-voice rail. NeMo refuses to load a config whose key variable is unset, so `config.py` sets an inert sentinel (`unset-no-key`) when it is missing and the action treats the sentinel as "no key". |
-| `GUARDRAILS_TOKEN` | If set, `/v1/checks` and `/v1/chat/completions` need header `x-le-guard-token` (the stock server has no auth and the brand-voice rail spends the model key). Health stays open. |
+| `GUARDRAILS_TOKEN` | If set, every path except `GET /v1/health` needs header `x-le-guard-token` (the stock server has no auth, `/v1/chat/completions` is a general model proxy and the brand-voice rail spends the model key). **Required when `NEBIUS_API_KEY` is set:** the server refuses to start without it. |
 | `PORT` | `start.sh` only; the Dockerfile serves on 8000. |
 
 ## Container (Cloudflare Containers or Fly.io)

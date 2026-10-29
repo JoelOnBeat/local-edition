@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { UpstreamError } from "../http/errors";
 import { createLogger } from "../log";
-import type { ChatResult, ResponseFormat, TfMode, TokenFactory } from "./client";
+import type { ChatResult, Reasoning, ResponseFormat, TfMode, TokenFactory } from "./client";
 
 const log = createLogger("tf-json");
 
@@ -24,6 +24,8 @@ export interface JsonCall {
   temperature?: number;
   /** Model for the repair call; defaults to `model`. */
   repairModel?: string;
+  /** Thinking control for every call here. Defaults to `off`: extraction and copy gain nothing from reasoning tokens. */
+  reasoning?: Reasoning;
   /** Name passed in the json_schema response_format. */
   name?: string;
   extraBody?: Record<string, unknown>;
@@ -35,7 +37,7 @@ export interface JsonResult<T> {
   /** Chat calls made: 1 = first try, 2 = fallback or repair, 3 = both. */
   calls: number;
   repaired: boolean;
-  usage: { inTokens: number; outTokens: number };
+  usage: { inTokens: number; outTokens: number; reasoningTokens: number };
 }
 
 /** Per-model memory of whether `response_format: json_schema` was rejected, so we stop paying for 400s. */
@@ -111,20 +113,21 @@ function tryParse<T>(schema: z.ZodType<T>, content: string | null): { ok: true; 
 
 /**
  * Structured output from a model whose JSON mode is unconfirmed.
- * 1. `response_format: json_schema`; if the provider rejects it (HTTP 4xx), schema-in-prompt instead.
+ * 1. `response_format: json_schema`; if the provider rejects that parameter (a 400/422 naming response_format), schema-in-prompt instead.
  * 2. Parse and validate with zod. On failure, ONE repair call that shows the model its output and the errors.
  * 3. Still invalid: throw ModelJsonError (an UpstreamError, code `invalid_response`).
  */
 export async function jsonOutput<T>(schema: z.ZodType<T>, call: JsonCall): Promise<JsonResult<T>> {
   const jsonSchema = jsonSchemaOf(schema);
-  const base = { maxTokens: call.maxTokens, temperature: call.temperature ?? 0, extraBody: call.extraBody };
-  const usage = { inTokens: 0, outTokens: 0 };
+  const base = { maxTokens: call.maxTokens, temperature: call.temperature ?? 0, extraBody: call.extraBody, reasoning: call.reasoning ?? ("off" as const) };
+  const usage = { inTokens: 0, outTokens: 0, reasoningTokens: 0 };
   let calls = 0;
   const run = async (model: string, messages: ChatCompletionMessageParam[], responseFormat?: ResponseFormat) => {
     calls++;
     const r: ChatResult = await call.tf.chat(messages, { ...base, model, responseFormat });
     usage.inTokens += r.usage.inTokens;
     usage.outTokens += r.usage.outTokens;
+    usage.reasoningTokens += r.usage.reasoningTokens;
     return r;
   };
 
@@ -137,7 +140,9 @@ export async function jsonOutput<T>(schema: z.ZodType<T>, call: JsonCall): Promi
         { type: "json_schema", json_schema: { name: call.name ?? "result", schema: jsonSchema } },
       );
     } catch (e) {
-      if (!(e instanceof UpstreamError) || e.code !== "upstream_4xx") throw e;
+      // Only a rejection of response_format itself downgrades the model. Any other 4xx (a bad image, an
+      // oversized prompt) is the caller's problem and must not switch structured output off for everyone.
+      if (!(e instanceof UpstreamError) || e.code !== "upstream_4xx" || e.hint !== "response_format_unsupported") throw e;
       log.warn("json_schema response_format rejected; using schema-in-prompt", { model: call.model, status: e.status });
       schemaUnsupported.add(call.model);
     }

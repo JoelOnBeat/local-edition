@@ -69,15 +69,15 @@ export async function* regenerateItem(params: RegenerateParams, deps: AgentDeps)
       return;
     }
 
-    // Evidence first (the edition owns it), then the version-checked item swap.
-    const fresh = (await repo.getEdition(edition.id)) ?? edition;
-    const have = new Set(fresh.evidence.map((e) => e.id));
-    const added = mem.evidenceFor(produced.item.evidenceIds).filter((e) => !have.has(e.id));
-    if (added.length) await repo.putEdition({ ...fresh, evidence: [...fresh.evidence, ...added] });
+    // Evidence first (the edition owns it), then the version-checked item swap. Both writes go through
+    // the repo's locked update, so neither can overwrite an edit made while the agent was working.
+    await repo.updateEdition(edition.id, (cur) => {
+      const have = new Set(cur.evidence.map((e) => e.id));
+      const added = mem.evidenceFor(produced.item!.evidenceIds).filter((e) => !have.has(e.id));
+      return added.length ? { ...cur, evidence: [...cur.evidence, ...added] } : cur;
+    });
     const saved = await repo.updateEditionItem(edition.id, produced.item, current.version);
-
-    const after = await repo.getEdition(edition.id);
-    if (after) await repo.setEditionStatus(edition.id, after.items.some((i) => i.status === "flagged") ? "flagged" : "draft");
+    await repo.updateEdition(edition.id, (cur) => ({ ...cur, status: cur.items.some((i) => i.status === "flagged") ? "flagged" : "draft" }));
     await invalidateCard(repo, edition.id);
 
     yield { type: "item_drafted", storeId: store.id, item: saved };

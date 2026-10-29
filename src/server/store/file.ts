@@ -15,9 +15,34 @@ interface Snapshot {
 export class FileKv extends MemoryKv {
   private mtimeMs = 0;
   private queue: Promise<void> = Promise.resolve();
+  private gate: Promise<void> = Promise.resolve();
 
   constructor(private readonly file: string) {
     super();
+  }
+
+  /**
+   * One operation at a time. A read reloads the snapshot from disk, which replaced the in-memory map
+   * while another put was still waiting to persist it, and that put's write was lost. Running every
+   * operation start to finish (reload, change, persist) closes that window inside the process.
+   */
+  private exclusive<T>(op: () => Promise<T>): Promise<T> {
+    const run = this.gate.then(op);
+    this.gate = run.then(() => undefined, () => undefined);
+    return run;
+  }
+
+  override get(key: string): Promise<unknown | null> {
+    return this.exclusive(() => super.get(key));
+  }
+  override put(key: string, value: unknown, opts?: { ttlSeconds?: number }): Promise<void> {
+    return this.exclusive(() => super.put(key, value, opts));
+  }
+  override delete(key: string): Promise<void> {
+    return this.exclusive(() => super.delete(key));
+  }
+  override list(prefix: string): Promise<string[]> {
+    return this.exclusive(() => super.list(prefix));
   }
 
   protected override async beforeRead(): Promise<void> {

@@ -42,8 +42,12 @@ export interface RouteSpec {
   sse: boolean;
 }
 
-const idParams = z.object({ id: z.string().min(1) });
-const itemParams = z.object({ id: z.string().min(1), itemId: z.string().min(1) });
+const idParams = z.object({ id: z.string().min(1).max(64) });
+const itemParams = z.object({ id: z.string().min(1).max(64), itemId: z.string().min(1).max(64) });
+/** Most stores one request may name; most menu items a chain may hold. */
+export const MAX_STORE_IDS = 50;
+export const MAX_MENU_ITEMS = 300;
+const storeIdList = z.array(z.string().min(1).max(64)).max(MAX_STORE_IDS);
 
 export const ChainUpdate = Chain.pick({ name: true, brandVoice: true, anchors: true });
 export type ChainUpdate = z.infer<typeof ChainUpdate>;
@@ -72,15 +76,15 @@ export type PublicStaffCard = z.infer<typeof PublicStaffCard>;
 /** Editable copy fields of an item; `edit` re-runs guardrails server-side. */
 export const ItemPatch = z
   .object({
-    name: z.string().min(1),
-    description: z.string().min(1),
-    staffLine: z.string().min(1),
-    flavourTags: z.array(z.string()),
-    brief: z.string().min(1),
-    mood: z.string().min(1),
-    reason: z.string().min(1),
-    offerIdea: z.string().min(1),
-    title: z.string().min(1),
+    name: z.string().min(1).max(600),
+    description: z.string().min(1).max(600),
+    staffLine: z.string().min(1).max(600),
+    flavourTags: z.array(z.string().min(1).max(60)).max(6),
+    brief: z.string().min(1).max(600),
+    mood: z.string().min(1).max(600),
+    reason: z.string().min(1).max(600),
+    offerIdea: z.string().min(1).max(600),
+    title: z.string().min(1).max(600),
     day: Weekday,
     time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
   })
@@ -113,7 +117,7 @@ export const routes = {
   },
   importStores: {
     method: "POST", path: "/api/stores/import", stream: "E", bodyKind: "csv", sse: false,
-    request: z.object({ body: z.string().min(1) }), // text/csv: name,address,lat,lon
+    request: z.object({ body: z.string().min(1).max(128 * 1024) }), // text/csv: name,address,lat,lon
     response: z.array(Store),
   },
   createStore: {
@@ -130,7 +134,7 @@ export const routes = {
   },
   putMenu: {
     method: "PUT", path: "/api/menu", stream: "E", bodyKind: "json", sse: false,
-    request: z.object({ body: z.array(MenuItem) }), response: z.array(MenuItem),
+    request: z.object({ body: z.array(MenuItem).max(MAX_MENU_ITEMS) }), response: z.array(MenuItem),
   },
   searchAnchors: {
     method: "GET", path: "/api/anchors/search", stream: "B", bodyKind: "none", sse: false,
@@ -143,12 +147,12 @@ export const routes = {
   },
   compareStores: {
     method: "GET", path: "/api/compare", stream: "B", bodyKind: "none", sse: false,
-    request: z.object({ query: z.object({ a: z.string().min(1), b: z.string().min(1) }) }),
+    request: z.object({ query: z.object({ a: z.string().min(1).max(64), b: z.string().min(1).max(64) }) }),
     response: CompareResponse,
   },
   buildEditions: {
     method: "POST", path: "/api/editions/build", stream: "C", bodyKind: "json", sse: true,
-    request: z.object({ body: z.object({ storeIds: z.array(z.string().min(1)).optional() }) }),
+    request: z.object({ body: z.object({ storeIds: storeIdList.optional() }) }),
     response: AgentEvent,
   },
   regenerateItem: {
@@ -178,14 +182,14 @@ export const routes = {
   },
   getPublicCard: {
     method: "GET", path: "/api/card/:token", stream: "E", bodyKind: "none", sse: false,
-    request: z.object({ params: z.object({ token: z.string().min(1) }) }), response: PublicStaffCard,
+    request: z.object({ params: z.object({ token: z.string().min(1).max(128) }) }), response: PublicStaffCard,
   },
   runMondayJob: {
     method: "POST", path: "/api/jobs/monday", stream: "E", bodyKind: "json", sse: false,
     request: z.object({
       // HMAC-SHA256 (hex) of the raw request body, keyed by LE_JOB_SECRET.
-      headers: z.object({ "x-le-signature": z.string().min(1) }),
-      body: z.object({ storeIds: z.array(z.string().min(1)).optional() }),
+      headers: z.object({ "x-le-signature": z.string().min(1).max(200) }),
+      body: z.object({ storeIds: storeIdList.optional() }),
     }),
     response: JobRun,
   },
