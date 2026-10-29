@@ -13,11 +13,7 @@ export interface PlatformEnv {
   TAVILY_BUDGET?: DurableObjectNamespaceLike<TavilyBudgetStub>;
   EDITION_BUILD?: WorkflowBindingLike<BuildWorkflowInput>;
   WEEKLY_REBUILD?: WorkflowBindingLike<BuildWorkflowInput>;
-  /** Service-account JSON (`wrangler secret put NEBIUS_SA_CREDENTIALS`); absent means the weekly Nebius job is not started. */
-  NEBIUS_SA_CREDENTIALS?: string;
-  /** Project the job runs in; defaults to Local Edition's eu-west2 CPU project. */
-  NEBIUS_PROJECT_ID?: string;
-  /** https URL of the deployed app, handed to the job. */
+  /** https URL of the deployed app. No Nebius credential ever reaches the Worker: its control plane is unreachable from Cloudflare (522). */
   APP_URL?: string;
   [key: string]: unknown;
 }

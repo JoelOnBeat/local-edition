@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Weekly Local Edition rebuild, run as a Nebius AI job (`nebius ai job run jobs/rebuild.py`).
+"""Local Edition rebuild trigger, for an operator to run by hand (e.g. `nebius ai job run jobs/rebuild.py` from a CLI session). Nothing
+schedules it: the weekly rebuild is the Worker's cron -> WeeklyRebuild Workflow, and this script is not part of the job bundle.
 
 Stdlib only. The job holds no Qloo, Tavily or model logic: it signs a request with LE_JOB_SECRET
 (HMAC-SHA256, hex, header `x-le-signature`, over "le2\n\nPOST\n/api/jobs/monday\n\n" + the raw body, so the method and
@@ -9,7 +10,7 @@ then polls GET $APP_URL/api/jobs/latest until that run finishes. The app does th
 Environment
   APP_URL         required  base URL of the deployed app, e.g. https://local-edition.example.workers.dev
   LE_JOB_SECRET   required  shared HMAC secret (never printed)
-  TRIGGER         optional  "cron" (default) or "manual"
+  TRIGGER         optional  "cron" (default) or "manual" (use "manual" for a run started by hand)
   JOB_NAME        optional  recorded on the run as nebiusJobId (the job name; Nebius does not document a job-id env var)
   STORE_IDS       optional  comma-separated store ids to build instead of all
   POLL_SECONDS    optional  poll interval, default 10

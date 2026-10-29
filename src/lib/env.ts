@@ -14,7 +14,7 @@ export const ServerEnv = z.object({
   TF_MODE: providerMode,
   TAVILY_MODE: providerMode,
   SPEND_CAP_USD: z.coerce.number().nonnegative().default(5),
-  /** HMAC key for /api/jobs/monday. At least MIN_JOB_SECRET_LENGTH characters or the route refuses (503). */
+  /** HMAC key for the job routes (the Worker only verifies; the CLI runner derives a per-job secret from it). At least MIN_JOB_SECRET_LENGTH characters or the route refuses (503). */
   LE_JOB_SECRET: optionalString,
   GUARDRAILS_URL: z.string().url().default("http://127.0.0.1:8000"),
   /** Shared secret for the guardrails sidecar (header x-le-guard-token). */

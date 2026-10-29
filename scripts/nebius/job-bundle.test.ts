@@ -2,10 +2,10 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { gunzipSync } from "node:zlib";
-import { buildLocalEditionJob, MAX_INJECTED_TOTAL_BYTES } from "../nebius/job-spec";
+import { buildLocalEditionJob, MAX_INJECTED_TOTAL_BYTES } from "./job-spec";
 import { JOB_BUNDLE, JOB_PACK_B64 } from "./job-bundle.generated";
 
-const root = resolve(__dirname, "../../..");
+const root = resolve(__dirname, "../..");
 
 describe("the Nebius job bundle", () => {
   it("is in step with jobs/ and guardrails/ (run `npm run gen:job-bundle` after editing them)", async () => {

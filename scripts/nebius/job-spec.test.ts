@@ -46,7 +46,7 @@ describe("buildLocalEditionJob", () => {
   it("sets APP_URL (trailing slash trimmed), TRIGGER and JOB_NAME as plain env", () => {
     const { name, request } = buildLocalEditionJob(base);
     const env = Object.fromEntries((request.spec.environmentVariables ?? []).map((e) => [e.name, e.value]));
-    expect(env).toMatchObject({ APP_URL: "https://localedition.pages.dev", TRIGGER: "cron", JOB_NAME: name });
+    expect(env).toMatchObject({ APP_URL: "https://localedition.pages.dev", TRIGGER: "manual", JOB_NAME: name });
   });
 
   it("delivers secrets as injected files by default, never as env, and exports them in run.sh", () => {
@@ -107,7 +107,7 @@ describe("buildLocalEditionJob", () => {
   });
 
   it("M4: the committed requirements pin every package by version and hash", async () => {
-    const { JOB_BUNDLE } = await import("../jobs/job-bundle.generated");
+    const { JOB_BUNDLE } = await import("./job-bundle.generated");
     const text = JOB_BUNDLE["requirements.txt"];
     const entries = text.split(/\n(?=[A-Za-z0-9])/).filter((e) => e.trim());
     expect(entries.length).toBeGreaterThan(30);

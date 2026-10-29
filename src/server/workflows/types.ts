@@ -7,7 +7,7 @@ export const BuildWorkflowParams = z.object({
   storeIds: z.array(z.string().min(1).max(64)).max(50).optional(),
   force: z.boolean().optional(),
   weekOf: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  /** `cron` marks the WeeklyRebuild entry: it records a JobRun and dispatches the certify job at the end. */
+  /** `cron` marks the WeeklyRebuild entry: it records a JobRun (certification is a separate on-demand CLI run, not started from here). */
   trigger: z.enum(["request", "cron"]).default("request"),
 });
 export type BuildWorkflowParams = z.infer<typeof BuildWorkflowParams>;

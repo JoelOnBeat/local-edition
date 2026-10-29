@@ -58,7 +58,7 @@ export function mockPublicCard(token: string): PublicStaffCard | null {
   return card && store ? { card, store, chainName: SAMPLE_CHAIN.name } : null;
 }
 
-/** The latest Monday run: the rebuild, which started the certify job. See `mockJobRuns` for one run per mode. */
+/** The latest Monday run: the weekly rebuild (NeMo certification is a separate, on-demand CLI run). See `mockJobRuns` for one run per mode. */
 export const mockJobRun: JobRun = mockJobRuns[0];
 
 export const mockStatus: ProviderStatus = {

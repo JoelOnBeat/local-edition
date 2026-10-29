@@ -12,14 +12,14 @@ summarised here.
 | Menu photos | R2, key `ws/<id>/<uuid>.<ext>` | Read back in the Worker and base64 it into the VL call. |
 | Long builds | Cloudflare Workflow in a second Worker `local-edition-ops` | One retried step per store; progress written to D1; the SSE route replays progress from D1 so a disconnect loses nothing. Next worker calls it through a service binding. |
 | SSE | Send `: open` immediately, heartbeat every 15 s | OpenNext #1468: a stream that errors before its first chunk hangs. `request.signal` abort is unreliable (#691). Headers: text/event-stream, no-cache, no-transform, X-Accel-Buffering: no. Max 6 simultaneous outbound connections waiting for headers per invocation, so stream LLM calls or fan out via Workflow steps. |
-| Guardrails | NO Cloudflare Container (owner, 29 Oct 22:15: Workers Paid quotas only). Live path (a head-office edit, a build in a Workflow): the TS mirror of the NeMo regex catalogue plus a Lightning self-check that uses NeMo's own `self check output` prompt, called directly from the Worker -> status `passed`/`rewritten`/`blocked`. Batch path: the real NeMo Guardrails library (nemoguardrails 0.24.1) runs inside a **Nebius Serverless Job** (`certify` mode) over every item of the week's editions and posts signed results back; items gain `certifiedBy: 'nemo-guardrails@nebius-job'`. If certification blocks an approved item, it flips to `flagged` and head office sees why. The same job's `eval` mode runs the 40+10 red-team set and publishes catch and false-positive rates. | Python never runs in a Worker; the job is batch only, never on a user's request path. |
-| Weekly job | Cloudflare cron `0 0 * * MON` (weekday 1 is Sunday on Cloudflare) -> Workflow `WeeklyRebuild` builds every store, one retried step per store, progress in D1 -> last step starts the Nebius Serverless Job (`certify` mode, then `eval` weekly) via GitHub `workflow_dispatch` -> `nebius ai job run jobs/certify.py` (python:3.12-slim, cpu-d3 2vcpu-8gb, about $0.01 a run from the $25 AI Cloud balance). The job reads pending items from `/api/jobs/pending` and posts results to `/api/jobs/results` (HMAC). Direct Worker -> Nebius REST job creation is the later upgrade. | Never an always-on Serverless Endpoint, VM or GPU. |
+| Guardrails | NO Cloudflare Container (owner, 29 Oct 22:15: Workers Paid quotas only). Live path (a head-office edit, a build in a Workflow): the TS mirror of the NeMo regex catalogue plus a Lightning self-check that uses NeMo's own `self check output` prompt, called directly from the Worker -> status `passed`/`rewritten`/`blocked`. Batch path: the real NeMo Guardrails library (nemoguardrails 0.24.1) runs inside a **Nebius Serverless Job** (`certify` mode) over every item of the week's editions and posts signed results back; items gain `certifiedBy: 'nemo-guardrails@nebius-job'`. **The job is started on demand from a developer's CLI session** (`npx tsx scripts/nebius-job.ts certify eval`, as `nebius --profile hackathon-jobs-sa`), never by the Worker, a cron or a Workflow: the Nebius control plane answers Cloudflare egress with a 522 (30 Oct 02:30 MYT rule, docs/NEBIUS-REST.md). If certification blocks an approved item, it flips to `flagged` and head office sees why. The same job's `eval` mode runs the 40+10 red-team set and publishes catch and false-positive rates. | Python never runs in a Worker; the job is batch only, never on a user's request path, and never on a schedule. |
+| Weekly job | Cloudflare cron `0 0 * * MON` (weekday 1 is Sunday on Cloudflare) -> Workflow `WeeklyRebuild` builds every store, one retried step per store, progress in D1, then records a `cron` JobRun whose note says NeMo certification is pending and runs on demand from the CLI. Token Factory and Tavily only: **no Nebius call**. NeMo certify, eval and import are separate on-demand runs: `nebius ai job` via `scripts/nebius-job.ts` (python:3.12-slim, cpu-d3 2vcpu-8gb, about $0.01 a run from the $25 AI Cloud balance). The job reads pending items from `/api/jobs/pending` and posts results to `/api/jobs/results` and `/api/jobs/eval` on https://localedition.pages.dev (HMAC, per-job secret); each appears on the proof ledger as a `manual` JobRun. | Never an always-on Serverless Endpoint, VM or GPU. |
 | Secrets | Worker secrets; local `.env.local` via the secret store | Never `.dev.vars` for Next; `next dev` reads `.env*`. |
 | Local dev | `next dev` for UI; `opennextjs-cloudflare preview` + `wrangler dev` (Docker/colima running) for SSE, Workflow, cron, container | `getPlatformProxy` simulates KV/D1/R2 but not Workflows or workerd limits. |
-| Cost | $0 beyond the $5 Workers Paid plan (Workers, D1, KV, R2, Durable Objects, Workflows, Queues, cron only, within quotas); Nebius job cents per run from the $25 AI Cloud balance | Durable Object holds the shared spend meter and the per-workspace build lock. |
+| Cost | $0 beyond the $5 Workers Paid plan (Workers, D1, KV, R2, Durable Objects, Workflows, Queues, cron only, within quotas); Nebius job cents per run, only when a developer starts one from the CLI, from the $25 AI Cloud balance | Durable Object holds the shared spend meter and the per-workspace build lock. |
 
 Open risks to test first: (1) guardrails image fits 1 GiB and answers `/v1/checks`, cold start
-time; (2) Nebius JWT mint + job create from workerd; (3) SSE > 2 minutes with heartbeats on
+time; (2) ~~Nebius JWT mint + job create from workerd~~ (answered 30 Oct 02:30 MYT: Cloudflare egress gets a 522 from the Nebius control plane, so jobs start from the CLI); (3) SSE > 2 minutes with heartbeats on
 Workers; (4) bundle size via `wrangler deploy --dry-run`.
 
 Shared limits (checked live 29 Oct 21:55): Token Factory 1,000 requests/min and 2M
@@ -61,14 +61,15 @@ CI service account for GitHub Actions is pending the owner's OK: until then jobs
    its wrangler.toml has `pages_build_output_dir` and `[[services]] binding = "APP", service = "local-edition"`.
    Judge URL: **https://localedition.pages.dev**.
 2. GitHub is for the repository only: NO GitHub Actions, Packages/GHCR or Pages. Delete `.github/workflows/`.
-3. Nebius jobs start from Cloudflare: the cron's Workflow step calls `POST https://api.nebius.cloud/ai/v1/jobs`
-   with an IAM token for the shared service account `serviceaccount-e04jbjf4y2wmex8crk`: sign an RS256 JWT with
-   WebCrypto (`kid` = key id, `iss` = `sub` = service account id, `exp` <= 5 min), exchange it, cache the 12 h
-   token in KV. Credentials only via `wrangler secret put NEBIUS_SA_CREDENTIALS < ~/.nebius/hackathon-jobs-sa.json`
-   (never print, log, copy to .dev.vars or commit). CPU jobs in project-e04yk83jbc00bwhyv60mbp (eu-west2).
-   Test as the SA with `nebius --profile hackathon-jobs-sa`; default profile stays `hackathons`. Images: public
-   (python:3.12-slim) or Nebius Container Registry, never GHCR. Jobs are named `local-edition-*`, use no
-   output bucket, and are deleted after a test.
+3. ~~Nebius jobs start from Cloudflare~~ **SUPERSEDED by the team's 30 Oct 02:30 MYT rule.** Finding: from a deployed Cloudflare Worker,
+   the Nebius AI Cloud control plane (`auth.eu.nebius.com`, `auth.nebius.com`, `api.nebius.cloud`, `api.eu-north1.nebius.cloud`) times out with a
+   Cloudflare **522** (Nebius appears to drop Cloudflare egress); Token Factory (`api.tokenfactory.nebius.com`) works. So no Worker, cron or Workflow
+   calls `POST /ai/v1/jobs` or the IAM token exchange, and `NEBIUS_SA_CREDENTIALS` is never a Worker secret (nothing to `wrangler secret put`). Scheduled
+   work is cron -> Workflow calling Token Factory only. Nebius Serverless Jobs (NeMo certify, eval, import) are started on demand from the developer's
+   session as `nebius --profile hackathon-jobs-sa` (`scripts/nebius-job.ts`); the job POSTs its results to https://localedition.pages.dev with the
+   per-job secret. Unchanged from the original approval: the shared service account `serviceaccount-e04jbjf4y2wmex8crk`, CPU jobs in
+   project-e04yk83jbc00bwhyv60mbp (eu-west2), public images (python:3.12-slim) or Nebius Container Registry, never GHCR, jobs named `local-edition-*`,
+   no output bucket, deleted after a run (the runner deletes in a `finally`). Default profile stays `hackathons`.
 4. GPU batch jobs with NVIDIA models are allowed only after an estimate is sent to the team and tallied.
    Local Edition currently plans NO GPU job (see the cost table in the build map).
 5. Cost table: every service, what it draws from, one-month USD; flag anything per-hour or always-on.

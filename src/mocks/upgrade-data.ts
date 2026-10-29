@@ -22,31 +22,31 @@ export const MOCK_GIT_SHA = fakeEntityId("local-edition@main").slice(0, 40);
 
 const allStores = SAMPLE_STORES.map((s) => s.id);
 
-/** One run per mode. The rebuild runs in the Worker's Workflow and starts the certify job. */
+/** One run per mode. The rebuild runs in the Worker's Workflow; certify, eval and import are Nebius jobs started on demand from the CLI (`manual`). */
 export const mockJobRuns: JobRun[] = [
   {
     id: "job_sample_2026w44", trigger: "cron", mode: "rebuild",
     startedAt: "2026-10-26T00:00:00.000Z", finishedAt: "2026-10-26T00:04:41.000Z",
-    storeIds: allStores, status: "done", nebiusJobId: MOCK_CERTIFY_JOB_ID, scriptSha: null,
-    note: "Sample run: 8 editions rebuilt, 1 item held for review.",
+    storeIds: allStores, status: "done", nebiusJobId: null, scriptSha: null,
+    note: "Sample run: 8 editions rebuilt, 1 item held for review. NeMo certification is pending: it runs on demand from the CLI, not on a schedule.",
   },
   {
-    id: "job_sample_2026w44_certify", trigger: "cron", mode: "certify",
+    id: "job_sample_2026w44_certify", trigger: "manual", mode: "certify",
     startedAt: "2026-10-26T00:05:10.000Z", finishedAt: "2026-10-26T00:06:48.000Z",
     storeIds: allStores, status: "done", nebiusJobId: MOCK_CERTIFY_JOB_ID, scriptSha: MOCK_CERTIFY_SHA,
-    note: "Sample run: 32 items and 8 staff cards checked with NeMo Guardrails, 1 flipped to flagged.",
+    note: "Sample run, started from the CLI: 32 items and 8 staff cards checked with NeMo Guardrails, 1 flipped to flagged.",
   },
   {
-    id: "job_sample_2026w44_eval", trigger: "cron", mode: "eval",
+    id: "job_sample_2026w44_eval", trigger: "manual", mode: "eval",
     startedAt: "2026-10-26T00:07:00.000Z", finishedAt: "2026-10-26T00:08:29.000Z",
     storeIds: [], status: "done", nebiusJobId: "nebius-job-b21e0d58", scriptSha: MOCK_EVAL_SHA,
-    note: "Sample run: 40 attack phrases and 10 benign phrases scored.",
+    note: "Sample run, started from the CLI: 40 attack phrases and 10 benign phrases scored.",
   },
   {
     id: "job_sample_import_0021", trigger: "manual", mode: "import",
     startedAt: "2026-10-23T03:12:00.000Z", finishedAt: "2026-10-23T03:15:36.000Z",
     storeIds: allStores, status: "done", nebiusJobId: "nebius-job-03c8e5a7", scriptSha: sha256Like("jobs/import.py"),
-    note: "Sample run: 8 stores read from a CSV upload and profiled.",
+    note: "Sample run, started from the CLI: 8 stores read from a CSV upload and profiled.",
   },
 ];
 

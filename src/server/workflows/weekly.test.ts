@@ -1,77 +1,69 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMemoryRepo } from "../store/memory";
 import { DEMO_WORKSPACE_ID, ensureDemoWorkspace } from "../session";
-import { JobStartRetryable } from "./nebius-start";
 import { handleScheduled, weeklyRunId } from "./cron";
 import { FakeStep, freshLog, okStore, params, scriptedPorts } from "./test-utils";
-import { JOB_MAX_POLLS, runWeeklyRebuild, type WeeklyPorts } from "./weekly";
+import { CERTIFY_ON_DEMAND_NOTE, runWeeklyRebuild, type WeeklyPorts } from "./weekly";
 import type { PlatformEnv } from "../platform/env";
 
 const disposers: Array<() => Promise<void>> = [];
 afterEach(async () => { await Promise.all(disposers.splice(0).map((d) => d())); });
 
-const ended: WeeklyPorts["checkJob"] = async () => ({ state: "COMPLETED", terminal: true });
-const deleted: WeeklyPorts["deleteJob"] = async () => ({ status: "deleted", state: "COMPLETED" });
-
-async function weeklyPorts(startJob: WeeklyPorts["startJob"], over: { repo?: ReturnType<typeof createMemoryRepo>; checkJob?: WeeklyPorts["checkJob"]; deleteJob?: WeeklyPorts["deleteJob"] } = {}) {
+async function weeklyPorts(over: { repo?: ReturnType<typeof createMemoryRepo> } = {}) {
   const repo = over.repo ?? createMemoryRepo();
   const demo = await ensureDemoWorkspace(repo);
   const ids = (await repo.listStores(demo.chainId)).map((s) => s.id);
   const log = await freshLog();
   disposers.push(log.dispose);
   const base = scriptedPorts(log.runLog, ids, okStore);
-  return { ports: { ...base, repo, startJob, checkJob: over.checkJob ?? ended, deleteJob: over.deleteJob ?? deleted, now: () => new Date("2026-11-02T00:00:05.000Z") } satisfies WeeklyPorts, ids, runLog: log.runLog, repo };
+  return { ports: { ...base, repo, now: () => new Date("2026-11-02T00:00:05.000Z") } satisfies WeeklyPorts, ids, runLog: log.runLog, repo };
 }
 
 describe("WeeklyRebuild", () => {
-  it("builds every demo store, records a JobRun with the Nebius job id, and says so in the note", async () => {
-    const startJob = vi.fn(async () => ({ status: "started" as const, name: "local-edition-certify-eval-202611020000", jobId: "aijob-e04abc123", existing: false }));
-    const { ports, ids, repo, runLog } = await weeklyPorts(startJob);
-    const out = await runWeeklyRebuild(new FakeStep(), ports, params({ runId: "weekly-2026-11-02", workspaceId: DEMO_WORKSPACE_ID, trigger: "cron" }));
+  it("builds every demo store with no Nebius ports at all, and records the on-demand certification note", async () => {
+    const { ports, ids, repo, runLog } = await weeklyPorts();
+    // The ports are exactly the build ports plus a repo and a clock: nothing in them can reach Nebius.
+    expect(Object.keys(ports).sort()).toEqual(["buildStore", "now", "planStores", "repo", "runLog"]);
+    const step = new FakeStep();
+    const out = await runWeeklyRebuild(step, ports, params({ runId: "weekly-2026-11-02", workspaceId: DEMO_WORKSPACE_ID, trigger: "cron" }));
     expect(out.build).toMatchObject({ status: "done" });
     expect(out.build?.editionIds).toHaveLength(ids.length);
-    expect(startJob).toHaveBeenCalledTimes(1);
-    // The job name is fixed by the run's first step, so a retry cannot start a second job.
-    const named = (startJob.mock.calls[0] as unknown as [Date])[0];
-    expect(named.toISOString()).toBe((await repo.latestJobRun())?.startedAt);
     const job = await repo.latestJobRun();
-    expect(job).toMatchObject({ trigger: "cron", mode: "rebuild", status: "done", nebiusJobId: "aijob-e04abc123" });
-    expect(job?.note).toContain("Nebius job local-edition-certify-eval-202611020000 started (certify, then eval).");
+    expect(job).toMatchObject({ trigger: "cron", mode: "rebuild", status: "done", nebiusJobId: null });
+    expect(job?.note).toContain(`Built ${ids.length} of ${ids.length} editions.`);
+    expect(job?.note).toContain(CERTIFY_ON_DEMAND_NOTE);
+    expect(CERTIFY_ON_DEMAND_NOTE).toMatch(/pending.*on demand from the CLI/);
+    expect(step.order.some((n) => /certif|nebius|reap|job-outcome/i.test(n))).toBe(false);
     expect((await runLog.get("weekly-2026-11-02"))?.status).toBe("done");
   });
 
-  it("still completes and records why when the Nebius job is skipped, refused or keeps failing", async () => {
-    for (const [result, text] of [
-      [{ status: "skipped", reason: "no_credentials" }, "not started (no credentials)"],
-      [{ status: "failed", code: "nebius_bad_request" }, "not started (nebius_bad_request)"],
-    ] as const) {
-      const { ports, repo } = await weeklyPorts(async () => result);
-      await runWeeklyRebuild(new FakeStep(), ports, params({ runId: "weekly-x", workspaceId: DEMO_WORKSPACE_ID, trigger: "cron" }));
-      expect((await repo.latestJobRun())?.note).toContain(text);
-    }
-    const { ports, repo } = await weeklyPorts(async () => { throw new JobStartRetryable("nebius_unavailable"); });
-    const step = new FakeStep();
-    await runWeeklyRebuild(step, ports, params({ runId: "weekly-y", workspaceId: DEMO_WORKSPACE_ID, trigger: "cron" }));
-    expect(step.attempts.get("certify")).toBe(3);
-    expect((await repo.latestJobRun())).toMatchObject({ status: "done" });
+  it("counts a store that could not be built and still names the on-demand certification", async () => {
+    const repo = createMemoryRepo();
+    const demo = await ensureDemoWorkspace(repo);
+    const ids = (await repo.listStores(demo.chainId)).map((s) => s.id);
+    const log = await freshLog();
+    disposers.push(log.dispose);
+    const base = scriptedPorts(log.runLog, ids, (id) => (id === ids[0] ? [{ type: "error", storeId: id, code: "store_failed", message: "no" } as never] : okStore(id, 1)));
+    const out = await runWeeklyRebuild(new FakeStep(), { ...base, repo, now: () => new Date("2026-11-02T00:00:05.000Z") }, params({ runId: "weekly-bad", workspaceId: DEMO_WORKSPACE_ID, trigger: "cron" }));
+    const job = await repo.latestJobRun();
+    expect(out.build?.failedStoreIds).toEqual([ids[0]]);
+    expect(job?.note).toContain(`Built ${ids.length - 1} of ${ids.length} editions; 1 store(s) failed.`);
+    expect(job?.note).toContain(CERTIFY_ON_DEMAND_NOTE);
   });
 
   it("does nothing when another job is already running", async () => {
     const repo = createMemoryRepo();
     await ensureDemoWorkspace(repo);
     await repo.putJobRun({ id: "job_live", trigger: "manual", startedAt: "2026-11-02T00:00:00.000Z", finishedAt: null, storeIds: [], status: "running", nebiusJobId: null, note: "" });
-    const startJob = vi.fn();
-    const { ports } = await weeklyPorts(startJob as never, { repo });
+    const { ports } = await weeklyPorts({ repo });
     const out = await runWeeklyRebuild(new FakeStep(), ports, params({ runId: "weekly-z", workspaceId: DEMO_WORKSPACE_ID }));
-    expect(out).toEqual({ job: null, build: null, nebius: null, reaped: null });
-    expect(startJob).not.toHaveBeenCalled();
+    expect(out).toEqual({ job: null, build: null });
   });
 });
 
 describe("WeeklyRebuild: L1, retried job-start", () => {
   it("a retry of job-start after its record was written still builds (it finds its own job, not a rival)", async () => {
-    const startJob = vi.fn(async () => ({ status: "skipped" as const, reason: "no_credentials" as const }));
-    const { ports, repo, ids } = await weeklyPorts(startJob);
+    const { ports, repo, ids } = await weeklyPorts();
     let first = true;
     const flaky = new FakeStep();
     const realDo = flaky.do.bind(flaky);
@@ -91,59 +83,11 @@ describe("WeeklyRebuild: L1, retried job-start", () => {
   });
 
   it("does not revive a run that already finished", async () => {
-    const { ports, runLog } = await weeklyPorts(vi.fn());
+    const { ports, runLog } = await weeklyPorts();
     await runLog.start("weekly-done", DEMO_WORKSPACE_ID, 1);
     await runLog.finish("weekly-done", "done");
     const out = await runWeeklyRebuild(new FakeStep(), ports, params({ runId: "weekly-done", workspaceId: DEMO_WORKSPACE_ID, trigger: "cron" }));
     expect(out.job).toBeNull();
-  });
-});
-
-describe("WeeklyRebuild: M4, the Nebius job is deleted when it ends", () => {
-  const started = { status: "started" as const, name: "local-edition-certify-eval-202611020000", jobId: "aijob-e04abc123", existing: false };
-
-  it("polls until the job is terminal, deletes it, and records how it ended on the JobRun", async () => {
-    const states = ["PROVISIONING", "RUNNING", "COMPLETED"];
-    const checkJob = vi.fn(async () => { const state = states.shift()!; return { state, terminal: state === "COMPLETED" }; });
-    const deleteJob = vi.fn(deleted);
-    const { ports, repo } = await weeklyPorts(async () => started, { checkJob, deleteJob });
-    const step = new FakeStep();
-    const out = await runWeeklyRebuild(step, ports, params({ runId: "weekly-reap", workspaceId: DEMO_WORKSPACE_ID, trigger: "cron" }));
-    expect(checkJob).toHaveBeenCalledTimes(3);
-    expect(step.sleeps.map(([n]) => n)).toEqual(["certify-wait:0", "certify-wait:1", "certify-wait:2"]);
-    expect(deleteJob).toHaveBeenCalledWith({ jobId: "aijob-e04abc123", name: started.name });
-    expect(out.reaped).toEqual({ state: "COMPLETED", deleted: true });
-    expect((await repo.latestJobRun())?.note).toMatch(/Job ended COMPLETED\. Deleted afterwards\.$/);
-  });
-
-  it("deletes a job that is still running after the longest wait (Nebius cancels it first) and says so", async () => {
-    const checkJob = vi.fn(async () => ({ state: "RUNNING", terminal: false }));
-    const deleteJob = vi.fn(deleted);
-    const { ports, repo } = await weeklyPorts(async () => started, { checkJob, deleteJob });
-    const out = await runWeeklyRebuild(new FakeStep(), ports, params({ runId: "weekly-stuck", workspaceId: DEMO_WORKSPACE_ID, trigger: "cron" }));
-    expect(checkJob).toHaveBeenCalledTimes(JOB_MAX_POLLS);
-    expect(deleteJob).toHaveBeenCalledTimes(1);
-    expect(out.reaped?.state).toContain("still running after the wait");
-    expect((await repo.latestJobRun())?.note).toContain("Deleted afterwards.");
-  });
-
-  it("keeps going when polling fails, and records a failed delete so it can be removed by hand", async () => {
-    const checkJob = vi.fn(async () => { throw new Error("boom"); });
-    const deleteJob = vi.fn(async () => ({ status: "failed" as const, code: "nebius_auth" }));
-    const { ports, repo } = await weeklyPorts(async () => started, { checkJob, deleteJob });
-    const out = await runWeeklyRebuild(new FakeStep(), ports, params({ runId: "weekly-fail", workspaceId: DEMO_WORKSPACE_ID, trigger: "cron" }));
-    expect(out.reaped?.deleted).toBe(false);
-    expect((await repo.latestJobRun())?.note).toContain("Not deleted (nebius_auth); delete it by hand.");
-  });
-
-  it("starts the job with a name stamped after the build, and never polls or deletes when no job started", async () => {
-    const checkJob = vi.fn(ended);
-    const deleteJob = vi.fn(deleted);
-    const { ports } = await weeklyPorts(async () => ({ status: "skipped" as const, reason: "no_credentials" as const }), { checkJob, deleteJob });
-    const out = await runWeeklyRebuild(new FakeStep(), ports, params({ runId: "weekly-none", workspaceId: DEMO_WORKSPACE_ID, trigger: "cron" }));
-    expect(out.reaped).toBeNull();
-    expect(checkJob).not.toHaveBeenCalled();
-    expect(deleteJob).not.toHaveBeenCalled();
   });
 });
 

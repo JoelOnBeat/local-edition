@@ -86,14 +86,14 @@ read on Nemotron 3.5 Super VL got 22 of 22 items, names and prices exact, and th
 ## 7. Serverless Jobs are described as scheduled, but have no schedule
 
 - **What we saw.** The jobs docs call them "one-off or scheduled batch workloads", yet `nebius ai job create` and
-  `nebius ai job run` have no schedule or cron option. Our weekly Monday rebuild and weekly eval need a clock, so we trigger
-  the job from outside: a Cloudflare cron fires a Workflow that signs an RS256 JWT with the service-account key,
-  exchanges it for a 12 h IAM token and calls `POST /ai/v1/jobs` (it worked: a dry-run create was accepted on the first try
-  from a Node script using the Worker's code path, with the code shipped as `injected_files`). The request shape came from the proto
-  files on GitHub and the public OpenAPI document.
+  `nebius ai job run` have no schedule or cron option. A weekly rebuild and eval need a clock, and the only place to get one is outside
+  Nebius. Our first design triggered the job from a Cloudflare cron (a Workflow signs an RS256 JWT with the service-account key, exchanges
+  it for a 12 h IAM token and calls `POST /ai/v1/jobs`; a dry-run create from a Node script was accepted on the first try, with the code shipped as
+  `injected_files`). That path cannot run from Cloudflare at all (section 9), so the jobs are now started on demand from a developer's CLI session
+  and we say so everywhere, rather than claiming a schedule that does not run.
   Sources: https://docs.nebius.com/serverless/jobs/manage.md and https://docs.nebius.com/cli/reference/ai/job/run.md
 - **Why it matters.** The most common use of a batch job on a SaaS is "every Monday". The product billed only while running
-  is a good fit for it, but the schedule lives in somebody else's scheduler.
+  is a good fit for it, but the schedule has to live in somebody else's scheduler, and (section 9) the usual one cannot reach the API.
 - **Suggestion.** Add `--schedule "0 0 * * 1"` (or a Schedules resource), and a short recipe for creating a job from a
   Cloudflare Worker with a service-account key, since Workers are a common front end for this.
 
@@ -109,3 +109,18 @@ read on Nemotron 3.5 Super VL got 22 of 22 items, names and prices exact, and th
 - **Suggestion.** Add JSON mode and function calling as catalogue filters for every model that passes them, and add one
   Nemotron structured-output example to the docs. Function calling also worked on Super VL in our test: two tools in one turn,
   valid arguments, final answer.
+
+## 9. The AI Cloud control plane is unreachable from Cloudflare Workers; Token Factory is not
+
+- **What we saw.** On 30 Oct 2026 (02:30 MYT) a deployed Cloudflare Worker could not reach any AI Cloud control-plane host:
+  `auth.eu.nebius.com`, `auth.nebius.com`, `api.nebius.cloud` and `api.eu-north1.nebius.cloud` all timed out and Cloudflare returned a
+  **522** (connection timed out between Cloudflare and the origin). In the same Worker, `api.tokenfactory.nebius.com` worked normally.
+  Nebius appears to drop Cloudflare's egress addresses on the control plane but not on Token Factory. The same calls from a laptop, with a
+  CLI-issued IAM token, work (create, poll, delete a job; dry-run create).
+- **Why it matters.** Workers (with Workflows and cron) are a natural scheduler for a Serverless Job, and a service-account token exchange
+  plus `POST /ai/v1/jobs` is exactly the call a Worker would make. We had built it (JWT signing with WebCrypto, token cache in KV, job start, poll,
+  delete) and had to remove it before it ever deployed. Nothing in the jobs, IAM or networking docs says Cloudflare egress is blocked, so it
+  was discovered by a 522 rather than read.
+- **Suggestion.** Document the egress policy for the AI Cloud control plane (which networks are refused and why), and either allow Cloudflare
+  egress or give the jobs API a Token-Factory-style public edge that Workers can call with an API key or a short-lived token. A `schedule` on
+  the job resource (section 7) would remove the need to call the API from outside at all.

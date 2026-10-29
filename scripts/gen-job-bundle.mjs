@@ -1,4 +1,4 @@
-// Writes src/server/jobs/job-bundle.generated.ts: the files the Nebius batch job runs, as strings keyed by their path under the
+// Writes scripts/nebius/job-bundle.generated.ts: the files the Nebius batch job runs, as strings keyed by their path under the
 // job work dir (/opt/le), so the Worker can inject them into the job container (`buildLocalEditionJob`, each file at most 64 KiB).
 // It also writes `JOB_PACK_B64`: the same files as one gzipped JSON object (path -> text), base64. Nebius refuses a create request
 // whose injected files total more than 64 KiB ("plaintext must not exceed 65536 bytes"; seen 30 Oct 2026, base64 counted), and
@@ -35,5 +35,5 @@ export function render() {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  writeFileSync(resolve(root, "src/server/jobs/job-bundle.generated.ts"), render());
+  writeFileSync(resolve(root, "scripts/nebius/job-bundle.generated.ts"), render());
 }

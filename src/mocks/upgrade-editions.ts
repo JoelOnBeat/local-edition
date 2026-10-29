@@ -50,7 +50,7 @@ const verified: ItemVerification = { lift: "recomputed", entities: "found" };
 /** Special, sound and partner items re-check their Qloo lift and entity ids; an event rests on a Tavily listing. */
 export const verificationFor = (kind: string): ItemVerification | null => (kind === "event" ? null : verified);
 
-/** Approved copy that passed gets the weekly NeMo certification; everything else stays on the live check. */
+/** Approved copy that passed gets the NeMo certification, run on demand from the CLI; everything else stays on the live check. */
 export function guardrailWithChecker(g: GuardrailResult, status: ItemStatus): GuardrailResult {
   if (g.status === "passed" && status === "approved") {
     return { ...g, checkedBy: "nemo-guardrails@nebius-job", certifiedAt: MOCK_CERTIFIED_AT, jobId: MOCK_CERTIFY_JOB_ID };

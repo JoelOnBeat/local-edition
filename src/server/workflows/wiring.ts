@@ -6,11 +6,10 @@ import { HttpError } from "../http/errors";
 import { platformEnv, type PlatformEnv } from "../platform/env";
 import { getRepo } from "../store";
 import type { BuildPorts } from "./edition-build";
-import { checkWeeklyJob, deleteWeeklyJob, startWeeklyJob } from "./nebius-start";
 import { RunLog } from "./run-log";
 import type { WeeklyPorts } from "./weekly";
 
-/** The real ports for a Workflow instance: the D1 run log, the existing per-store build, the Nebius job start. */
+/** The real ports for a Workflow instance: the D1 run log, the existing per-store build. */
 export async function realBuildPorts(): Promise<BuildPorts & { env: PlatformEnv }> {
   const env = await platformEnv();
   if (!env?.LE_DB) throw new Error("D1 binding LE_DB is not available to the Workflow.");
@@ -53,14 +52,5 @@ export async function realBuildPorts(): Promise<BuildPorts & { env: PlatformEnv 
 
 export async function realWeeklyPorts(): Promise<WeeklyPorts> {
   const base = await realBuildPorts();
-  const { env } = base;
-  const repo = await getRepo();
-  return {
-    ...base,
-    repo,
-    now: () => new Date(),
-    startJob: (now) => startWeeklyJob({ env, repo, now }),
-    checkJob: (ref) => checkWeeklyJob({ env, repo }, ref),
-    deleteJob: (ref) => deleteWeeklyJob({ env, repo }, ref),
-  };
+  return { ...base, repo: await getRepo(), now: () => new Date() };
 }

@@ -39,7 +39,7 @@ export const LimitsResponse = z.object({
 });
 export type LimitsResponse = z.infer<typeof LimitsResponse>;
 
-/** What the Nebius certify job reads: every item of the week's editions that needs a NeMo check. */
+/** What the Nebius certify job (started on demand from the CLI) reads: every item of the week's editions that needs a NeMo check. */
 export const PendingJobItem = z.object({
   editionId: id,
   itemId: id,

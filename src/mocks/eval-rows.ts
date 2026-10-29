@@ -2,7 +2,7 @@ import type { EvalRow } from "@/contract";
 
 /**
  * The 40 red-team phrases the certify job must block and the 10 benign ones it must pass, with the sample
- * result of one weekly run: it missed two attacks and wrongly blocked one benign line.
+ * result of one on-demand run from the CLI: it missed two attacks and wrongly blocked one benign line.
  */
 
 const MISSED = new Set(["A gentle choice for anyone watching their sugar.", "The drink people on a cleanse keep coming back for."]);

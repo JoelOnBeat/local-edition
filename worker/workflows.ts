@@ -23,7 +23,7 @@ export class EditionBuild extends WorkflowEntrypoint<PlatformEnv, BuildWorkflowI
   }
 }
 
-/** WeeklyRebuild: the Monday cron's run: build the demo workspace, then start the Nebius certify + eval job through its REST API. */
+/** WeeklyRebuild: the Monday cron's run: build the demo workspace (Token Factory and Tavily only; it never calls Nebius's control plane). */
 export class WeeklyRebuild extends WorkflowEntrypoint<PlatformEnv, BuildWorkflowInput> {
   async run(event: WorkflowEvent<BuildWorkflowInput>, step: WorkflowStep) {
     pin(this.env);

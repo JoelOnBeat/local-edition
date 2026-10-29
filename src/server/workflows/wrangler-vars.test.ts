@@ -18,4 +18,14 @@ describe("L9: the deployed Worker's provider modes", () => {
   it("keeps the other production vars", () => {
     expect(wranglerVars()).toMatchObject({ STORE_DRIVER: "d1", BUILD_MODE: "workflow", APP_URL: "https://localedition.pages.dev" });
   });
+
+  it("carries no Nebius control-plane credential or project (docs/NEBIUS-REST.md: Cloudflare egress gets a 522 from it)", () => {
+    const text = readFileSync(resolve(__dirname, "../../../wrangler.jsonc"), "utf8");
+    const vars = wranglerVars();
+    expect(Object.keys(vars).filter((k) => /^NEBIUS_(SA|PROJECT)/.test(k))).toEqual([]);
+    expect(text).not.toMatch(/NEBIUS_PROJECT_ID|api\.nebius\.cloud|auth\.(eu\.)?nebius\.com/);
+    // The only mention of the credential is the comment that forbids it.
+    expect(text.match(/NEBIUS_SA_CREDENTIALS/g)).toHaveLength(1);
+    expect(text).toContain("NEBIUS_SA_CREDENTIALS is NEVER a Worker secret");
+  });
 });

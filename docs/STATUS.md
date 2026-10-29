@@ -1,5 +1,20 @@
 # Local Edition backend status (Thu 29 Oct 2026)
 
+## No Worker -> Nebius path (30 Oct 2026, after the 02:30 MYT team rule)
+
+From a deployed Cloudflare Worker the Nebius AI Cloud control plane (`auth.eu.nebius.com`, `auth.nebius.com`, `api.nebius.cloud`, `api.eu-north1.nebius.cloud`)
+times out with a Cloudflare 522; Token Factory works. So the Worker-side job start is gone, and each NeMo job is started from the CLI, on demand.
+Nothing was deployed, so nothing live was undone. Details: `docs/NEBIUS-REST.md`, `docs/CLOUDFLARE.md` (approval 3 superseded), `docs/FEEDBACK.md` section 9.
+
+| Area | State |
+|---|---|
+| Removed | `src/server/workflows/nebius-start.ts`, the JWT signer, credentials parser and token exchange (`src/server/nebius/`), the certify, poll and delete steps of `WeeklyRebuild`, `NEBIUS_SA_CREDENTIALS` and `NEBIUS_PROJECT_ID` (env types, `wrangler.jsonc`), the one-off `live-check.ts` and `live-eval-check.ts`. |
+| Weekly job | Cron -> `WeeklyRebuild` builds every demo store and records a `cron` JobRun whose note says NeMo certification is pending and runs on demand from the CLI. Token Factory and Tavily only. |
+| Runner | `scripts/nebius-job.ts` (`npx tsx`): modes `certify`, `eval`, `import`; `--dry-run`, `--app-url` (https only). IAM token from `nebius --profile hackathon-jobs-sa` in-process; per-job secret and `NEBIUS_API_KEY` injected as files, never environment variables; the job is deleted in a `finally`. Session-only code is in `scripts/nebius/`, outside the Worker tree. |
+| Proof ledger | A CLI-started certify, eval or import run is a `manual` JobRun with the Nebius job name as `nebiusJobId`, one row per (mode, job name) (already how the ingest routes worked; now tested end to end). No contract schema change. |
+| Verified | `npx tsc --noEmit`, `npm run lint`, `npx vitest run` (85 files, 1121 tests; was 86 files, 1154) pass. The OpenNext build and `wrangler deploy --dry-run` give a 9,886 KiB Worker (1,957 KiB gzipped) with zero hits for the control-plane hosts, `token/exchange` and `NEBIUS_SA_CREDENTIALS`. `npx tsx scripts/nebius-job.ts certify eval --dry-run` was accepted as `hackathon-jobs-sa` and created nothing. |
+| Not done | No real job was created from the runner (the first real `certify eval` run is still to do). Nothing deployed or pushed. |
+
 ## Verify pass after the data-path review fixes (30 Oct 2026, 00:10 MYT)
 
 Gate: `npm run typecheck`, `npm run lint`, `npm test` (86 files, 1153 tests), `guardrails` pytest (125), `tests/e` pytest (12) and `npm run build` pass. The
@@ -13,7 +28,7 @@ run (Token Factory, Tavily, real Ultra) ran under `next dev`. Full numbers: `doc
 | Live run | One demo store built in 36 s for $0.0075 with 1 Tavily credit (through the global ledger); a second build of it used 0 credits (cache). Real Ultra review: 936 ms, 713 in / 86 out tokens, $0.0008. Live copy check passed and the public card served. Total $0.0177 of the $0.5 cap. |
 | Gaps | A small `SPEND_CAP_USD` (below $1.50) blocks every visitor action because the reserved floor is a constant; fixture builds cannot yield a public card (M1); SSE beyond 42 s, SpendMeter reserve/settle in workerd with real calls, R2, the Pages `cf-connecting-ip` hop and the Nebius job start were not exercised here. See "Remaining gaps" in the smoke doc. |
 
-Still to do before judging (unchanged): create the D1, KV and R2 resources and put their ids in `wrangler.jsonc`; `wrangler secret put` for the five secrets;
+Still to do before judging (unchanged): create the D1, KV and R2 resources and put their ids in `wrangler.jsonc`; `wrangler secret put` for the four secrets (`LE_JOB_SECRET`, `NEBIUS_API_KEY`, `QLOO_API_KEY`, `TAVILY_API_KEY`);
 deploy with `--var GIT_SHA:<sha>`; deploy `edge/pages/` and check `cf-connecting-ip` on the real hop; a stream over 2 minutes on deployed Workers.
 
 ---
@@ -27,7 +42,7 @@ Gate: `npm run typecheck`, `npm run lint`, `npm test` (74 files, 997 tests), `gu
 | Area | State |
 |---|---|
 | Platform (S1) | D1 `Repo` driver, R2 blob store, spend-meter and build-lock Durable Objects, `EditionBuild` and `WeeklyRebuild` Workflows, SSE route that tails the D1 run log, cron `0 0 * * MON`. One Worker (`worker/index.ts`), `workers_dev: false`. Unit-tested with fakes; not run in workerd. |
-| Nebius job (S2 + REST client) | NeMo Guardrails runs as a batch library in one Nebius Serverless Job (certify, then eval; import mode on demand). The Worker's weekly Workflow starts it through `src/server/nebius/` (JWT, IAM token cached in KV, `POST /ai/v1/jobs`, code shipped as injected files from `job-bundle.generated.ts`). JWT exchange and a dry-run create verified live; no real job run yet. GitHub Actions and `dispatch.ts` are gone. |
+| Nebius job (S2 + REST client) | NeMo Guardrails runs as a batch library in one Nebius Serverless Job (certify, then eval; import mode on demand). SUPERSEDED 30 Oct 02:30 MYT: the Worker does not start it (Nebius control plane 522s Cloudflare egress); a developer starts it from the CLI with `scripts/nebius-job.ts` (code shipped as injected files from `scripts/nebius/job-bundle.generated.ts`). A dry-run create is verified live; no real job run yet. GitHub Actions and `dispatch.ts` are gone. |
 | Agent (S3) | `step_metrics` for every model call, Ultra reviewer with Super VL fallback (fixture mode answers from code-found clashes, labelled), evidence verifier on every item, totals persisted for the proof page. |
 | Tavily and menu (S4) | Search, one batched extract and Lightning triage; 7-day cache; 10 credits a day per workspace; brand-voice crawl; menu read with a verify pass and stored photo. |
 | Proof and limits (S5) | `GET /api/proof`, `GET /api/limits`, `docs/FEEDBACK.md`. Wired to the numbers the other streams write; averages are `null` until recorded (contract updated). |
@@ -35,8 +50,8 @@ Gate: `npm run typecheck`, `npm run lint`, `npm test` (74 files, 997 tests), `gu
 Wiring fixes found in the smoke: item edits dropped `checkedBy` and pass notes; the review pass returned `review_missing` for every store in fixture mode; the
 proof ledger read keys nothing wrote (now reads `agent/stats.ts` and the Tavily credit counter); rebuild runs were not in the proof ledger.
 
-Still to do before judging: create the D1, KV and R2 resources and put their ids in `wrangler.jsonc`; `wrangler secret put` for `NEBIUS_SA_CREDENTIALS`,
-`LE_JOB_SECRET`, `NEBIUS_API_KEY`, `QLOO_API_KEY`, `TAVILY_API_KEY`; deploy with `--var GIT_SHA:<sha>`; deploy `edge/pages/`; run one real Nebius job and delete it;
+Still to do before judging: create the D1, KV and R2 resources and put their ids in `wrangler.jsonc`; `wrangler secret put` for
+`LE_JOB_SECRET`, `NEBIUS_API_KEY`, `QLOO_API_KEY`, `TAVILY_API_KEY` (never `NEBIUS_SA_CREDENTIALS`); deploy with `--var GIT_SHA:<sha>`; deploy `edge/pages/`; run one real Nebius job from the CLI (`scripts/nebius-job.ts`) and check it deleted itself;
 run a live (not fixture) build, review and Tavily chain once and record the numbers. See "Remaining gaps" in `docs/BACKEND-SMOKE-2.md`.
 
 ---
@@ -63,7 +78,7 @@ it is labelled sample data (the routes set `x-le-mode`, `/api/status` reports ea
 | F6 | Guardrails | Real sidecar and local regex catalogue. A gluten-free/immunity edit is blocked (reasons listed, item `flagged`, approve returns 409 `guardrail_blocked`). Sidecar stopped: a clean edit becomes `unchecked`, a health claim is still blocked locally, and approve-all skips both. `/api/status` shows `up`/`down` | A model key, for the brand-voice self-check (reported as "Skipped check brand voice", never as passed). Fly.io or Cloudflare Containers hosting is untested | Regex rules are not exhaustive. Found and fixed in this pass: "Perfect for young single women in their twenties" passed; the catalogue now covers stacked modifiers and age bands (Python and TS in parity, 4 new phrases). |
 | F7 | Portfolio and approvals | `GET /api/editions[?weekOf=]`, `GET /api/editions/:id`, `PATCH` approve, reject, edit (clean edit goes to `edited`; blocked goes to `flagged`; stale `If-Match` 409), `POST approve-all` (approves only `passed` or `rewritten`; edition stays `flagged` while a flagged item remains). A visitor cannot read another workspace's edition or store (404) | Cloudflare KV or D1 driver for hosting (`STORE_DRIVER=kv` ran only against a fake namespace; D1 is planned, not written) | Map and portfolio view are UI work. Rewritten-text replacement on edit needs the sidecar's model rail, so it is untested end to end. |
 | F8 | Staff card | `GET /api/editions/:id/card` writes the card on first request (4 guarded lines) and keeps the token; `GET /api/card/:token` is public (no cookie) and returns card, store and chain name; unknown token 404 | Lightning for real copy | A rebuild, regenerate or item edit blanks the card's lines and the public link answers 404 until head office opens the card again (`GET /api/editions/:id/card` rewrites it under the same token). The public link is served only when the edition is `approved` and the card's guardrail status is `passed` or `rewritten`. |
-| F9 | Monday edition | `POST /api/jobs/monday` verifies the HMAC (401 on a bad signature, 400 with none), returns a `running` JobRun at once, builds 8 of 8 editions in the background, `GET /api/jobs/latest` then reports `done`. New visitor workspaces are seeded with the built demo editions | Nebius service account and project, `LE_JOB_SECRET`, `APP_URL`, GitHub secrets. The weekly job is started by the Worker's cron Workflow through the Nebius REST API (see "Upgrade integration" below); `jobs/rebuild.py` is the old rebuild script and no longer scheduled; GitHub Actions are not used | The Cloudflare cron and Workflow are built (`worker/`, `src/server/workflows/`) but have not run on Cloudflare. Long builds on Workers need `waitUntil` or a Workflow; untested on workerd. Stopgap for a build killed mid-store (its `finally` never runs): a `drafting` edition older than 5 minutes is flagged when it is read and at the start of every build (`src/server/store/reaper.ts`). The full fix is the Cloudflare Workflow phase (one retried step per store, progress in D1). A build also holds a per-workspace lock (20 min TTL) so two builds cannot interleave. |
+| F9 | Monday edition | `POST /api/jobs/monday` verifies the HMAC (401 on a bad signature, 400 with none), returns a `running` JobRun at once, builds 8 of 8 editions in the background, `GET /api/jobs/latest` then reports `done`. New visitor workspaces are seeded with the built demo editions | Nebius service account and project, `LE_JOB_SECRET`, `APP_URL`, GitHub secrets. The weekly rebuild is the Worker's cron Workflow; the NeMo job is started from the CLI on demand (see "No Worker -> Nebius path" above); `jobs/rebuild.py` is the old rebuild script and no longer scheduled; GitHub Actions are not used | The Cloudflare cron and Workflow are built (`worker/`, `src/server/workflows/`) but have not run on Cloudflare. Long builds on Workers need `waitUntil` or a Workflow; untested on workerd. Stopgap for a build killed mid-store (its `finally` never runs): a `drafting` edition older than 5 minutes is flagged when it is read and at the start of every build (`src/server/store/reaper.ts`). The full fix is the Cloudflare Workflow phase (one retried step per store, progress in D1). A build also holds a per-workspace lock (20 min TTL) so two builds cannot interleave. |
 
 ## Stretch features C1-C6
 

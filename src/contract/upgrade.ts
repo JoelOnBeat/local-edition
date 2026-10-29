@@ -53,7 +53,7 @@ export const EvalRow = z.object({ phrase: z.string().min(1).max(500), expected: 
 export type EvalRow = z.infer<typeof EvalRow>;
 
 /**
- * The guardrails red-team result the Nebius `eval` job posts. `cases` counts the phrases that should be
+ * The guardrails red-team result the Nebius `eval` job (started on demand from the CLI) posts. `cases` counts the phrases that should be
  * blocked and `caught` those that were; `benign` counts the phrases that should pass and `falsePositives`
  * those that were wrongly blocked. Rates are 0..1.
  */

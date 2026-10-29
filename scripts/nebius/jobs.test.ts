@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { createNebiusRest } from "./index";
 import { createJobsClient } from "./jobs";
 import { buildLocalEditionJob } from "./job-spec";
 import { isTerminalState, summarizeJob } from "./schemas";
-import { createMemoryTokenCache } from "./token";
-import { FAKE_TOKEN, scriptedFetch, testKeys } from "./test-utils";
+import { FAKE_TOKEN, scriptedFetch } from "./test-utils";
 
 const PROJECT = "project-e04yk83jbc00bwhyv60mbp";
 const tokens = { getToken: async (o?: { forceRefresh?: boolean }) => (o?.forceRefresh ? `${FAKE_TOKEN}-fresh` : FAKE_TOKEN) };
@@ -170,21 +168,5 @@ describe("error mapping to { error, code }", () => {
 
   it("rejects an unexpected success shape as nebius_unavailable", async () => {
     await expect(client({ text: "not json" }).jobs.get("job-1")).rejects.toMatchObject({ code: "nebius_unavailable" });
-  });
-});
-
-describe("createNebiusRest", () => {
-  it("wires credentials, token exchange and the client end to end", async () => {
-    const { credentialsFileJson } = testKeys();
-    const exchange = { body: { access_token: FAKE_TOKEN, expires_in: 43200 } };
-    const f = scriptedFetch(exchange, { body: { items: [] } });
-    const rest = createNebiusRest({ credentialsJson: credentialsFileJson, cache: createMemoryTokenCache(), fetchImpl: f.fetchImpl });
-    await rest.jobs.list(PROJECT);
-    expect(f.calls.map((c) => c.url)).toEqual(["https://auth.eu.nebius.com:443/oauth2/token/exchange", `https://api.nebius.cloud/ai/v1/jobs?parentId=${PROJECT}`]);
-    expect(f.calls[1].headers.authorization).toBe(`Bearer ${FAKE_TOKEN}`);
-  });
-
-  it("throws nebius_auth when the secret is missing", () => {
-    expect(() => createNebiusRest({ credentialsJson: undefined, cache: createMemoryTokenCache() })).toThrowError(expect.objectContaining({ code: "nebius_auth" }));
   });
 });

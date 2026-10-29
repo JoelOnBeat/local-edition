@@ -2,6 +2,9 @@ import { NebiusError } from "./errors";
 import type { CreateJobRequest, JobSpecInput } from "./schemas";
 
 /**
+ * SESSION-ONLY (30 Oct 2026, 02:30 MYT rule): runs from a developer's shell, never from the Worker, a cron or a Workflow. The
+ * Nebius control plane answers a Cloudflare 522 to Cloudflare egress, so nothing under src/ or worker/ may import this file.
+ *
  * Builds the Nebius job for Local Edition's batch work (`jobs/certify.py`: certify, eval, import).
  *
  * How the code gets into the container without a custom image (chosen from what the OpenAPI supports):
@@ -16,10 +19,10 @@ import type { CreateJobRequest, JobSpecInput } from "./schemas";
  * Secrets: injected files are returned only by `GET /ai/v1/jobs/{id}?view=SECRET`, so by default the
  * secret values are injected as files under /opt/le-secrets/ (file name = env var name) and `run.sh`
  * exports them AFTER the install. Plain `environmentVariables` would be readable by anyone who can read the job.
- * `secretDelivery: "env"` puts them in environmentVariables instead (before pip; not used by the Worker).
+ * `secretDelivery: "env"` puts them in environmentVariables instead (before pip; the runner never uses it).
  * `LE_JOB_SECRET` inside the job is the per-job secret HMAC(shared secret, job name), never the shared one: the app accepts
- * it only for this job's name, only on the job endpoints and only within an hour of the timestamp in the name. The Workflow
- * deletes the job when it ends, so the secrets do not stay in the job record.
+ * it only for this job's name, only on the job endpoints and only within an hour of the timestamp in the name. The session
+ * runner (scripts/nebius-job.ts) deletes the job when it ends, so the secrets do not stay in the job record.
  */
 
 export const LOCAL_EDITION_PROJECT_ID = "project-e04yk83jbc00bwhyv60mbp"; // eu-west2, CPU jobs
@@ -34,7 +37,7 @@ export const MAX_INJECTED_FILE_BYTES = 64 * 1024;
 export const MAX_INJECTED_FILES = 32;
 /**
  * Nebius rejects a create request whose injected files add up to more than 64 KiB (`plaintext must not exceed 65536 bytes`,
- * 30 Oct 2026; a dry run does not check it; the base64 text counts). The loose files are about 74 KB in base64, so the Worker sends one gzipped
+ * 30 Oct 2026; a dry run does not check it; the base64 text counts). The loose files are about 74 KB in base64, so the runner sends one gzipped
  * pack instead (`pack`), which `run.sh` unpacks. This is the ceiling a request is checked against before it is sent.
  */
 export const MAX_INJECTED_TOTAL_BYTES = 64 * 1024;
@@ -186,7 +189,7 @@ export function buildLocalEditionJob(input: LocalEditionJobInput): BuiltJob {
 
   const environmentVariables: Array<{ name: string; value: string }> = [
     ...(printOnly ? [{ name: "EVAL_PRINT", value: "1" }] : [{ name: "APP_URL", value: input.appUrl!.replace(/\/+$/, "") }]),
-    { name: "TRIGGER", value: input.trigger ?? "cron" },
+    { name: "TRIGGER", value: input.trigger ?? "manual" },
     { name: "JOB_NAME", value: name },
     { name: "PIP_ROOT_USER_ACTION", value: "ignore" },
     { name: "PYTHONUNBUFFERED", value: "1" },

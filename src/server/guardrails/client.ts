@@ -55,7 +55,7 @@ export function resetGuardrailsBreaker(): void {
  *      unreadable answer, the spend cap) the copy is `unchecked`, never `passed`: the identity-targeting, hype and
  *      brand-voice rules exist only in the model check, so head office must see the gap and approve with an override.
  *      `unchecked` is also what empty or invalid input gets.
- * Every verdict is `checkedBy: "live"`; the NeMo library in the Nebius job re-certifies it later.
+ * Every verdict is `checkedBy: "live"`; the NeMo library in a Nebius job, started on demand from the CLI, certifies it later.
  */
 export async function checkCopyDetailed(input: CheckCopyInput, options: CheckCopyOptions = {}): Promise<CheckedCopy> {
   const parsed = CheckCopyInput.safeParse(input);

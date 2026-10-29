@@ -1,11 +1,13 @@
 import type { z } from "zod";
-import { createLogger } from "../log";
 import { mapHttpError, NebiusError, networkError, safeMessage } from "./errors";
 import { jobSchema, listJobsSchema, operationSchema, type CreateJobRequest, type Job, type Operation } from "./schemas";
-import type { TokenProvider } from "./token";
 
-const log = createLogger("nebius:jobs");
+/** Where a bearer token comes from. The session runner supplies a CLI-issued token (`nebius iam get-access-token`). */
+export interface TokenProvider {
+  getToken(opts?: { forceRefresh?: boolean }): Promise<string>;
+}
 
+/** Session-only: never import this from `src/` or `worker/`. The Cloudflare edge cannot reach the Nebius control plane (docs/NEBIUS-REST.md). */
 export const NEBIUS_API_BASE = "https://api.nebius.cloud";
 const TIMEOUT_MS = 20_000;
 const MAX_ERROR_BODY = 4096;
@@ -102,7 +104,6 @@ export function createJobsClient(opts: JobsClientOptions): JobsClient {
           await sleep(300 * 2 ** tries);
           continue;
         }
-        log.warn("nebius request failed", { what, code: err.code, status: err.status });
         throw err;
       }
     }

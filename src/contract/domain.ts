@@ -117,7 +117,7 @@ export const GuardrailResult = z.object({
   rail: z.string().optional(),
   reasons: z.array(z.string()),
   original: z.string().optional(),
-  /** Who produced the verdict: the Worker's live check, or the NeMo Guardrails library in the Nebius job. Absent means `live`. */
+  /** Who produced the verdict: the Worker's live check, or the NeMo Guardrails library in a Nebius job started on demand from the CLI. Absent means `live`. */
   checkedBy: GuardrailChecker.optional(),
   /** When the Nebius job certified it. Only set with `checkedBy: "nemo-guardrails@nebius-job"`. */
   certifiedAt: isoDateTime.optional(),
@@ -237,11 +237,13 @@ export type CompareResult = z.infer<typeof CompareResult>;
 
 export const JobRun = z.object({
   id,
+  /** `cron`: the Worker's weekly rebuild. `manual`: a Nebius job (certify, eval, import) started on demand from the CLI; it never runs on a schedule. */
   trigger: z.enum(["cron", "manual"]),
   startedAt: isoDateTime,
   finishedAt: isoDateTime.nullable(),
   storeIds: z.array(z.string()),
   status: z.enum(["running", "done", "failed"]),
+  /** The Nebius job's name (`local-edition-<modes>-<yyyymmddhhmm>`) for certify, eval and import runs; null for the rebuild, which never calls Nebius. */
   nebiusJobId: z.string().nullable(),
   note: z.string(),
   /** Which job this was. Absent on rows written before the upgrade. */

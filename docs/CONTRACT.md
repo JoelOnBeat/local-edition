@@ -28,7 +28,7 @@ one-page staff card. Rebuilt every Monday.
 - `GuardrailResult` { status: 'passed'|'rewritten'|'blocked'|'unchecked', rail?: string,
   reasons: string[], original?: string, checkedBy: 'live'|'nemo-guardrails@nebius-job',
   certifiedAt?: ISO string, jobId?: string }  (live = TS mirror + Lightning self-check in the
-  Worker; nemo = the NeMo Guardrails library in the Nebius Serverless Job; see CLOUDFLARE.md)
+  Worker; nemo = the NeMo Guardrails library in a Nebius Serverless Job started on demand from the CLI; see CLOUDFLARE.md)
 - `EditionItem` = common { id, status: 'draft'|'flagged'|'approved'|'edited'|'rejected',
   evidenceIds: string[] (>= 1, else the item is dropped), guardrail: GuardrailResult,
   version: number } plus one of:
@@ -46,7 +46,7 @@ one-page staff card. Rebuilt every Monday.
 - `CompareResult` { a: storeId, b: storeId, shared: BlockTag[], onlyA: BlockTag[], onlyB: BlockTag[],
   evidenceIds: string[] }
 - `JobRun` { id, trigger: 'cron'|'manual', startedAt, finishedAt: string|null,
-  storeIds: string[], status: 'running'|'done'|'failed', nebiusJobId: string|null, note }
+  storeIds: string[], status: 'running'|'done'|'failed', nebiusJobId: string|null /* the Nebius job's name; null for the rebuild */, note }
 - `ProviderStatus` { qloo: Mode, tokenfactory: Mode, tavily: Mode, guardrails: 'up'|'down'|'local',
   spend: { usd: number, capUsd: number } } where Mode = 'live'|'replay'|'fixture'|'cache'|'missing-key'
 - `Workspace` { id, chainId, createdAt } — one per visitor (httpOnly cookie `le_ws`), seeded with a
@@ -150,3 +150,9 @@ never a raw stack or upstream body.
   model, jobId, rows: { phrase, expected: 'block'|'pass', got: 'block'|'pass' }[] }.
 - `/api/proof`'s `spendPerEditionUsd` and `cachedRatio`, and `/api/limits`'s `costPerEditionUsd`, are `number | null`: null until a build has recorded its model calls and a finished edition.
 - `JobRun` gains `mode: 'rebuild'|'certify'|'eval'|'import'` and `scriptSha: string|null`.
+- Job runs (30 Oct, 02:30 MYT rule; no schema change, semantics only): the weekly rebuild is `trigger: 'cron'`, `mode: 'rebuild'`, `nebiusJobId: null` and its
+  note says NeMo certification is pending and runs on demand from the CLI. A `certify`, `eval` or `import` run is a Nebius job started from the CLI
+  (`scripts/nebius-job.ts`), never by the Worker or a schedule: `trigger: 'manual'`, `nebiusJobId` = the Nebius job's name
+  (`local-edition-<modes>-<yyyymmddhhmm>`), one row per (mode, job name), so a job that re-posts overwrites its own row. The job sends `trigger` and its name as the
+  signed `jobId`; `/api/jobs/results`, `/api/jobs/eval` and `/api/stores/import` write the row, `/api/proof` reads it. The job's secret is the per-job
+  `HMAC(LE_JOB_SECRET, job name)` with `x-le-job-id` set to the name (`src/server/jobs/job-auth.ts`).
