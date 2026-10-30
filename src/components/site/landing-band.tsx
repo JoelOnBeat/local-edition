@@ -102,9 +102,9 @@ function panes(sample: LandingSample | null): Step[] {
               </div>
             </div>
           </TraceCard>
-          <TraceCard brand="gcal" label={`calendar · ${(w?.name ?? "williamsburg").toLowerCase().replace(/\s+/g, "-")}.ics`}>
-            {w?.event ? <Row own left={w.event.title} right={w.event.when} /> : <SamplePending dark className="px-2.5" />}
-          </TraceCard>
+          {w?.event ? <TraceCard brand="gcal" label={`calendar · ${(w?.name ?? "williamsburg").toLowerCase().replace(/\s+/g, "-")}.ics`}>
+            <Row own left={w.event.title} right={w.event.when} />
+          </TraceCard> : null}
         </div>
       ),
     },
