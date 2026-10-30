@@ -5,7 +5,11 @@ export { Chip, GuardrailChip, Pill, SampleBadge, StatusChip, TagChip, statusTone
 export { cx } from "./cx";
 export { Drawer } from "./drawer";
 export { EvidenceChip, headlineMetric, sourceProvider } from "./evidence-chip";
-export { FormField, Input, Select, Textarea } from "./input";
+export { FormField, Input, Textarea } from "./input";
+export { Combobox, Select, type SelectProps } from "./select";
+export { type ListOption } from "./popover-list";
+export { Checkbox, Segmented, Switch } from "./controls";
+export { Dropzone } from "./dropzone";
 export { Dot, Masthead } from "./masthead";
 export { Delta, SignalMeter, StatusBar, levelClass } from "./metrics";
 export { ProviderBadge, ProviderTile, providerName, type Provider } from "./provider-badge";

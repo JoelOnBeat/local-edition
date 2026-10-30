@@ -17,19 +17,6 @@ export function Textarea({ className, ...rest }: ComponentProps<"textarea">) {
   return <textarea className={cx(field, "min-h-24 py-2.5", className)} {...rest} />;
 }
 
-export function Select({ className, ...rest }: ComponentProps<"select">) {
-  return (
-    <select
-      className={cx(
-        "h-9 appearance-none rounded-lg bg-white bg-[url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none'%3E%3Cpath d='m4.5 6.5 3.5 3.5 3.5-3.5' stroke='%23A8A29E' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")]",
-        "bg-[length:16px] bg-[right_10px_center] bg-no-repeat pl-3 pr-9 text-[14px] text-stone-900 shadow-ring-xs outline-none hover:bg-stone-50 focus-visible:shadow-[0_0_0_2px_var(--accent)]",
-        className,
-      )}
-      {...rest}
-    />
-  );
-}
-
 /** Label + control + help or error. */
 export function FormField({ label, help, error, htmlFor, className, children }: { label: ReactNode; help?: ReactNode; error?: ReactNode; htmlFor?: string; className?: string; children: ReactNode }) {
   return (

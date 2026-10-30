@@ -127,3 +127,23 @@
 @media (scripting: none) {
   .le-reveal-root .le-reveal { clip-path: none; }
 }
+
+/* Six code boxes (account/code-boxes.tsx keeps the logic; the look lives here). */
+.le-code [data-testid="code-boxes"] { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.le-code [data-testid="code-boxes"] input {
+  width: 100% !important; margin: 0 !important; height: 52px; border-radius: 10px; background: #fff;
+  text-align: center; font-size: 22px; font-weight: 500; color: var(--ink); font-variant-numeric: tabular-nums;
+  box-shadow: inset 0 0 0 1px #e5e5e5; outline: none; caret-color: var(--accent);
+  transition: box-shadow 150ms var(--ease-out-quint), background-color 150ms var(--ease-out-quint);
+}
+.le-code [data-testid="code-boxes"] input:hover { box-shadow: inset 0 0 0 1px var(--rule-strong); }
+.le-code [data-testid="code-boxes"] input:focus { box-shadow: inset 0 0 0 2px var(--accent); }
+.le-code [data-testid="code-boxes"] input:disabled { background: var(--paper-2); color: var(--muted); }
+.le-code[data-invalid] [data-testid="code-boxes"] input { box-shadow: inset 0 0 0 2px var(--danger-ring); }
+@media (max-width: 380px) { .le-code [data-testid="code-boxes"] { gap: 6px; } .le-code [data-testid="code-boxes"] input { height: 46px; font-size: 20px; } }
+
+/* Popover open (Select, Combobox, menus): scale .95 → 1 with opacity, 150ms. */
+@keyframes le-pop { from { opacity: 0; scale: .95; } to { opacity: 1; scale: 1; } }
+.le-pop { animation: le-pop 150ms var(--ease-out-quint) both; }
+@keyframes le-switch-stretch { 0% { width: 16px; } 50% { width: 20px; } 100% { width: 16px; } }
+@media (prefers-reduced-motion: reduce) { .le-pop { animation: none; } }
