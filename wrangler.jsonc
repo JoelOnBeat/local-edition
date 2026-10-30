@@ -25,7 +25,18 @@
     // (Token Factory), QLOO_API_KEY, TAVILY_API_KEY. Never .dev.vars. NEBIUS_SA_CREDENTIALS is NEVER a Worker secret: no Worker, cron or
     // Workflow calls the Nebius AI Cloud control plane (it answers Cloudflare egress with a 522, docs/NEBIUS-REST.md). NeMo
     // certify/eval/import jobs are started on demand from a developer's CLI session (scripts/nebius-job.ts) and post back to APP_URL.
-    "APP_URL": "https://localedition.pages.dev"
+    // APP_URL must stay exactly this: Square signs APP_URL + path and the connectors build their callback URLs from it.
+    "APP_URL": "https://localedition.pages.dev",
+
+    // Connectors (set by lane B1, 30 Oct). Their secrets are in the Worker (scripts/deploy-secrets.sh), never here.
+    "SQUARE_MODE": "live",
+    "COMPOSIO_AUTH_CONFIG_GMAIL": "ac_tdGDLHfau6M2",
+    "COMPOSIO_AUTH_CONFIG_OUTLOOK": "ac__ISIyjcn1-I3",
+    "COMPOSIO_SAMPLE_USER_ID": "le-sample",
+    "SLACK_HEAD_OFFICE_CHANNEL": "head-office",
+    // Empty until the owner connects the sample mailbox: set both in the deploy that follows.
+    "COMPOSIO_SAMPLE_GMAIL_ACCOUNT": "",
+    "COMMS_SAMPLE_MANAGER_EMAIL": ""
   },
 
   // Monday 00:00 UTC (08:00 Kuala Lumpur): the weekly rebuild Workflow (Token Factory and Tavily only). Cloudflare numbers weekdays from Sunday, so name the day.

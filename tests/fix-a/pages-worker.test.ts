@@ -41,4 +41,28 @@ describe("Pages _worker.js keeps cf-connecting-ip across the service-binding hop
     await h.run();
     expect(clientIp(h.seen[0])).toBe("unknown");
   });
+describe("Pages _worker.js passes webhook bodies and signature headers through byte for byte", () => {
+  const SIGNED = {
+    "x-square-hmacsha256-signature": "c2lnbmF0dXJl+/=",
+    "x-slack-signature": "v0=a1b2c3d4e5f60718293a4b5c6d7e8f9001122334455667788990011223344556",
+    "x-slack-request-timestamp": "1793340331",
+    "webhook-id": "msg_2vK9",
+    "webhook-timestamp": "1793340331",
+    "webhook-signature": "v1,AbCdEf+/==",
+    "content-type": "application/x-www-form-urlencoded",
+    "cf-connecting-ip": "203.0.113.9",
+  };
+  // Not valid JSON, with a trailing newline and non-ASCII: any re-encoding would change the bytes a signature covers.
+  const BODY = "payload=%7B%22type%22%3A%22block_actions%22%7D&note=caf\u00e9 \n";
+
+  it("hands the Worker the same raw body and every signature header unchanged", async () => {
+    const seen: Request[] = [];
+    const env = { APP: { fetch: async (r: Request) => { seen.push(r); return new Response("ok"); } } };
+    await front.fetch(new Request("https://localedition.pages.dev/api/connectors/slack/interactivity", { method: "POST", headers: SIGNED, body: BODY }), env);
+    expect(await seen[0].text()).toBe(BODY);
+    for (const [name, value] of Object.entries(SIGNED)) expect(seen[0].headers.get(name)).toBe(value);
+    expect(seen[0].method).toBe("POST");
+    expect(new URL(seen[0].url).pathname).toBe("/api/connectors/slack/interactivity");
+  });
+});
 });
