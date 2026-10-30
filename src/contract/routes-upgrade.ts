@@ -12,6 +12,26 @@ const signed = z.object({ "x-le-signature": z.string().min(1).max(200) });
 /** Most results one certify or eval post may carry. */
 export const MAX_JOB_RESULTS = 500;
 
+/** One pipeline step and the model that runs it, from the server's model table (not copied into the page). */
+export const ProofStep = z.object({
+  step: z.string().min(1).max(80),
+  model: z.string().min(1).max(120),
+  does: z.string().min(1).max(300),
+});
+export type ProofStep = z.infer<typeof ProofStep>;
+
+/** The Ultra reviewer's verdict on one store's edition. */
+export const ProofReview = z.object({
+  storeId: id,
+  storeName: z.string().max(80),
+  colorIndex: z.number().int().min(1).max(8),
+  verdict: z.enum(["approve", "needs_change"]),
+  reason: z.string().max(600),
+  hint: z.string().max(400).nullable(),
+  reviewedBy: z.string().max(120),
+});
+export type ProofReview = z.infer<typeof ProofReview>;
+
 export const ProofResponse = z.object({
   jobRuns: z.array(JobRun),
   eval: EvalResult.nullable(),
@@ -23,8 +43,28 @@ export const ProofResponse = z.object({
   spendPerEditionUsd: z.number().nonnegative().nullable(),
   /** Share of prompt tokens served from the provider's prefix cache, 0..1. */
   cachedRatio: z.number().min(0).max(1).nullable(),
+  /** Which model runs each step. */
+  steps: z.array(ProofStep).max(20),
+  /** Models the public (demo) editions name as having run, so the page can mark the steps it has evidence for. */
+  seenModels: z.array(z.string().max(120)).max(20),
+  /** Editions the reviewer and the counts below were read from. */
+  editionCount: z.number().int().nonnegative(),
+  reviews: z.array(ProofReview).max(100),
 });
 export type ProofResponse = z.infer<typeof ProofResponse>;
+
+/** A counter against a hard total and a daily slice (Tavily credits, Qloo calls). */
+export const BudgetUsage = z.object({
+  used: z.number().int().nonnegative(),
+  cap: z.number().int().positive(),
+  dailyUsed: z.number().int().nonnegative(),
+  dailyCap: z.number().int().positive(),
+});
+export type BudgetUsage = z.infer<typeof BudgetUsage>;
+
+/** A burst, then a steady refill per minute: "4, then 1 a minute". */
+export const RateLimitRow = z.object({ action: z.string().max(80), workspace: z.string().max(80), ip: z.string().max(80) });
+export type RateLimitRow = z.infer<typeof RateLimitRow>;
 
 export const LimitsResponse = z.object({
   droppedForEvidence: z.number().int().nonnegative(),
@@ -36,6 +76,13 @@ export const LimitsResponse = z.object({
   /** Null until a build has recorded its model calls and a finished edition. */
   costPerEditionUsd: z.number().nonnegative().nullable(),
   tavilyCreditsUsed: z.number().nonnegative(),
+  /** Tavily's hard total and daily slice, with what the whole app has used. */
+  tavily: BudgetUsage,
+  /** Live Qloo calls against the hard cap (300) and daily slice (40); null when the ledger could not be read. */
+  qloo: BudgetUsage.nullable(),
+  rateLimits: z.array(RateLimitRow).max(30),
+  /** What one visitor may spend (dollars), and the share of the cap held back for the demo. */
+  visitorBudgets: z.object({ workspaceUsd: z.number().nonnegative(), networkDailyUsd: z.number().nonnegative(), demoFloorUsd: z.number().nonnegative() }),
 });
 export type LimitsResponse = z.infer<typeof LimitsResponse>;
 

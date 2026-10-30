@@ -8,6 +8,7 @@ import type { CommsDeps } from "../comms/deps";
 import { recordEvent } from "../comms/events";
 import type { DigestRow, Resolution } from "../comms/store";
 import { refreshDigestMessage } from "./digest";
+import { startRegenerate } from "./regenerate";
 import { describeFailure, getBinding, type SlackBinding } from "./binding";
 import { parseButtonValue, specialOf } from "./blocks";
 
@@ -82,7 +83,14 @@ export async function handleInteraction(deps: CommsDeps, payload: SlackInteracti
   if (!(await deps.store.claim(key, deps.now().getTime()))) return;
 
   try {
-    const done = kind === "approve" ? await approve(deps, binding, digest, who, nowUnix, payload.response_url) : await regenerate(deps, binding, digest, who, nowUnix, special?.id ?? null, payload.response_url);
+    let done = true;
+    if (kind === "approve") {
+      done = await approve(deps, binding, digest, who, nowUnix, payload.response_url);
+    } else {
+      if (!special) throw new HttpError(409, "no_special", "This edition has no special to regenerate.");
+      // Marks the message "regenerating", then runs in the EditionBuild Workflow when bound, inline otherwise. Settles its own failures.
+      await startRegenerate(deps, target.workspaceId, { editionId: target.editionId, itemId: special.id, userId: who, atUnix: nowUnix, responseUrl: payload.response_url, claimKey: key });
+    }
     if (!done) await deps.store.release(key);
   } catch (e) {
     await deps.store.release(key);
@@ -120,26 +128,5 @@ async function approve(deps: CommsDeps, binding: SlackBinding, digest: DigestRow
   await refreshDigestMessage(deps, workspaceId, row, binding.token, responseUrl);
   // The same dispatcher the app uses: staff card to the store channel, email to the manager. Idempotent per card.
   if (after.status === "approved") await deps.dispatch({ workspaceId, editionId });
-  return true;
-}
-
-async function regenerate(deps: CommsDeps, binding: SlackBinding, digest: DigestRow, who: string, nowUnix: number, itemId: string | null, responseUrl?: string): Promise<boolean> {
-  const { workspaceId, editionId } = digest;
-  if (!itemId) throw new HttpError(409, "no_special", "This edition has no special to regenerate.");
-  // A Worker may cut background work short, so say what is happening before the slow part starts.
-  await refreshDigestMessage(deps, workspaceId, await resolve(deps, digest, { kind: "regenerating", userId: who, atUnix: nowUnix }), binding.token, responseUrl);
-  const { regenerateItem } = await import("../../agent/regenerate");
-  let failure: string | null = null;
-  for await (const ev of regenerateItem({ workspaceId, editionId, itemId }, await deps.agent())) {
-    if (ev.type === "error") failure = ev.message;
-  }
-  if (failure) throw new HttpError(409, "regenerate_failed", failure);
-  const row = await resolve(deps, digest, { kind: "regenerated", userId: who, atUnix: nowUnix });
-  const edition = await deps.repo.getEdition(editionId);
-  await recordEvent(deps.store, workspaceId, {
-    provider: "slack", direction: "in", kind: "regenerate.clicked", storeId: edition?.storeId ?? null, editionId, ok: true,
-    summary: "A new special was requested from Slack; head office reviews it before it goes out.",
-  });
-  await refreshDigestMessage(deps, workspaceId, row, binding.token, responseUrl);
   return true;
 }

@@ -7,7 +7,8 @@ export default defineConfig({
   fullyParallel: true,
   retries: 0,
   reporter: [["list"]],
-  use: { baseURL: `http://127.0.0.1:${port}`, trace: "retain-on-failure" },
+  // `next dev` blocks its client scripts for the 127.0.0.1 origin; point BASE_URL at http://localhost:<port> when you start the server yourself.
+  use: { baseURL: process.env.BASE_URL ?? `http://127.0.0.1:${port}`, trace: "retain-on-failure" },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
     command: `npm run dev -- --port ${port}`,

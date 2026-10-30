@@ -1,3 +1,4 @@
+import { BRAND_VOICE_LIMITS } from "../limits-table";
 import { routes } from "@/contract";
 import { HttpError } from "../http/errors";
 import { requireChain, wsRoute } from "../handlers/ws";
@@ -12,7 +13,7 @@ import { BrandVoiceBody, generateBrandVoice } from "./brand-voice";
  * rate limited per workspace on top of the per-IP limit in route.ts.
  */
 export const brandVoicePost = wsRoute(routes.generateBrandVoice, async (_input, ctx) => {
-  await rateLimit({ key: `brand-voice:ws:${ctx.workspace.id}`, capacity: 3, refillPerMinute: 1 });
+  await rateLimit({ key: `brand-voice:ws:${ctx.workspace.id}`, ...BRAND_VOICE_LIMITS.workspace });
   let parsedBody: unknown;
   try {
     parsedBody = ctx.rawBody ? JSON.parse(ctx.rawBody) : {};

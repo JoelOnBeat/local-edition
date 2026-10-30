@@ -3,6 +3,12 @@ import { CrashError, FakeStep, freshLog, okStore, params, runEditionBuild, scrip
 
 const disposers: Array<() => Promise<void>> = [];
 afterEach(async () => { await Promise.all(disposers.splice(0).map((d) => d())); });
+const setup2 = async () => {
+  const log = await freshLog();
+  disposers.push(log.dispose);
+  expect(await log.runLog.start("run_t2", "ws_t", 1)).toBe(true);
+  return log.runLog;
+};
 const setup = async () => {
   const log = await freshLog();
   disposers.push(log.dispose);
@@ -25,6 +31,26 @@ describe("EditionBuild step logic", () => {
     const progress = (await runLog.readFrom("run_t1", 0)).flatMap((e) => (e.event.type === "progress" ? [e.event] : []));
     expect(progress.map((p) => [p.done, p.total])).toEqual([[1, 3], [2, 3], [3, 3]]);
     expect(await runLog.get("run_t1")).toMatchObject({ status: "done", done: 3 });
+  });
+
+  it("prefetches the week's events in its own retried step before the first store, and a failed prefetch never fails the run", async () => {
+    const runLog = await setup();
+    const step = new FakeStep();
+    const seen: string[][] = [];
+    const ports = { ...scriptedPorts(runLog, ["a", "b"], okStore), prefetchEvents: async (_p: unknown, ids: string[]) => { seen.push(ids); } };
+    const out = await runEditionBuild(step, ports, params());
+    expect(out.status).toBe("done");
+    expect(seen).toEqual([["a", "b"]]);
+    expect(step.order.indexOf("prefetch-events")).toBeGreaterThan(step.order.indexOf("plan"));
+    expect(step.order.indexOf("prefetch-events")).toBeLessThan(step.order.indexOf("store:a"));
+
+    const runLog2 = await setup2();
+    let tries = 0;
+    const flaky = { ...scriptedPorts(runLog2, ["a"], okStore), prefetchEvents: async () => { tries++; throw new Error("tavily slow"); } };
+    const step2 = new FakeStep();
+    const out2 = await runEditionBuild(step2, flaky, params({ runId: "run_t2" }));
+    expect(tries).toBe(3); // one try and two retries
+    expect(out2).toMatchObject({ status: "done", editionIds: ["ed_a"] });
   });
 
   it("retries a store that failed outright, and never shows the failed first attempt", async () => {
@@ -117,5 +143,35 @@ describe("RunLog", () => {
     const rows = await log.runLog.readFrom("r1", 0);
     expect(rows.map((r) => r.seq)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     expect((await log.runLog.readFrom("r1", 8)).map((r) => r.seq)).toEqual([9, 10]);
+  });
+});
+
+describe("EditionBuild: head-office digest", () => {
+  it("posts the digest in its own step after run_done, with the finished edition ids; a failing digest never fails the build", async () => {
+    const runLog = await setup();
+    const seen: string[][] = [];
+    const ports = { ...scriptedPorts(runLog, ["a", "b"], okStore), afterBuild: async (_p: unknown, ids: string[]) => { seen.push(ids); } };
+    const step = new FakeStep();
+    const out = await runEditionBuild(step, ports, params());
+    expect(out.status).toBe("done");
+    expect(seen).toEqual([["ed_a", "ed_b"]]);
+    expect(step.order.indexOf("digest")).toBeGreaterThan(step.order.indexOf("finish"));
+    expect((await types(runLog)).at(-1)).toBe("run_done");
+
+    const runLog2 = await setup2();
+    const broken = { ...scriptedPorts(runLog2, ["a"], okStore), afterBuild: async () => { throw new Error("slack down"); } };
+    const out2 = await runEditionBuild(new FakeStep(), broken, params({ runId: "run_t2" }));
+    expect(out2).toMatchObject({ status: "done", editionIds: ["ed_a"] });
+    expect(await runLog2.get("run_t2")).toMatchObject({ status: "done" });
+  });
+
+  it("does not post a digest for a run that hit the spend cap or built nothing", async () => {
+    const runLog = await setup();
+    let called = 0;
+    const script: StoreScript = (id) => [{ type: "error", storeId: id, code: "spend_cap", message: "cap" }];
+    const ports = { ...scriptedPorts(runLog, ["a"], script), afterBuild: async () => { called++; } };
+    const out = await runEditionBuild(new FakeStep(), ports, params());
+    expect(out.status).toBe("failed");
+    expect(called).toBe(0);
   });
 });

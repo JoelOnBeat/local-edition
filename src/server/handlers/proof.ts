@@ -1,10 +1,13 @@
 import { ProofResponse, routes, type JobRun } from "@/contract";
 import { withRoute } from "../http/api";
+import { peekWorkspace } from "../session";
 import { getRepo } from "../store";
+import { PROOF_STEPS, reviewsOf, seenModels } from "./proof-steps";
 import { readEval, readJobRuns, readMetricsTotals } from "./proof-ledger";
 
 /**
- * GET /api/proof: what actually ran, from stored data only. No cookie, no model call.
+ * GET /api/proof: what actually ran, from stored data only. No model call. A public page: it reads the visitor's workspace if their
+ * cookie names one, otherwise the demo workspace, and never creates a workspace or sets a cookie.
  *
  * `spendPerEditionUsd` and `cachedRatio` are null until the build has recorded `step_metrics` and a finished edition
  * (`agent/stats.ts`, written by every build, regenerate, card and review run).
@@ -26,8 +29,11 @@ export function scriptShaFrom(runs: JobRun[], env: Record<string, string | undef
   return cleanSha((certify ?? runs.find((r) => r.scriptSha))?.scriptSha ?? undefined);
 }
 
-export const getProof = withRoute(routes.getProof, async (): Promise<ProofBody> => {
+export const getProof = withRoute(routes.getProof, async (_input, ctx): Promise<ProofBody> => {
   const repo = await getRepo();
+  const workspace = await peekWorkspace(ctx.request, repo);
+  const stores = workspace ? await repo.listStores(workspace.chainId) : [];
+  const editions = stores.length ? await repo.listEditions({ storeIds: stores.map((s) => s.id), finishedOnly: true }) : [];
   const [jobRuns, evalResult, totals] = await Promise.all([readJobRuns(repo), readEval(repo), readMetricsTotals(repo)]);
   return {
     jobRuns,
@@ -36,5 +42,9 @@ export const getProof = withRoute(routes.getProof, async (): Promise<ProofBody> 
     gitSha: cleanSha(process.env.GIT_SHA),
     spendPerEditionUsd: totals.editions > 0 ? totals.usd / totals.editions : null,
     cachedRatio: totals.promptTokens > 0 ? Math.min(1, totals.cachedTokens / totals.promptTokens) : null,
+    steps: PROOF_STEPS,
+    seenModels: seenModels(editions),
+    editionCount: editions.length,
+    reviews: reviewsOf(editions, stores),
   };
 });

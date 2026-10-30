@@ -88,6 +88,21 @@ describe("the agent's Tavily port goes through the cached chain and the global l
     expect(await createLedger(await repoCache(), undefined, { stub: null }).usage()).toMatchObject({ total: credits, today: credits });
   });
 
+  it("prefetchWeek runs the whole batch up front and never throws; the stores' turns then read the saved results without a call", async () => {
+    await ensureDemoWorkspace(await getRepo());
+    const deps = await liveAgentDeps();
+    await deps.tavily.prefetchWeek!(SAMPLE_STORES, demoChain);
+    expect(calls.filter((c) => c.path === "/search")).toHaveLength(SAMPLE_STORES.length);
+    expect(calls.filter((c) => c.path === "/extract")).toHaveLength(1);
+    const after = calls.length;
+    resetTavilyPrefetch(); // a different isolate: nothing memoised, only the saved results
+    for (const s of SAMPLE_STORES) expect((await (await liveAgentDeps()).tavily.eventsThisWeek(s, demoChain, WEEK_OF)).evidence.length).toBeGreaterThan(0);
+    expect(calls).toHaveLength(after);
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("network down"); }));
+    resetTavilyPrefetch();
+    await expect(deps.tavily.prefetchWeek!([], demoChain)).resolves.toBeUndefined();
+  });
+
   it("when part of the slice is already spent, the batch is capped there: fewer searches, no page read, and the stores left over use saved events", async () => {
     await ensureDemoWorkspace(await getRepo());
     const ledger = createLedger(await repoCache(), undefined, { stub: null });

@@ -1,24 +1,17 @@
 import Papa from "papaparse";
-import type { AgentEvent, Edition, EditionItem, EvalResult, ItemAction, MenuItem, QlooEntityRef, Store } from "@/contract";
+import type { AgentEvent, Edition, EditionItem, EvalResult, ItemAction, MenuItem, Store } from "@/contract";
 import {
   buildMockCard, editionStatusOf, getMockProfile, mockBrandVoice, mockBuildEvents, mockCompare, mockEval, mockJobRun,
   mockLimits, mockProof, mockPublicCard, mockRegenerateEvents, mockReviewEvents, mockStatus, mockWorkspaceBundle,
   profileEvidence,
 } from "@/mocks";
+import { reviewsOf, seenModels } from "@/server/handlers/proof-steps";
+import { SUGGESTED_ANCHORS } from "./anchor-suggestions";
+import { mockAfterBuild, mockComms, mockDeliveriesFor, mockMergedConnections, mockOnApproval, mockPatchSuggestion, resetMockConnectors } from "./mock-connectors";
 import { newId } from "./ids";
 import { ApiClientError, type ApiClient, type ApiClientOptions } from "./api-types";
 
 /** In-memory stand-in for the whole backend, used when NEXT_PUBLIC_DATA_MODE=mock. Resets on reload. */
-
-const BRANDS = [
-  "Blue Bottle Coffee", "Aesop", "Muji", "Stumptown Coffee Roasters", "La Colombe", "Le Labo", "Everlane",
-  "Sweetgreen", "Rapha", "Ace Hotel", "Kinfolk", "Patagonia", "Glossier", "Warby Parker", "Equinox",
-];
-const brandRef = (name: string): QlooEntityRef => ({
-  entityId: `sample-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
-  name,
-  type: "urn:entity:brand",
-});
 
 /** Stand-in for the guardrail pass: strips exclamation marks and flags health claims. */
 const HEALTH_CLAIM = /\b(healthy|healthier|detox|cures?|boosts?|antioxidants?|immune|immunity|weight loss|energy|vegan-safe|allergen-free)\b/i;
@@ -50,6 +43,7 @@ export function createMockApi(opts: Pick<ApiClientOptions, "mockDelayMs" | "mock
   const eventDelayMs = opts.mockEventDelayMs ?? 350;
   const wait = () => (delayMs > 0 ? new Promise<void>((r) => setTimeout(r, delayMs)) : Promise.resolve());
   const db = mockWorkspaceBundle();
+  resetMockConnectors();
   const editionOrThrow = (id: string): Edition => {
     const e = db.latestEditions.find((x) => x.id === id);
     if (!e) throw new ApiClientError(404, "not_found", "That edition does not exist.");
@@ -77,6 +71,14 @@ export function createMockApi(opts: Pick<ApiClientOptions, "mockDelayMs" | "mock
         const { verdict, reason, clashWith, hint, reviewedBy } = event;
         if (target) replaceEdition({ ...target, review: { verdict, reason, clashWith, hint, reviewedBy, at: new Date().toISOString() } });
       }
+      yield event;
+    }
+  }
+
+  /** The head-office digest goes to Slack once a build reports `run_done`, as the server does. */
+  async function* afterBuild(events: AsyncIterable<AgentEvent>): AsyncGenerator<AgentEvent> {
+    for await (const event of events) {
+      if (event.type === "run_done") mockAfterBuild(event.editionIds.length);
       yield event;
     }
   }
@@ -119,7 +121,7 @@ export function createMockApi(opts: Pick<ApiClientOptions, "mockDelayMs" | "mock
       return structuredClone(db.menu.map((m): MenuItem => ({ ...m, source: "vl" })));
     },
     putMenu: (items) => run(() => { db.menu = items; return db.menu; }),
-    searchAnchors: (q) => run(() => BRANDS.filter((b) => b.toLowerCase().includes(q.toLowerCase())).slice(0, 8).map(brandRef)),
+    searchAnchors: (q) => run(() => SUGGESTED_ANCHORS.filter((b) => b.name.toLowerCase().includes(q.toLowerCase())).slice(0, 8)),
     getStoreProfile: (id) => run(() => {
       const profile = getMockProfile(id);
       if (!profile) throw new ApiClientError(404, "not_found", "No profile for that store yet.");
@@ -130,8 +132,7 @@ export function createMockApi(opts: Pick<ApiClientOptions, "mockDelayMs" | "mock
       if (!r) throw new ApiClientError(404, "not_found", "Both stores need a profile to compare.");
       return r;
     }),
-    buildEditions: (body, o) =>
-      mockBuildEvents(body.storeIds, { delayMs: eventDelayMs, signal: o?.signal, force: body.force, approvedStoreIds: approvedStores() }),
+    buildEditions: (body, o) => afterBuild(mockBuildEvents(body.storeIds, { delayMs: eventDelayMs, signal: o?.signal, force: body.force, approvedStoreIds: approvedStores() })),
     regenerateItem: (id, itemId, body, o) => mockRegenerateEvents(editionOrThrow(id), itemId, body?.hint, { delayMs: eventDelayMs, signal: o?.signal }),
     listEditions: (weekOf) => run(() => db.latestEditions.filter((e) => !weekOf || e.weekOf === weekOf)),
     getEdition: (id) => run(() => editionOrThrow(id)),
@@ -152,7 +153,7 @@ export function createMockApi(opts: Pick<ApiClientOptions, "mockDelayMs" | "mock
       else if (action.action === "reject") next.status = "rejected";
       else next = applyGuardrail({ ...next, ...action.patch, status: "edited" } as EditionItem);
       const items = edition.items.map((i) => (i.id === itemId ? next : i));
-      replaceEdition({ ...edition, items });
+      mockOnApproval(edition, replaceEdition({ ...edition, items }));
       return next;
     }),
     approveAll: (id) => run(() => {
@@ -161,7 +162,9 @@ export function createMockApi(opts: Pick<ApiClientOptions, "mockDelayMs" | "mock
         i.status === "rejected" || i.status === "flagged" || i.guardrail.status === "unchecked" || i.guardrail.status === "blocked"
           ? i
           : { ...i, status: "approved", version: i.status === "approved" ? i.version : i.version + 1 });
-      return replaceEdition({ ...edition, items });
+      const after = replaceEdition({ ...edition, items });
+      mockOnApproval(edition, after);
+      return after;
     }),
     getCard: (id) => run(() => buildMockCard(editionOrThrow(id))),
     getPublicCard: (token) => run(() => {
@@ -175,10 +178,24 @@ export function createMockApi(opts: Pick<ApiClientOptions, "mockDelayMs" | "mock
     }),
     getLatestJob: () => run(() => mockJobRun),
     getStatus: () => run(() => mockStatus),
-    getProof: () => run(() => ({ ...mockProof, eval: evalResult })),
+    getProof: () => run(() => ({
+      ...mockProof, eval: evalResult,
+      seenModels: seenModels(db.latestEditions), editionCount: db.latestEditions.length, reviews: reviewsOf(db.latestEditions, db.stores),
+    })),
     getLimits: () => run(() => mockLimits),
     reviewEditions: (body, o) => reviewStream(body?.weekOf, o?.signal),
     generateBrandVoice: () => run(() => mockBrandVoice),
+    listDeliveries: (editionId) => run(() => mockDeliveriesFor(editionId)),
+    getConnections: () => run(() => mockMergedConnections()),
+    getComms: () => run(() => mockComms()),
+    patchSuggestion: (id, status) => run(() => {
+      const next = mockPatchSuggestion(id, status);
+      if (!next) throw new ApiClientError(404, "not_found", "That suggestion does not exist.");
+      return next;
+    }),
+    pollMail: () => run(() => ({ checked: mockComms().connections.filter((c) => c.status === "connected" && c.provider !== "slack").length, newReplies: 0 })),
+    // The mock backend keeps no run log: nothing to replay.
+    resumeBuild: () => (async function* () { /* no stored run */ })(),
     getPendingJobs: (signature) => run(() => {
       requireSignature(signature);
       const items = db.latestEditions.flatMap((e) =>

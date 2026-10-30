@@ -139,8 +139,8 @@ never a raw stack or upstream body.
 - `MenuItem` gains `seen: boolean` and `priceLegible: boolean` from the VL verify pass (amber in the UI when false).
 - `Event` tie-in gains `venue: string|null`, `date: string|null`, `triage: { kept: boolean, reason }`.
 - New routes:
-  | GET /api/proof | — | { jobRuns: JobRun[], eval: EvalResult|null, scriptSha, gitSha, spendPerEditionUsd, cachedRatio } | S5 |
-  | GET /api/limits | — | { droppedForEvidence, guardrailBlocks, falsePositiveRate, qlooCoverageGaps[], costPerEditionUsd, tavilyCreditsUsed } | S5 |
+  | GET /api/proof | — | { jobRuns, eval, scriptSha, gitSha, spendPerEditionUsd, cachedRatio, steps[] (model per step), seenModels[], editionCount, reviews[] } | S5 |
+  | GET /api/limits | — | { droppedForEvidence, guardrailBlocks, falsePositiveRate, qlooCoverageGaps[], costPerEditionUsd, tavilyCreditsUsed, tavily {used,cap,dailyUsed,dailyCap}, qloo {…}|null, rateLimits[], visitorBudgets } | S5 |
   | POST /api/editions/review | { weekOf? } | SSE AgentEvent (Ultra review pass over the workspace's editions) | S3 |
   | GET /api/jobs/pending | HMAC header | { items: { editionId, itemId, kind, text, brandVoice }[] } | S2 |
   | POST /api/jobs/results | HMAC header | { results: { editionId, itemId, guardrail: GuardrailResult }[] } -> { updated } | S2 |
@@ -156,3 +156,41 @@ never a raw stack or upstream body.
   (`local-edition-<modes>-<yyyymmddhhmm>`), one row per (mode, job name), so a job that re-posts overwrites its own row. The job sends `trigger` and its name as the
   signed `jobId`; `/api/jobs/results`, `/api/jobs/eval` and `/api/stores/import` write the row, `/api/proof` reads it. The job's secret is the per-job
   `HMAC(LE_JOB_SECRET, job name)` with `x-le-job-id` set to the name (`src/server/jobs/job-auth.ts`).
+
+## Connector routes (Local Edition, 30 Oct)
+Specs: `squareRoutes` (src/contract/connectors-square.ts), `commsRoutes` (src/contract/connectors-comms.ts), `connectorApiRoutes` (src/contract/routes-connectors.ts).
+Shapes: `Connection`, `SyncEvent`, `Delivery` (src/contract/connectors.ts). Auth: `ws` = the `le_ws` cookie; `signed` = provider signature, no cookie.
+| Method + path | Auth | Request | Response |
+|---|---|---|---|
+| GET /api/connections | ws | — | { connections: Connection[] (square, slack, gmail, outlook, calendar), events: SyncEvent[] newest first, all lanes merged } |
+| GET /api/connectors/deliveries?editionId= | ws | — | { deliveries: Delivery[] } (Square, Slack and mail together) |
+| GET /api/connectors/square | ws | — | SquareStatus |
+| POST /api/connectors/square/connect | ws | { method: 'sandbox'\|'oauth' } | { kind: 'connected', status, result } \| { kind: 'redirect', authorizeUrl } |
+| GET /api/connectors/square/callback | oauth state | Square's query | 302 to /app/connections?square=connected\|error |
+| POST /api/connectors/square/sync | ws | — | { status, result } |
+| DELETE /api/connectors/square | ws | — | { ok } |
+| POST /api/connectors/square/webhook | signed (`x-square-hmacsha256-signature`) | Square event | { ok, handled, eventType } |
+| GET /api/connectors/square/sales?editionId= | ws | — | { sales: SpecialSales[] } |
+| GET /api/connectors/calendar | ws | — | { feeds: CalendarFeed[] } |
+| GET /api/calendar/:token(.ics) | token is the capability | — | text/calendar |
+| GET /api/connectors/comms | ws | — | CommsState { connections, events, targets, deliveries, notes, suggestions } |
+| PUT /api/connectors/comms/targets | ws | { targets: StoreCommsTarget[] } | { targets } |
+| PATCH /api/connectors/comms/suggestions/:id | ws | { status: 'applied'\|'dismissed' } | RegenerateSuggestion |
+| DELETE /api/connectors/comms/:provider | ws | — | { ok } (slack, gmail, outlook) |
+| GET /api/connectors/slack/install | ws | — | 302 to Slack |
+| GET /api/connectors/slack/callback | oauth state | Slack's query | 302 to /app/connections?connected=slack |
+| POST /api/connectors/slack/interactions | signed (Slack) | form `payload=<json>` | 200 empty within 3 s; the work continues in the background |
+| POST /api/connectors/slack/digest | ws | { editionIds? } | { posted, note, deliveries } |
+| POST /api/connectors/mail/connect | ws | { provider: 'gmail'\|'outlook' } | { redirectUrl } (Composio consent) |
+| GET /api/connectors/mail/callback | oauth state | Composio's query | 302 to /app/connections?connected=gmail\|outlook |
+| POST /api/connectors/mail/webhook | signed (Composio) | event | { ok } |
+| POST /api/connectors/mail/poll | ws | — | { checked, newReplies } (the edition and connections pages call it every 20 s while visible, until the webhook secret exists) |
+
+Wiring decisions (30 Oct):
+- Approving a `special` item publishes it to Square at once (`dispatchSquareItem`, idempotent per item version); approving the last item still runs `dispatchApproved` (Square, Slack card, mail).
+- When a build finishes (`run_done`), the Slack head-office digest is posted if Slack is connected: a `digest` Workflow step after `finish` (and a background call in the inline path). It never fails the build.
+- A Slack Regenerate click starts an `EditionBuild` Workflow instance with `params.regenerate` when the Workflow is bound (`BUILD_MODE=workflow` or production); inline otherwise.
+- The week's Tavily events are prefetched in their own retried `prefetch-events` step before the first store (inline: awaited after `run_started`), so `events_this_week` reads the cache.
+- `GET /api/anchors/search` is cache-first (KV, 14 days), allows 3 live Qloo searches per workspace per day on top of the ledger (300 total, 40 a day), and otherwise answers suggested brands with the header `x-le-code: qloo_budget`.
+- `/api/proof` and `/api/limits` are public reads: the visitor's workspace if their cookie names one, else the demo workspace; they never create a workspace or set a cookie.
+- The client (`ApiClient`) gains `listDeliveries`, `getConnections`, `getComms`, `patchSuggestion`, `pollMail` and `resumeBuild(afterSeq)` (sends `Last-Event-ID`, yields `{ seq, event }` parsed from `id:` lines).

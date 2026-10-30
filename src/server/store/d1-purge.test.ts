@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import type { D1Like } from "../platform/types";
 import { createD1Repo } from "./d1";
-import { JOB_RUN_KEEP_MS, PURGE_CHUNK, PURGE_MAX_ROUNDS } from "./d1-purge";
+import { CONNECTOR_TABLES, JOB_RUN_KEEP_MS, PURGE_CHUNK, PURGE_MAX_ROUNDS } from "./d1-purge";
 import { openTestD1, wipe } from "./d1-test-utils";
 import { cardFor, cleanEdition } from "../../../tests/e/helpers";
 import { sampleSeed } from "@/server/sample/chain";
@@ -134,5 +134,58 @@ describe("L6/L7: workspace_id on every row, and reads that respect it", () => {
     await db.prepare("UPDATE stores SET workspace_id = 'ws_b' WHERE id = ?").bind(edition.storeId).run();
     expect(await repo.getStore(edition.storeId)).toBeNull();
     expect((await repo.listStores("chain_kettle_kiln")).some((s) => s.id === edition.storeId)).toBe(false);
+  });
+});
+
+describe("purge: connector and comms rows", () => {
+  /** One row of every connector table for workspace `ws`. */
+  async function seedConnectors(db: D1Like, ws: string) {
+    await db.batch([
+      db.prepare("INSERT INTO comms_docs (workspace_id, kind, key, json, at) VALUES (?, 'note', 'n1', '{}', 'x')").bind(ws),
+      db.prepare("INSERT INTO connector_connections (workspace_id, provider, json, mode, meta, updated_at) VALUES (?, 'square', '{}', 'sandbox', '{}', 'x')").bind(ws),
+      db.prepare("INSERT INTO connector_events (id, workspace_id, provider, at, json) VALUES (?, ?, 'square', 'x', '{}')").bind(`ev_${ws}`, ws),
+      db.prepare("INSERT INTO connector_deliveries (workspace_id, provider, edition_id, at, json) VALUES (?, 'square', 'e1', 'x', '{}')").bind(ws),
+      db.prepare("INSERT INTO square_locations (workspace_id, location_id, name) VALUES (?, 'L1', 'Loc')").bind(ws),
+      db.prepare("INSERT INTO calendar_tokens (token, workspace_id, scope, created_at) VALUES (?, ?, 'chain', 'x')").bind(`tok_${ws}`, ws),
+      db.prepare("INSERT INTO connector_oauth_state (state, workspace_id, provider, expires_at) VALUES (?, ?, 'square', ?)").bind(`st_${ws}`, ws, NOW + DAY),
+    ]);
+  }
+
+  it("removes an expired workspace's connector and comms rows, keeps a live one's, and trims old claims and spent OAuth states", async () => {
+    const db = await open();
+    await db.batch([...CONNECTOR_TABLES, "comms_claims"].map((t) => db.prepare(`DELETE FROM ${t}`)));
+    await seedWorkspaces(db, 2, NOW - DAY);
+    await seedWorkspaces(db, 1, NOW + 5 * DAY, "live");
+    await seedConnectors(db, "ws_old0");
+    await seedConnectors(db, "ws_old1");
+    await seedConnectors(db, "ws_live0");
+    await db.batch([
+      db.prepare("INSERT INTO comms_claims (key, at) VALUES ('stale', ?)").bind(NOW - 30 * DAY),
+      db.prepare("INSERT INTO comms_claims (key, at) VALUES ('fresh', ?)").bind(NOW - DAY),
+      db.prepare("INSERT INTO connector_oauth_state (state, workspace_id, provider, expires_at) VALUES ('spent', 'ws_live0', 'square', ?)").bind(NOW - 1),
+    ]);
+    const repo = createD1Repo(async () => db, { now: () => NOW });
+    expect(await repo.purgeExpired()).toBe(2);
+    for (const t of CONNECTOR_TABLES) {
+      expect(await count(db, t, "workspace_id LIKE 'ws_old%'"), t).toBe(0);
+      expect(await count(db, t, "workspace_id = 'ws_live0'"), t).toBe(1);
+    }
+    expect(await count(db, "comms_claims")).toBe(1);
+    expect(await count(db, "connector_oauth_state", "state = 'spent'")).toBe(0);
+  });
+
+  it("still purges the core rows when the connector tables do not exist yet", async () => {
+    const own = await openTestD1(); // its own database: the tables are dropped
+    try {
+      const db = own.db;
+      await wipe(db);
+      await seedWorkspaces(db, 3, NOW - DAY);
+      await db.batch([...CONNECTOR_TABLES, "comms_claims"].map((t) => db.prepare(`DROP TABLE ${t}`)));
+      const repo = createD1Repo(async () => db, { now: () => NOW });
+      expect(await repo.purgeExpired()).toBe(3);
+      expect(await count(db, "workspaces", "id LIKE 'ws_old%'")).toBe(0);
+    } finally {
+      await own.dispose();
+    }
   });
 });

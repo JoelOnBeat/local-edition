@@ -11,6 +11,17 @@ const SEVEN_DAYS_MS = 7 * 24 * 3600 * 1000;
 export const JOB_RUN_KEEP_MS = 60 * 24 * 3600 * 1000;
 const WORKSPACE_TABLES = ["staff_cards", "editions", "stores", "menus", "chains", "build_events", "build_runs"] as const;
 
+/**
+ * Connector tables (migrations 0003 and 0004) that hold a workspace's Square connection (ciphertext tokens), sync log, deliveries,
+ * calendar tokens, and the Slack and mail state in `comms_docs`. They go with the workspace. Run as their own guarded batches: a
+ * database that has not had those migrations yet must not stop the core purge.
+ */
+export const CONNECTOR_TABLES = [
+  "comms_docs", "connector_connections", "connector_events", "connector_deliveries", "square_locations", "calendar_tokens", "connector_oauth_state",
+] as const;
+/** Idempotency claims (button clicks, digests, sample quotas) are only useful for a short while. */
+export const COMMS_CLAIM_KEEP_MS = 14 * 24 * 3600 * 1000;
+
 /** The same ids in every statement of a batch (the ids are re-selected inside the transaction, ordered, with the same bound `now`). */
 const EXPIRED_IDS = "SELECT id FROM workspaces WHERE expires_at IS NOT NULL AND expires_at <= ? ORDER BY expires_at, id LIMIT ?";
 
@@ -35,6 +46,8 @@ export async function purgeExpiredRows(getDb: () => Promise<D1Like>, now: number
         break;
       }
     }
+    // Before the workspace rows go: the ids are re-selected from them.
+    await guarded("connector rows", () => db.batch(CONNECTOR_TABLES.map((t) => sql(`DELETE FROM ${t} WHERE workspace_id IN (${EXPIRED_IDS})`, now, PURGE_CHUNK))));
     await db.batch([
       ...WORKSPACE_TABLES.map((t) => sql(`DELETE FROM ${t} WHERE workspace_id IN (${EXPIRED_IDS})`, now, PURGE_CHUNK)),
       sql(`DELETE FROM workspaces WHERE id IN (${EXPIRED_IDS})`, now, PURGE_CHUNK),
@@ -54,5 +67,19 @@ export async function purgeExpiredRows(getDb: () => Promise<D1Like>, now: number
     // `started_at` is an ISO-8601 UTC string, so text order is time order.
     sql("DELETE FROM job_runs WHERE started_at < ?", new Date(now - JOB_RUN_KEEP_MS).toISOString()),
   ]);
+  await guarded("connector global rows", () =>
+    db.batch([
+      sql("DELETE FROM comms_claims WHERE at < ?", now - COMMS_CLAIM_KEEP_MS),
+      sql("DELETE FROM connector_oauth_state WHERE expires_at <= ?", now),
+    ]),
+  );
   return removed;
+
+  async function guarded(what: string, run: () => Promise<unknown>): Promise<void> {
+    try {
+      await run();
+    } catch (e) {
+      log.warn("purge skipped", { what, err: (e as Error)?.message?.slice(0, 120) });
+    }
+  }
 }

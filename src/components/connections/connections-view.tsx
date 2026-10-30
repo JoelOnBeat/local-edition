@@ -6,6 +6,7 @@ import type { Connection, ConnectorProvider, SquareStatus, SyncEvent } from "@/c
 import { useWorkspace } from "@/components/app/workspace-context";
 import { Card, ErrorState, Notice, ProviderBadge, Skeleton, SkeletonText, providerName } from "@/components/ui";
 import { useAsync } from "@/components/lib/use-async";
+import { MAIL_POLL_LABEL, useMailPoll } from "@/components/lib/use-mail-poll";
 import { CalendarCard } from "./calendar-card";
 import { connect, disconnect, loadConnections, runAction } from "./connections-api";
 import { ProviderCard } from "./provider-card";
@@ -69,10 +70,14 @@ export function ConnectionsView() {
     else reload();
   };
 
-  const events: SyncEvent[] = [
-    ...(snap?.square.ok ? snap.square.data.events : []),
-    ...(snap?.comms.ok ? snap.comms.data.events : []),
-  ];
+  // GET /api/connections merges every lane's events newest first; if it failed, fall back to what the lanes returned.
+  const events: SyncEvent[] = snap?.merged.ok
+    ? snap.merged.data.events
+    : [...(snap?.square.ok ? snap.square.data.events : []), ...(snap?.comms.ok ? snap.comms.data.events : [])];
+  const mailConnected = Boolean(snap?.merged.ok
+    ? snap.merged.data.connections.some((c) => (c.provider === "gmail" || c.provider === "outlook") && c.status === "connected")
+    : snap?.comms.ok && snap.comms.data.connections.some((c) => (c.provider === "gmail" || c.provider === "outlook") && c.status === "connected"));
+  useMailPoll(mailConnected, reload);
   const card = (c: Connection, details?: React.ReactNode, extra?: { oauthAvailable?: boolean; sandboxAvailable?: boolean }) => (
     <ProviderCard
       key={c.provider}
@@ -115,6 +120,8 @@ export function ConnectionsView() {
           </>
         )}
       </div>
+
+      {mailConnected ? <p data-testid="mail-poll-label" className="text-[12.5px] text-muted">{MAIL_POLL_LABEL}</p> : null}
 
       {snap ? <SyncLog events={events} stores={stores} live={!q.error} /> : <SkeletonText lines={6} />}
     </div>

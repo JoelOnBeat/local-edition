@@ -25,6 +25,8 @@ export interface BuildParams {
   runId?: string;
   /** Rebuild stores whose current edition has approved or edited items (their work is replaced). */
   force?: boolean;
+  /** The caller already ran the week's events prefetch (the Workflow does, as its own step). */
+  skipPrefetch?: boolean;
   /** A build lock the caller already took (the route does, to answer 409 before streaming). */
   lock?: BuildLock;
 }
@@ -79,6 +81,8 @@ async function* runBuild(params: BuildParams, deps: AgentDeps): AsyncGenerator<A
   const runId = params.runId ?? newId("run");
 
   yield { type: "run_started", runId, storeIds: stores.map((s) => s.id) };
+  // The week's Tavily batch is slow when live: fetch it once, here, so each store's `events_this_week` reads the cache.
+  if (!params.skipPrefetch) await deps.tavily.prefetchWeek?.(stores, chain);
   const editionIds: string[] = [];
   try {
     for (const [i, store] of stores.entries()) {

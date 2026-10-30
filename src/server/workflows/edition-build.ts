@@ -2,7 +2,7 @@ import type { AgentEvent } from "@/contract";
 import { createLogger } from "../log";
 import { WORKFLOW_LOCK_TTL_SECONDS } from "../agent/build-lock";
 import type { EventAttempt, RunLog } from "./run-log";
-import type { BuildWorkflowParams } from "./types";
+import type { BuildWorkflowParams, SlackRegenerateJob } from "./types";
 
 const log = createLogger("workflow");
 
@@ -23,6 +23,10 @@ export interface StepConfig {
 
 /** Retry once, five seconds later: a failed store costs real model tokens, so retries stay few. */
 export const STORE_STEP: StepConfig = { retries: { limit: 1, delay: "5 seconds", backoff: "exponential" }, timeout: "10 minutes" };
+/** The week's live Tavily batch (8 searches and a page read) runs long, so it gets its own step with a generous timeout and two retries. */
+export const PREFETCH_STEP: StepConfig = { retries: { limit: 2, delay: "3 seconds", backoff: "exponential" }, timeout: "3 minutes" };
+/** One retry: the digest is idempotent (a claim per set of edition states), so a repeat cannot post twice. */
+export const DIGEST_STEP: StepConfig = { retries: { limit: 1, delay: "5 seconds" }, timeout: "1 minute" };
 export const LIGHT_STEP: StepConfig = { retries: { limit: 3, delay: "2 seconds", backoff: "exponential" }, timeout: "1 minute" };
 
 /**
@@ -41,6 +45,18 @@ export interface BuildPorts {
   lock?: RunLock;
   /** The store ids to build, or null when the workspace or a requested store does not exist. */
   planStores(params: BuildWorkflowParams): Promise<string[] | null>;
+  /**
+   * Saves the week's events (live Tavily) before any store is built, so `events_this_week` reads the cache. It never throws for a budget
+   * or upstream problem; if it does throw, the run goes on and the agent uses saved events.
+   */
+  prefetchEvents?(params: BuildWorkflowParams, storeIds: string[]): Promise<void>;
+  /**
+   * The run finished and `run_done` is in the log: post the head-office digest to Slack when it is connected. Failures here are logged and
+   * ignored; they never fail the build.
+   */
+  afterBuild?(params: BuildWorkflowParams, editionIds: string[]): Promise<void>;
+  /** A Slack Regenerate click (`params.regenerate`): the item's rewrite and the digest message's update. It settles its own failures. */
+  regenerate?(workspaceId: string, job: SlackRegenerateJob): Promise<void>;
   /** One store's build: the existing per-store pipeline in src/server/agent/build.ts. */
   buildStore(storeId: string, params: BuildWorkflowParams): AsyncIterable<AgentEvent>;
 }
@@ -68,6 +84,7 @@ const WRAPPER_EVENTS = new Set<AgentEvent["type"]>(["run_started", "run_done"]);
  * be pure. One retried step per store; every event goes to D1 as it happens; the SSE route tails that log.
  */
 export async function runEditionBuild(step: StepLike, ports: BuildPorts, params: BuildWorkflowParams): Promise<BuildOutcome> {
+  if (params.regenerate) return runRegenerate(step, ports, params, params.regenerate);
   const { runLog } = ports;
   const { runId, workspaceId } = params;
 
@@ -111,6 +128,13 @@ export async function runEditionBuild(step: StepLike, ports: BuildPorts, params:
   const editionIds: string[] = [];
   const failedStoreIds: string[] = [];
   let spendCap = false;
+  if (ports.prefetchEvents) {
+    try {
+      await step.do("prefetch-events", PREFETCH_STEP, async () => { await ports.prefetchEvents!(params, storeIds); });
+    } catch (e) {
+      log.warn("events prefetch failed; the stores use saved events", { runId, err: e });
+    }
+  }
   try {
     for (const [index, storeId] of storeIds.entries()) {
       if (spendCap) break;
@@ -140,6 +164,13 @@ export async function runEditionBuild(step: StepLike, ports: BuildPorts, params:
       await ports.lock?.release(workspaceId, runId);
       await runLog.finish(runId, status);
     });
+    if (status === "done" && editionIds.length && ports.afterBuild) {
+      try {
+        await step.do("digest", DIGEST_STEP, async () => { await ports.afterBuild!(params, editionIds); });
+      } catch (e) {
+        log.warn("head-office digest failed; the build is unaffected", { runId, err: e });
+      }
+    }
     return { runId, editionIds, failedStoreIds, status, spendCap };
   } catch (e) {
     // A step ran out of retries. Do not leave the workspace locked (or the run `running`) until the TTL passes.
@@ -149,6 +180,25 @@ export async function runEditionBuild(step: StepLike, ports: BuildPorts, params:
     }).catch(() => undefined);
     throw e;
   }
+}
+
+/** The REGENERATE step is long (a model rewrite and a guardrail check) but not retried: the click's claim makes a repeat a no-op. */
+export const REGENERATE_STEP: StepConfig = { retries: { limit: 0, delay: "5 seconds" }, timeout: "5 minutes" };
+
+/** A Slack Regenerate click as its own Workflow instance: one step, no run log, no workspace build lock. */
+async function runRegenerate(step: StepLike, ports: BuildPorts, params: BuildWorkflowParams, job: SlackRegenerateJob): Promise<BuildOutcome> {
+  const { runId, workspaceId } = params;
+  let status: BuildOutcome["status"] = "done";
+  try {
+    await step.do("regenerate", REGENERATE_STEP, async () => {
+      if (!ports.regenerate) throw new Error("This Workflow has no regenerate port.");
+      await ports.regenerate(workspaceId, job);
+    });
+  } catch (e) {
+    log.error("slack regenerate step failed", { runId, err: e });
+    status = "failed";
+  }
+  return { runId, editionIds: [], failedStoreIds: [], status, spendCap: false };
 }
 
 /**

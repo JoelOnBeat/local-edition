@@ -2,6 +2,7 @@ import type { Edition, EditionItem } from "@/contract";
 import { routes } from "@/contract";
 import { invalidateCard } from "../agent/card-state";
 import { dispatchApproved } from "../connectors/dispatch";
+import { dispatchSquareItem } from "../connectors/square/dispatch";
 import { HttpError } from "../http/errors";
 import { runInBackground } from "../jobs/background";
 import { getCheckCopy } from "../jobs/wiring-guardrails";
@@ -87,6 +88,9 @@ export const patchItem = wsRoute(patchItemSpec, async ({ params, body }, ctx) =>
   const stored = await ctx.repo.updateEditionItem(edition.id, next, expected).catch(conflict);
   // The staff card was written from the old copy: blank it so the public link stops serving it.
   if (body.action !== "approve") await invalidateCard(ctx.repo, edition.id);
+  // A special goes live in Square the moment it is approved, without waiting for the other items. Idempotent with the
+  // edition-level dispatcher (same item version, same idempotency key); a Square failure never fails the approval.
+  if (body.action === "approve" && item.kind === "special") runInBackground(Promise.resolve().then(() => dispatchSquareItem(ctx.workspace.id, edition.id, item.id)));
   afterStatus(ctx, edition.status, await syncStatus(ctx.repo, edition.id));
   return stored;
 });

@@ -157,6 +157,8 @@ export interface QlooPort {
 
 export interface TavilyPort {
   eventsThisWeek(store: Store, chain: Chain, weekOf: string): Promise<WithEvidence<EventCandidate[]>>;
+  /** Saves the week's events for these stores before the agent loop (live Tavily only; a no-op elsewhere). Never throws. */
+  prefetchWeek?(stores: Store[], chain: Chain): Promise<void>;
 }
 
 export interface RankedDoc {

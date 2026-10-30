@@ -45,7 +45,7 @@ const wb = SAMPLE_STORES[0];
 const ps = SAMPLE_STORES[1];
 
 export const mockCommsEvents: SyncEvent[] = [
-  { id: "se_comms_6", provider: "gmail", at: at(-2), direction: "in", kind: "mail.reply", summary: "Dana Okafor (Williamsburg) replied: sold out of the cardamom bun by 11am.", storeId: wb.id, editionId: mockEditionId(wb.id), ok: true },
+  { id: "se_comms_6", provider: "gmail", at: at(-2), direction: "in", kind: "mail.reply", summary: "Dana Okafor (Williamsburg) replied: sold out of the Orange Peel Cortado by 11am.", storeId: wb.id, editionId: mockEditionId(wb.id), ok: true },
   { id: "se_comms_5", provider: "gmail", at: at(-3), direction: "out", kind: "mail.sent", summary: "Staff card emailed to Dana Okafor (Williamsburg).", storeId: wb.id, editionId: mockEditionId(wb.id), ok: true },
   { id: "se_comms_4", provider: "slack", at: at(-3), direction: "out", kind: "card.posted", summary: "Staff card posted to #store-williamsburg.", storeId: wb.id, editionId: mockEditionId(wb.id), ok: true },
   { id: "se_comms_3", provider: "slack", at: at(-4), direction: "in", kind: "approval.clicked", summary: "Approved by Hannah (head office), Williamsburg.", storeId: wb.id, editionId: mockEditionId(wb.id), ok: true },
@@ -61,8 +61,8 @@ export const mockCommsDeliveries: Delivery[] = [
 export const mockStoreNotes: StoreNote[] = [
   {
     id: "note_sample_1", editionId: mockEditionId(wb.id), storeId: wb.id, at: at(-2), provider: "gmail", fromEmail: "dana.okafor@example.com", fromName: "Dana Okafor",
-    category: "sold_out", summary: "Cardamom bun sold out by 11am on Monday and Tuesday.",
-    excerpt: "Hi, the cardamom bun was gone by 11 both days. Could we get a bigger batch from the bakery next week? Thanks, Dana",
+    category: "sold_out", summary: "Orange Peel Cortado sold out by 11am on Monday and Tuesday.",
+    excerpt: "Hi, the Orange Peel Cortado was gone by 11 both days. Could we get more orange peel in the Thursday delivery? Thanks, Dana",
     threadId: "thr_sample_williamsburg", messageId: "msg_sample_williamsburg_1",
   },
   {

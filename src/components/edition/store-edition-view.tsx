@@ -16,8 +16,10 @@ import { ItemBlock } from "./item-block";
 import { EventContent, PartnerContent, SoundContent, SpecialContent } from "./item-content";
 import { ReviewNote } from "./review-note";
 import { StaffCardButton } from "./staff-card-button";
+import { StoreReplies } from "./store-replies";
 import { useDeliveries } from "./use-deliveries";
 import { useItemActions } from "./use-item-actions";
+import { useStoreReplies } from "./use-store-replies";
 
 /** /app/stores/[storeId]: the store's edition as a small front page. */
 export function StoreEditionView({ storeId }: { storeId: string }) {
@@ -27,7 +29,8 @@ export function StoreEditionView({ storeId }: { storeId: string }) {
   const edition = w.editionForStore(storeId);
   const profile = useAsync(store ? `profile:${storeId}` : null, () => api.getStoreProfile(storeId));
   const actions = useItemActions(edition);
-  const deliveries = useDeliveries(edition?.id);
+  const deliveries = useDeliveries(edition?.id, edition?.items.map((i) => `${i.id}:${i.status}`).join(","));
+  const replies = useStoreReplies(edition?.id);
   const [drawer, setDrawer] = useState<EditionItem | null>(null);
 
   if (w.error && !w.bundle) return <ErrorState message={w.error.message} onRetry={w.reload} />;
@@ -123,6 +126,7 @@ export function StoreEditionView({ storeId }: { storeId: string }) {
       </div>
 
       <DeliveryStrip deliveries={deliveries} />
+      <StoreReplies edition={edition} replies={replies} actions={actions} readOnly={readOnly} />
       {w.bundle.chain.isSample ? (
         <p className="border-t border-rule pt-3 text-[12px] text-muted">
           Sample chain: the stores, partner places and event listings are invented for the demo. Nothing here is a real customer.

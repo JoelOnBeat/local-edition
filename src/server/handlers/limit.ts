@@ -1,15 +1,10 @@
 import { clientIp, ipHash, rateLimit } from "../limits";
+import { SPEND_LIMITS } from "../limits-table";
 import { DEMO_WORKSPACE_ID } from "../session";
 import { ADMISSION_USD, chargeSpendBudget } from "../spend-budget";
 import type { WsContext } from "./ws";
 
-/** Bucket sizes for the routes that spend model credits: a burst, then a steady refill per minute. */
-const LIMITS = {
-  build: { workspace: { capacity: 4, refillPerMinute: 1 }, ip: { capacity: 12, refillPerMinute: 3 } },
-  regenerate: { workspace: { capacity: 10, refillPerMinute: 4 }, ip: { capacity: 30, refillPerMinute: 10 } },
-  card: { workspace: { capacity: 10, refillPerMinute: 5 }, ip: { capacity: 30, refillPerMinute: 10 } },
-  edit: { workspace: { capacity: 30, refillPerMinute: 20 }, ip: { capacity: 90, refillPerMinute: 40 } },
-} as const;
+const LIMITS = SPEND_LIMITS;
 
 export type SpendAction = keyof typeof LIMITS;
 

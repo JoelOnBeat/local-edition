@@ -9,21 +9,8 @@ import { EvalBlock, JobRuns, Section, Stat } from "./proof-parts";
 
 /** What actually ran: which model did which step, the Ultra review, the guardrail eval, the Nebius jobs. */
 
-const STEPS = [
-  { step: "Edition agent", model: "nvidia/Nemotron-3.5-Super-VL", does: "Plans each store's edition and calls the Qloo, Tavily and menu tools." },
-  { step: "Menu photo read", model: "nvidia/Nemotron-3.5-Super-VL", does: "Reads items and prices from a menu-board photo, then checks its own reading." },
-  { step: "Copy", model: "nvidia/Nemotron-3_5-Lightning", does: "Writes the special, the sound brief, the event and the staff card in the chain's voice." },
-  { step: "Live guardrail check", model: "nvidia/Nemotron-3_5-Lightning", does: "NeMo's self-check prompt on every line, inside the Worker, before anything is a draft." },
-  { step: "Chain review", model: "nvidia/Nemotron-3-Ultra-550b-a55b", does: "Reads every store's edition together and flags clashes between stores." },
-  { step: "Matching and ranking", model: "Qwen/Qwen3-Embedding-8B", does: "Matches the block's flavours to menu items and ranks partner places." },
-  { step: "Certification", model: "NeMo Guardrails library", does: "Runs in a Nebius Serverless Job over every item and card, started from the CLI." },
-];
-
-async function load() {
-  const api = getApi();
-  const [proof, ws] = await Promise.all([api.getProof(), api.getWorkspace().catch(() => null)]);
-  return { proof, ws };
-}
+/** Public page: everything comes from /api/proof, so a visitor who only reads it is never given a workspace. */
+const load = () => getApi().getProof();
 
 export function ProofView() {
   const q = useAsync("proof", load);
@@ -37,12 +24,10 @@ export function ProofView() {
   }
   if (q.error || !q.data) return <div data-testid="proof-error"><ErrorState message={q.error?.message ?? "The proof did not load."} onRetry={q.reload} /></div>;
 
-  const { proof, ws } = q.data;
-  const editions = ws?.latestEditions ?? [];
-  const stores = ws?.stores ?? [];
-  const reviewed = editions.filter((e) => e.review);
-  const needs = reviewed.filter((e) => e.review?.verdict === "needs_change");
-  const seen = new Set([...editions.map((e) => e.generatedBy.agentModel), ...editions.map((e) => e.generatedBy.copyModel), ...reviewed.map((e) => e.review!.reviewedBy)]);
+  const proof = q.data;
+  const reviewed = proof.reviews;
+  const needs = reviewed.filter((r) => r.verdict === "needs_change");
+  const seen = new Set(proof.seenModels);
   const latestCertify = proof.jobRuns.find((r) => r.mode === "certify");
 
   return (
@@ -50,7 +35,7 @@ export function ProofView() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat testId="proof-spend-per-edition" label="Model spend per edition" value={proof.spendPerEditionUsd === null ? "n/a" : formatUsd(proof.spendPerEditionUsd)} sub="Token Factory, averaged" />
         <Stat testId="proof-cached-ratio" label="Prompt served from cache" value={proof.cachedRatio === null ? "n/a" : pct(proof.cachedRatio)} sub="Token Factory prefix cache" />
-        <Stat testId="proof-reviewed" label="Editions reviewed by Ultra" value={`${reviewed.length}/${editions.length}`} sub={`${needs.length} sent back with a change`} />
+        <Stat testId="proof-reviewed" label="Editions reviewed by Ultra" value={`${reviewed.length}/${proof.editionCount}`} sub={`${needs.length} sent back with a change`} />
         <Stat testId="proof-catch-rate" label="Guardrail catch rate" value={proof.eval ? pct(proof.eval.catchRate) : "n/a"} sub={proof.eval ? `${pct(proof.eval.falsePositiveRate)} false positives` : "no eval yet"} />
       </div>
 
@@ -61,7 +46,7 @@ export function ProofView() {
               <tr><th className="px-4 py-2 font-semibold">Step</th><th className="px-4 py-2 font-semibold">Model</th><th className="px-4 py-2 font-semibold">What it does</th></tr>
             </thead>
             <tbody className="divide-y divide-rule">
-              {STEPS.map((s) => (
+              {proof.steps.map((s) => (
                 <tr key={s.step} data-testid="proof-model-row" data-seen={seen.has(s.model)} className="grid gap-1 px-4 py-3 md:table-row md:p-0">
                   <td className="font-semibold md:px-4 md:py-3">{s.step}</td>
                   <td className="md:px-4 md:py-3">
@@ -83,14 +68,12 @@ export function ProofView() {
           <p className="text-[14.5px] text-muted">No review has run on this week&apos;s editions yet. It runs from the portfolio.</p>
         ) : (
           <ul className="grid gap-2 md:grid-cols-2">
-            {reviewed.map((e) => {
-              const store = stores.find((s) => s.id === e.storeId);
-              const r = e.review!;
+            {reviewed.map((r) => {
               return (
-                <li key={e.id} data-testid="proof-review" data-store-id={e.storeId} data-verdict={r.verdict} className="grid gap-1.5 rounded-[var(--radius)] border border-rule bg-paper p-3.5">
+                <li key={r.storeId} data-testid="proof-review" data-store-id={r.storeId} data-verdict={r.verdict} className="grid gap-1.5 rounded-[var(--radius)] border border-rule bg-paper p-3.5">
                   <div className="flex items-center justify-between gap-2">
-                    <Link href={`/app/stores/${e.storeId}`} className="min-w-0 font-semibold hover:underline">
-                      <StoreSwatch colorIndex={store?.colorIndex ?? 1} name={store?.name ?? e.storeId} />
+                    <Link href={`/app/stores/${r.storeId}`} className="min-w-0 font-semibold hover:underline">
+                      <StoreSwatch colorIndex={r.colorIndex} name={r.storeName} />
                     </Link>
                     <Chip tone={r.verdict === "approve" ? "ok" : "warn"} dot>{r.verdict === "approve" ? "Approve" : "Needs a change"}</Chip>
                   </div>

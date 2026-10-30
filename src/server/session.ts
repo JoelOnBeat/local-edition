@@ -140,6 +140,21 @@ export async function createVisitorWorkspace(repo: Repo): Promise<Workspace> {
 }
 
 /**
+ * The workspace a read-only public page should show: the visitor's own when their cookie names a live workspace, otherwise the
+ * canonical demo workspace if it exists, otherwise none. Never creates a workspace and never sets a cookie, so /proof and /limits
+ * stay public pages and a visitor who only reads them does not get a private copy.
+ */
+export async function peekWorkspace(request: Request, repo?: Repo): Promise<Workspace | null> {
+  const store = repo ?? (await getRepo());
+  const cookie = readCookie(request, WORKSPACE_COOKIE);
+  if (cookie && cookie !== DEMO_WORKSPACE_ID) {
+    const own = await store.getWorkspace(cookie);
+    if (own) return own;
+  }
+  return store.getWorkspace(DEMO_WORKSPACE_ID);
+}
+
+/**
  * Cookie -> workspace id. A missing, unknown or tampered cookie gets a fresh seeded workspace (rate
  * limited per IP). The `demo` id is never accepted from a cookie: it belongs to the weekly job.
  */

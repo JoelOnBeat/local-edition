@@ -1,9 +1,12 @@
-import type { z } from "zod";
-import { formatIfMatch, routes, type AgentEvent, type RouteId, type RouteOutput } from "@/contract";
+import { z } from "zod";
+import {
+  CommsState, ConnectionsResponse, DeliveriesResponse, RegenerateSuggestion, formatIfMatch, routes,
+  type AgentEvent, type RouteId, type RouteOutput,
+} from "@/contract";
 import { clientDataMode } from "./env";
 import { createMockApi } from "./mock-api";
-import { ApiClientError, type AgentEventStream, type ApiClient, type ApiClientOptions, type Out } from "./api-types";
-import { parseSseStream } from "./sse-client";
+import { ApiClientError, type SeqEvent, type AgentEventStream, type ApiClient, type ApiClientOptions, type Out } from "./api-types";
+import { parseSseFrames, parseSseStream } from "./sse-client";
 
 export { ApiClientError } from "./api-types";
 export type { AgentEventStream, ApiClient, ApiClientOptions, StreamOptions } from "./api-types";
@@ -33,6 +36,8 @@ async function toError(res: Response): Promise<ApiClientError> {
     return new ApiClientError(res.status, "http_error", `Request failed (${res.status}).`);
   }
 }
+
+const PollResponse = z.object({ checked: z.number().int().nonnegative(), newReplies: z.number().int().nonnegative() });
 
 function createHttpApi(baseUrl = "", fetchImpl: typeof fetch = (...a) => fetch(...a)): ApiClient {
   const send = async (id: RouteId, input: CallInput, signal?: AbortSignal): Promise<Response> => {
@@ -68,6 +73,31 @@ function createHttpApi(baseUrl = "", fetchImpl: typeof fetch = (...a) => fetch(.
     return parsed.data as RouteOutput<K>;
   };
 
+  /** A connector route: not in the `routes` table, so its path and response schema are given here. */
+  const call = async <T>(method: string, path: string, schema: z.ZodType<T>, body?: unknown): Promise<T> => {
+    let res: Response;
+    try {
+      res = await fetchImpl(`${baseUrl}${path}`, {
+        method,
+        headers: body === undefined ? undefined : { "content-type": "application/json" },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        credentials: "same-origin",
+      });
+    } catch {
+      throw new ApiClientError(0, "network", "Could not reach the server. Check your connection and try again.");
+    }
+    if (!res.ok) throw await toError(res);
+    const parsed = schema.safeParse(await res.json().catch(() => null));
+    if (!parsed.success) throw new ApiClientError(502, "invalid_response", "The server answered in an unexpected shape.");
+    return parsed.data;
+  };
+
+  async function* resume(afterSeq: number, signal?: AbortSignal): AsyncGenerator<SeqEvent> {
+    const res = await send("buildEditions", { headers: { "last-event-id": String(Math.max(0, Math.trunc(afterSeq))) }, body: {} }, signal);
+    if (!res.body) throw new ApiClientError(502, "no_stream", "The server did not open a stream.");
+    yield* parseSseFrames(res.body);
+  }
+
   async function* stream(id: RouteId, input: CallInput, signal?: AbortSignal): AgentEventStream {
     const res = await send(id, input, signal);
     if (!res.body) throw new ApiClientError(502, "no_stream", "The server did not open a stream.");
@@ -101,6 +131,13 @@ function createHttpApi(baseUrl = "", fetchImpl: typeof fetch = (...a) => fetch(.
     getLimits: () => json("getLimits"),
     reviewEditions: (body = {}, o) => stream("reviewEditions", { body }, o?.signal),
     generateBrandVoice: () => json("generateBrandVoice", { body: {} }),
+    listDeliveries: async (editionId) =>
+      (await call("GET", `/api/connectors/deliveries?editionId=${encodeURIComponent(editionId)}`, DeliveriesResponse)).deliveries,
+    getConnections: () => call("GET", "/api/connections", ConnectionsResponse),
+    getComms: () => call("GET", "/api/connectors/comms", CommsState),
+    patchSuggestion: (id, status) => call("PATCH", `/api/connectors/comms/suggestions/${encodeURIComponent(id)}`, RegenerateSuggestion, { status }),
+    pollMail: () => call("POST", "/api/connectors/mail/poll", PollResponse),
+    resumeBuild: (afterSeq, o) => resume(afterSeq, o?.signal),
     getPendingJobs: (signature) => json("getPendingJobs", { headers: { "x-le-signature": signature } }),
     postJobResults: (signature, body) => json("postJobResults", { headers: { "x-le-signature": signature }, body }),
     postJobEval: (signature, body) => json("postJobEval", { headers: { "x-le-signature": signature }, body }),

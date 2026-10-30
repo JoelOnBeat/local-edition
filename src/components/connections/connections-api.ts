@@ -1,23 +1,27 @@
 import { z } from "zod";
 import {
   CalendarFeedsResponse, SquareConnectResponse, SquareStatus, SquareSyncResponse,
-  type CalendarFeed, type Connection, type ConnectorProvider, type SyncEvent,
+  type CalendarFeed, type Connection, type ConnectionsResponse, type ConnectorProvider,
 } from "@/contract";
 import { CommsState, DigestResponse, MailConnectResponse } from "@/contract/connectors-comms";
+import { getApi } from "@/lib/api-client";
 import { ApiClientError } from "@/lib/api-types";
 import { clientDataMode } from "@/lib/env";
-import { mockCalendarFeeds, mockSquareDisconnected, mockSquareStatus } from "@/mocks/connectors-square";
-import { mockCommsState } from "@/mocks/connectors-comms";
+import { addMockEvent, mockConnectorState } from "@/lib/mock-connectors";
+import { mockSquareDisconnected, mockSquareStatus } from "@/mocks/connectors-square";
 
 /**
  * The connections page's data, read from the connector lanes' routes (B2 Square + calendar, B3 Slack + mail).
- * The shared api-client has no connector methods yet, so this file calls the routes directly and validates every answer with
- * the lanes' zod shapes. NEXT_PUBLIC_DATA_MODE=mock serves the lanes' sample mocks and simulates each action in memory.
+ * The merged log and connection list come from the shared api-client (`getConnections`); the per-lane details and the actions call the
+ * routes directly and validate every answer with the lanes' zod shapes. NEXT_PUBLIC_DATA_MODE=mock serves the shared mock
+ * connector state (src/lib/mock-connectors.ts) and simulates each action in memory.
  */
 
 export type Settled<T> = { ok: true; data: T } | { ok: false; error: string };
 
 export interface ConnectionsSnapshot {
+  /** The merged answer of GET /api/connections: every connection plus all sync events newest first. */
+  merged: Settled<ConnectionsResponse>;
   square: Settled<SquareStatus>;
   comms: Settled<CommsState>;
   calendar: Settled<CalendarFeed[]>;
@@ -47,61 +51,58 @@ async function call<T>(url: string, schema: z.ZodType<T>, init: { method?: strin
 const settle = <T,>(p: Promise<T>): Promise<Settled<T>> =>
   p.then((data) => ({ ok: true as const, data }), (e: unknown) => ({ ok: false as const, error: (e as Error)?.message || "Did not load." }));
 
+function resetSquare(next: SquareStatus) {
+  mockConnectorState().square = next;
+}
+
 const Ok = z.object({ ok: z.boolean() });
 const PollResponse = z.object({ checked: z.number(), newReplies: z.number() });
 
-// ---- mock state (mock mode only; resets on reload) ----
+// ---- mock mode: the shared connector state (src/lib/mock-connectors.ts), so actions here and approvals elsewhere show up together ----
 
-/** Moves the sample's fixed timestamps so its newest event was two minutes ago, as a live log would read. */
-const SHIFT_MS = Math.max(0, Date.now() - 120_000 - Math.max(...[...mockSquareStatus.events, ...mockCommsState.events].map((e) => Date.parse(e.at))));
-const move = <T extends string | null>(iso: T): T => (iso ? new Date(Date.parse(iso) + SHIFT_MS).toISOString() : iso) as T;
-const fresh = (c: Connection): Connection => ({ ...c, connectedAt: move(c.connectedAt), lastSyncAt: move(c.lastSyncAt) });
-const freshEvents = (es: SyncEvent[]) => es.map((e) => ({ ...e, at: move(e.at) }));
-const SAMPLE_SQUARE: SquareStatus = {
-  ...mockSquareStatus, connection: fresh(mockSquareStatus.connection), events: freshEvents(mockSquareStatus.events),
-  lastWebhookAt: move(mockSquareStatus.lastWebhookAt), lastCatalogChangeAt: move(mockSquareStatus.lastCatalogChangeAt),
-};
-const mock = {
-  square: structuredClone(SAMPLE_SQUARE),
-  comms: { ...structuredClone(mockCommsState), connections: mockCommsState.connections.map(fresh), events: freshEvents(mockCommsState.events) },
-  feeds: structuredClone(mockCalendarFeeds),
-};
 const wait = (ms = 350) => new Promise<void>((r) => setTimeout(r, ms));
 const now = () => new Date().toISOString();
-let seq = 0;
-function mockEvent(provider: ConnectorProvider, direction: "in" | "out", kind: string, summary: string, ok = true): SyncEvent {
-  return { id: `sync_local_${++seq}`, provider, at: now(), direction, kind, summary, storeId: null, editionId: null, ok };
-}
 function setComms(provider: "slack" | "gmail" | "outlook", patch: Partial<Connection>) {
-  mock.comms.connections = mock.comms.connections.map((c) => (c.provider === provider ? { ...c, ...patch } : c));
+  const st = mockConnectorState();
+  st.comms.connections = st.comms.connections.map((c) => (c.provider === provider ? { ...c, ...patch } : c));
 }
 
 const isMock = () => clientDataMode() === "mock";
 
 export async function loadConnections(): Promise<ConnectionsSnapshot> {
+  const merged = settle(getApi().getConnections());
   if (isMock()) {
     await wait();
-    return { square: { ok: true, data: structuredClone(mock.square) }, comms: { ok: true, data: structuredClone(mock.comms) }, calendar: { ok: true, data: structuredClone(mock.feeds) } };
+    const st = mockConnectorState();
+    return {
+      merged: await merged,
+      square: { ok: true, data: structuredClone(st.square) },
+      comms: { ok: true, data: structuredClone(st.comms) },
+      calendar: { ok: true, data: structuredClone(st.feeds) },
+    };
   }
-  const [square, comms, calendar] = await Promise.all([
+  const [all, square, comms, calendar] = await Promise.all([
+    merged,
     settle(call("/api/connectors/square", SquareStatus)),
     settle(call("/api/connectors/comms", CommsState)),
     settle(call("/api/connectors/calendar", CalendarFeedsResponse).then((r) => r.feeds)),
   ]);
-  return { square, comms, calendar };
+  return { merged: all, square, comms, calendar };
 }
 
 /** Starts a connection. Resolves to a URL when the browser must leave for the provider's consent page. */
 export async function connect(provider: ConnectorProvider, method: "sandbox" | "oauth" = "sandbox"): Promise<string | null> {
   if (isMock()) {
     await wait(700);
+    const st = mockConnectorState();
     if (provider === "square") {
-      mock.square = { ...structuredClone(SAMPLE_SQUARE), connection: { ...SAMPLE_SQUARE.connection, connectedAt: now(), lastSyncAt: now() }, events: [] };
-      mock.square.events = [mockEvent("square", "in", "menu.imported", "Imported 20 menu items and 8 locations from Square."), ...mock.square.events];
+      const events = st.square.events;
+      resetSquare({ ...structuredClone(mockSquareStatus), connection: { ...mockSquareStatus.connection, connectedAt: now(), lastSyncAt: now() }, events });
+      addMockEvent("square", "in", "menu.imported", "Imported 20 menu items and 8 locations from Square.");
     } else if (provider === "slack" || provider === "gmail" || provider === "outlook") {
       const label = provider === "slack" ? "Kettle & Kiln HQ (sample) · #head-office" : `headoffice@kettleandkiln.example (sample)`;
       setComms(provider, { status: "connected", mode: "sandbox", accountLabel: label, connectedAt: now(), lastSyncAt: now(), error: null });
-      mock.comms.events = [mockEvent(provider, "in", "connection.created", `Connected ${label}.`), ...mock.comms.events];
+      addMockEvent(provider, "in", "connection.created", `Connected ${label}.`);
     }
     return null;
   }
@@ -119,7 +120,7 @@ export async function connect(provider: ConnectorProvider, method: "sandbox" | "
 export async function disconnect(provider: ConnectorProvider): Promise<void> {
   if (isMock()) {
     await wait();
-    if (provider === "square") mock.square = structuredClone(mockSquareDisconnected);
+    if (provider === "square") resetSquare({ ...structuredClone(mockSquareDisconnected), events: mockConnectorState().square.events });
     else if (provider === "slack" || provider === "gmail" || provider === "outlook") {
       setComms(provider, { status: "not_connected", mode: null, accountLabel: null, connectedAt: null, lastSyncAt: null, error: null });
     }
@@ -133,16 +134,17 @@ export async function disconnect(provider: ConnectorProvider): Promise<void> {
 export async function runAction(provider: ConnectorProvider): Promise<string> {
   if (isMock()) {
     await wait(800);
+    const st = mockConnectorState();
     if (provider === "square") {
-      mock.square.events = [mockEvent("square", "in", "menu.synced", "Checked Square: menu unchanged, 20 items across 8 locations."), ...mock.square.events];
-      mock.square.connection = { ...mock.square.connection, lastSyncAt: now() };
+      addMockEvent("square", "in", "menu.synced", "Checked Square: menu unchanged, 20 items across 8 locations.");
+      st.square.connection = { ...st.square.connection, lastSyncAt: now() };
       return "Square checked: 20 items, nothing changed.";
     }
     if (provider === "slack") {
-      mock.comms.events = [mockEvent("slack", "out", "digest.posted", "Digest for 8 stores posted to #head-office."), ...mock.comms.events];
+      addMockEvent("slack", "out", "digest.posted", "Digest for 8 stores posted to #head-office.");
       return "Digest posted to #head-office for 8 stores.";
     }
-    mock.comms.events = [mockEvent(provider, "in", "mail.checked", "Checked the edition threads: no new replies."), ...mock.comms.events];
+    addMockEvent(provider, "in", "mail.checked", "Checked the edition threads: no new replies.");
     return "No new replies since the last check.";
   }
   if (provider === "square") {
@@ -162,7 +164,7 @@ export async function runAction(provider: ConnectorProvider): Promise<string> {
 export async function loadSquare(): Promise<SquareStatus> {
   if (isMock()) {
     await wait();
-    return structuredClone(mock.square);
+    return structuredClone(mockConnectorState().square);
   }
   return call("/api/connectors/square", SquareStatus);
 }

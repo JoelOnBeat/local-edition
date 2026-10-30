@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { Edition, EditionItem, WorkspaceBundle } from "@/contract";
 import { GET as limitsGET } from "@/app/api/limits/route";
 import { getWorkspace } from "@/server/handlers/workspace";
+import { ensureDemoWorkspace } from "@/server/session";
 import { LimitsBody } from "@/server/handlers/limits";
 import { LEDGER_KEYS } from "@/server/handlers/proof-ledger";
 import { recordDropped, recordEditions, recordStep, recordTavily } from "./ledger-helpers";
@@ -30,13 +31,35 @@ function editionFor(storeId: string, id: string, mutate: (items: EditionItem[]) 
 }
 
 describe("GET /api/limits", () => {
-  it("on a fresh workspace: counters are zero, rates are null, every store lacks an edition", async () => {
+  it("for a visitor with no workspace: counters are zero, rates are null, no workspace is created, no cookie is set", async () => {
     const { res, body } = await limits();
     expect(res.status).toBe(200);
-    expect(res.headers.get("set-cookie")).toMatch(/^le_ws=/); // workspace data is involved, so the visitor gets a workspace
+    expect(res.headers.get("set-cookie")).toBeNull();
     expect(body).toMatchObject({ droppedForEvidence: 0, guardrailBlocks: 0, falsePositiveRate: null, costPerEditionUsd: null, tavilyCreditsUsed: 0 });
-    expect(body.qlooCoverageGaps).toHaveLength(8);
-    expect(body.qlooCoverageGaps[0]).toMatch(/no edition has been built yet/);
+    expect(body.qlooCoverageGaps).toEqual([]); // no demo workspace in this store: nothing to report on
+    expect(await repo.getWorkspace("demo")).toBeNull();
+  });
+
+  it("without a cookie it reads the demo workspace; with a cookie it reads the visitor's own", async () => {
+    await ensureDemoWorkspace(repo);
+    const anon = await limits();
+    expect(anon.res.headers.get("set-cookie")).toBeNull();
+    expect(anon.body.qlooCoverageGaps).toHaveLength(8);
+    expect(anon.body.qlooCoverageGaps[0]).toMatch(/no edition has been built yet/);
+    const mine = await visit();
+    const own = await limits(mine.cookie);
+    expect(own.res.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("reports the Tavily total and daily slice, Qloo's calls against 300 and 40, the rate limits and the visitor budgets from the server", async () => {
+    await recordTavily(repo, 3);
+    const { body } = await limits();
+    expect(body.tavily).toEqual({ used: 3, cap: 80, dailyUsed: 3, dailyCap: 10 });
+    expect(body.qloo).toMatchObject({ cap: 300, dailyCap: 40 });
+    expect(body.qloo!.used).toBeGreaterThanOrEqual(0);
+    expect(body.rateLimits.map((r) => r.action)).toEqual(expect.arrayContaining(["Build editions", "Search Qloo brands", "Read a menu photo"]));
+    expect(body.rateLimits.find((r) => r.action === "Build editions")).toEqual({ action: "Build editions", workspace: "4, then 1 a minute", ip: "12, then 3 a minute" });
+    expect(body.visitorBudgets).toEqual({ workspaceUsd: 0.4, networkDailyUsd: 0.8, demoFloorUsd: 1.5 });
   });
 
   it("reads the counters and rates that were recorded", async () => {
@@ -102,6 +125,7 @@ describe("GET /api/limits", () => {
     await repo.cachePut("tv:credits:global:v1", { total: -5, day: "x", dayUsed: "lots" }, 3600);
     const { res, body } = await limits(cookie);
     expect(res.status).toBe(200);
+    expect(body.tavily.used).toBe(0);
     expect(body.droppedForEvidence).toBe(0);
     expect(body.tavilyCreditsUsed).toBe(0);
   });

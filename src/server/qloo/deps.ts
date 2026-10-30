@@ -49,4 +49,4 @@ export function resolveDeps(partial: Partial<QlooDeps> = {}): QlooDeps {
   };
 }
 
-export const TTL = { baseline: 24 * 3600, search: 24 * 3600, profile: 6 * 3600, compare: 6 * 3600 } as const;
+export const TTL = { baseline: 24 * 3600, search: 14 * 24 * 3600, profile: 6 * 3600, compare: 6 * 3600 } as const;

@@ -5,12 +5,15 @@ import { isEntityId } from "./types";
 
 const BRAND = "urn:entity:brand";
 
+/** The cache key of one brand search, so a caller can look before it spends. */
+export const brandSearchKey = (q: string, take = 8): string => `qloo:search:brand:v1:${take}:${q.trim().slice(0, 80).toLowerCase()}`;
+
 /** Brand lookup for the "which brands do you resemble" picker. `/search` takes names, not ids. */
 export async function searchBrands(q: string, partial?: Partial<QlooDeps>, take = 8): Promise<QlooEntityRef[]> {
   const deps = resolveDeps(partial);
   const query = q.trim().slice(0, 80);
   if (!query) return [];
-  const key = `qloo:search:brand:v1:${take}:${query.toLowerCase()}`;
+  const key = brandSearchKey(query, take);
   const hit = await deps.cache.get<QlooEntityRef[]>(key);
   if (hit) return hit;
   const call = await deps.client.search({ query, types: BRAND, take });

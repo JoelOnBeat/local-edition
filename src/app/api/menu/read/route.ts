@@ -1,3 +1,4 @@
+import { MENU_READ_LIMITS } from "@/server/limits-table";
 import { routes } from "@/contract";
 import { wsRoute } from "@/server/handlers/ws";
 import { ipLimited, rateLimit } from "@/server/limits";
@@ -15,7 +16,7 @@ import { stashPhoto } from "@/server/tokenfactory/menu-photo";
  * IP (before the upload is read) and per workspace, and its spend is reserved against the shared cap.
  */
 const read = wsRoute(routes.readMenu, async ({ body }, { workspace }) => {
-  await rateLimit({ key: `menu-read:ws:${workspace.id}`, capacity: 6, refillPerMinute: 3 });
+  await rateLimit({ key: `menu-read:ws:${workspace.id}`, ...MENU_READ_LIMITS.workspace });
   const bytes = new Uint8Array(await body.image.arrayBuffer());
   const mime = requireMenuImage(bytes);
   await stashPhoto(workspace.id, bytes, mime);
@@ -25,4 +26,4 @@ const read = wsRoute(routes.readMenu, async ({ body }, { workspace }) => {
   });
 });
 
-export const POST = ipLimited({ name: "menu-read", capacity: 12, refillPerMinute: 6 }, read);
+export const POST = ipLimited({ name: "menu-read", ...MENU_READ_LIMITS.ip }, read);

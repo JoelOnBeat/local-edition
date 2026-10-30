@@ -6,7 +6,8 @@ import { LEDGER_KEYS, recordJobRun } from "@/server/handlers/proof-ledger";
 import { recordEditions, recordStep } from "./ledger-helpers";
 import { mockEval, mockJobRuns, MOCK_CERTIFY_SHA } from "@/mocks/upgrade-data";
 import type { Repo } from "@/server/store";
-import { freshApp, req } from "../e/helpers";
+import { ensureDemoWorkspace } from "@/server/session";
+import { cleanEdition, freshApp, req } from "../e/helpers";
 
 const GIT = "3f9c2ab71d0e4c5a8b6f1e2d3c4b5a69788796a5";
 const saved = { ...process.env };
@@ -28,7 +29,7 @@ describe("GET /api/proof", () => {
     const res = await get();
     expect(res.status).toBe(200);
     expect(res.headers.get("set-cookie")).toBeNull();
-    expect(await body(res)).toEqual({ jobRuns: [], eval: null, scriptSha: null, gitSha: null, spendPerEditionUsd: null, cachedRatio: null });
+    expect(await body(res)).toMatchObject({ jobRuns: [], eval: null, scriptSha: null, gitSha: null, spendPerEditionUsd: null, cachedRatio: null, seenModels: [], editionCount: 0, reviews: [] });
   });
 
   it("returns the newest run of each mode with its job id, newest first", async () => {
@@ -110,6 +111,26 @@ describe("GET /api/proof", () => {
     process.env.NEBIUS_API_KEY = "nb-secret-value";
     const text = await (await get()).text();
     expect(text).not.toContain("secret");
-    expect(Object.keys(JSON.parse(text)).sort()).toEqual(["cachedRatio", "eval", "gitSha", "jobRuns", "scriptSha", "spendPerEditionUsd"]);
+    expect(Object.keys(JSON.parse(text)).sort()).toEqual(["cachedRatio", "editionCount", "eval", "gitSha", "jobRuns", "reviews", "scriptSha", "seenModels", "spendPerEditionUsd", "steps"]);
+  });
+
+  it("names the model per step from the server's model table", async () => {
+    const { steps } = await body(await get());
+    expect(steps.find((s) => s.step === "Edition agent")?.model).toBe("nvidia/Nemotron-3.5-Super-VL");
+    expect(steps.find((s) => s.step === "Chain review")?.model).toBe("nvidia/Nemotron-3-Ultra-550b-a55b");
+    expect(steps.find((s) => s.step === "Copy")?.model).toBe("nvidia/Nemotron-3_5-Lightning");
+  });
+
+  it("reads the demo workspace's editions and reviews without creating a workspace or a cookie", async () => {
+    const demo = await ensureDemoWorkspace(repo);
+    const [store] = await repo.listStores(demo.chainId);
+    const e = cleanEdition(store.id, "ed_demo_proof");
+    await repo.putEdition({ ...e, storeId: store.id, review: { verdict: "needs_change", reason: "Two stores push the same special.", clashWith: [], hint: "Swap the Astoria special.", reviewedBy: "nvidia/Nemotron-3-Ultra-550b-a55b", at: "2026-10-30T10:00:00.000Z" } });
+    const res = await get();
+    expect(res.headers.get("set-cookie")).toBeNull();
+    const b = await body(res);
+    expect(b.editionCount).toBe(1);
+    expect(b.reviews).toEqual([expect.objectContaining({ storeId: store.id, storeName: store.name, verdict: "needs_change", hint: "Swap the Astoria special." })]);
+    expect(b.seenModels).toContain("nvidia/Nemotron-3-Ultra-550b-a55b");
   });
 });

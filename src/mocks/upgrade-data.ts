@@ -1,5 +1,8 @@
 import type { BrandVoiceResponse, EvalResult, JobRun, LimitsResponse, MenuItem, ProofResponse } from "@/contract";
+import { PROOF_STEPS, reviewsOf, seenModels } from "@/server/handlers/proof-steps";
+import { rateLimitRows } from "@/server/limits-table";
 import { SAMPLE_MENU, SAMPLE_STORES } from "@/server/sample/chain";
+import { mockEditions } from "./editions";
 import { MOCK_EVAL_ROWS } from "./eval-rows";
 import { evidence, fakeEntityId } from "./helpers";
 import { MOCK_MODEL_IDS, allStoreSteps, sumMetrics } from "./metrics";
@@ -7,10 +10,10 @@ import { MOCK_CERTIFY_JOB_ID } from "./upgrade-editions";
 
 /** Upgrade payloads: the menu verify pass, one JobRun per mode, the eval result, /api/proof and /api/limits. */
 
-/** The sample menu as the VL verify pass leaves it: every item seen, one price too smudged to read. */
+/** The sample menu as the connected Square sandbox holds it (source "square"); every item seen, one price too smudged to read in a photo read. */
 export const mockMenu: MenuItem[] = SAMPLE_MENU.map((m) => ({
   ...m,
-  source: "vl",
+  source: "square",
   seen: true,
   priceLegible: m.id !== "menu_pour-over",
 }));
@@ -75,6 +78,10 @@ export const mockProof: ProofResponse = {
   gitSha: MOCK_GIT_SHA,
   spendPerEditionUsd,
   cachedRatio: buildSteps.cachedRatio,
+  steps: PROOF_STEPS,
+  seenModels: seenModels(mockEditions),
+  editionCount: mockEditions.length,
+  reviews: reviewsOf(mockEditions, SAMPLE_STORES),
 };
 
 export const mockLimits: LimitsResponse = {
@@ -88,6 +95,11 @@ export const mockLimits: LimitsResponse = {
   ],
   costPerEditionUsd: spendPerEditionUsd,
   tavilyCreditsUsed: 11,
+  // Mirrors src/server/tavily/budget.ts (80 total, 10 a day), src/server/qloo/ledger.ts (300 total, 40 a day) and src/server/spend-budget.ts.
+  tavily: { used: 11, cap: 80, dailyUsed: 10, dailyCap: 10 },
+  qloo: { used: 34, cap: 300, dailyUsed: 12, dailyCap: 40 },
+  rateLimits: rateLimitRows(),
+  visitorBudgets: { workspaceUsd: 0.4, networkDailyUsd: 0.8, demoFloorUsd: 1.5 },
 };
 
 /** One Tavily crawl of the chain's own pages, then Lightning writes three lines in that voice. */

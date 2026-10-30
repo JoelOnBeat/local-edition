@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "vendor:maplibre": "node scripts/vendor-maplibre-worker.mjs",
+    "predev": "node scripts/vendor-maplibre-worker.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/vendor-maplibre-worker.mjs",
     "build": "next build",
     "start": "next start",
     "typecheck": "next typegen && tsc --noEmit",

@@ -9,26 +9,6 @@ import { Section, Stat } from "../../proof/_parts/proof-parts";
 
 /** Spend, budgets, rate limits and the places the data runs thin. */
 
-/** Mirrors src/server/spend-budget.ts and src/server/tavily/budget.ts (30 Oct). The API does not report these yet. */
-const VISITOR_BUDGETS = [
-  { label: "Per workspace", value: "$0.40", note: "for the life of your private copy" },
-  { label: "Per network, per day", value: "$0.80", note: "the address is hashed, never stored" },
-  { label: "Held back for the demo", value: "$1.50", note: "so the sample chain and the weekly rebuild always have room" },
-];
-const TAVILY_TOTAL = 80;
-const TAVILY_DAILY = 10;
-
-/** Mirrors src/server/handlers/limit.ts and the menu, anchors and brand-voice routes (30 Oct). */
-const RATE_LIMITS = [
-  { action: "Build editions", workspace: "4, then 1 a minute", ip: "12, then 3 a minute" },
-  { action: "Regenerate an item", workspace: "10, then 4 a minute", ip: "30, then 10 a minute" },
-  { action: "Staff card", workspace: "10, then 5 a minute", ip: "30, then 10 a minute" },
-  { action: "Edit an item", workspace: "30, then 20 a minute", ip: "90, then 40 a minute" },
-  { action: "Read a menu photo", workspace: "6, then 3 a minute", ip: "shared with the workspace" },
-  { action: "Search Qloo brands", workspace: "30, then 30 a minute", ip: "shared with the workspace" },
-  { action: "Draft brand voice", workspace: "3, then 1 a minute", ip: "shared with the workspace" },
-];
-
 const MODE_TEXT: Record<ProviderStatus["qloo"], string> = {
   live: "Live", replay: "Recorded answers", fixture: "Sample answers", cache: "Cached answers", "missing-key": "No key: sample answers",
 };
@@ -68,6 +48,12 @@ export function LimitsView() {
   if (q.error || !q.data) return <div data-testid="limits-error"><ErrorState message={q.error?.message ?? "The limits did not load."} onRetry={q.reload} /></div>;
   const { limits, status } = q.data;
   const { usd, capUsd } = status.spend;
+  const { tavily, qloo, rateLimits, visitorBudgets } = limits;
+  const visitorBudgetCards = [
+    { label: "Per workspace", value: formatUsd(visitorBudgets.workspaceUsd), note: "for the life of your private copy" },
+    { label: "Per network, per day", value: formatUsd(visitorBudgets.networkDailyUsd), note: "the address is hashed, never stored" },
+    { label: "Held back for the demo", value: formatUsd(visitorBudgets.demoFloorUsd), note: "so the sample chain and the weekly rebuild always have room" },
+  ];
 
   return (
     <div className="grid gap-12">
@@ -77,7 +63,7 @@ export function LimitsView() {
           <p className="font-mono text-[13px] text-ink-2">{formatUsd(usd)} of {formatUsd(capUsd)} cap</p>
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
-          {VISITOR_BUDGETS.map((b) => <Stat key={b.label} label={b.label} value={b.value} sub={b.note} />)}
+          {visitorBudgetCards.map((b) => <Stat key={b.label} label={b.label} value={b.value} sub={b.note} />)}
         </div>
         <Stat testId="limits-cost-per-edition" label="Average cost of one edition" value={limits.costPerEditionUsd === null ? "n/a" : formatUsd(limits.costPerEditionUsd)} sub="all model calls for one store, one week" />
       </Section>
@@ -89,9 +75,17 @@ export function LimitsView() {
               <span className="font-display text-[19px] font-bold">Qloo</span>
               <Chip data-testid="limits-qloo-mode" data-mode={status.qloo} tone={status.qloo === "live" ? "ok" : "warn"} mono>{MODE_TEXT[status.qloo]}</Chip>
             </div>
+            {qloo ? (
+              <>
+                <Meter testId="limits-qloo" used={qloo.used} cap={qloo.cap} label={`${qloo.used} of ${qloo.cap} live calls`} />
+                <p data-testid="limits-qloo-today" className="font-mono text-[12.5px] text-ink-2">{qloo.dailyUsed} of {qloo.dailyCap} today</p>
+              </>
+            ) : (
+              <p data-testid="limits-qloo-unread" className="text-[13.5px] text-muted">The live-call counter could not be read just now.</p>
+            )}
             <p className="text-[14px] leading-[1.55] text-ink-2">
               Every Qloo answer is stored and reused, so judges read stored editions and regenerating an item never calls Qloo again.
-              Live calls stop at a hard cap. Only coordinates, brand ids and tag ids go to Qloo.
+              Live calls stop at a hard cap of {qloo?.cap ?? 300}, at most {qloo?.dailyCap ?? 40} a day. Only coordinates, brand ids and tag ids go to Qloo.
             </p>
           </div>
           <div className="grid content-start gap-3 rounded-[var(--radius)] border border-rule bg-paper p-5">
@@ -99,9 +93,10 @@ export function LimitsView() {
               <span className="font-display text-[19px] font-bold">Tavily</span>
               <Chip data-testid="limits-tavily-mode" data-mode={status.tavily} tone={status.tavily === "live" ? "ok" : "warn"} mono>{MODE_TEXT[status.tavily]}</Chip>
             </div>
-            <Meter testId="limits-tavily" used={limits.tavilyCreditsUsed} cap={TAVILY_TOTAL} label={`${limits.tavilyCreditsUsed} of ${TAVILY_TOTAL} credits`} />
+            <Meter testId="limits-tavily" used={tavily.used} cap={tavily.cap} label={`${tavily.used} of ${tavily.cap} credits`} />
+            <p data-testid="limits-tavily-today" className="font-mono text-[12.5px] text-ink-2">{tavily.dailyUsed} of {tavily.dailyCap} today</p>
             <p className="text-[14px] leading-[1.55] text-ink-2">
-              At most {TAVILY_DAILY} credits a day, enough for one full eight-store build. Past that, event nights use this week&apos;s saved listings.
+              At most {tavily.dailyCap} credits a day, enough for one full eight-store build. Past that, event nights use this week&apos;s saved listings.
             </p>
           </div>
         </div>
@@ -114,7 +109,7 @@ export function LimitsView() {
               <tr><th className="px-4 py-2 font-semibold">Action</th><th className="px-4 py-2 font-semibold">Per workspace</th><th className="hidden px-4 py-2 font-semibold sm:table-cell">Per network</th></tr>
             </thead>
             <tbody className="divide-y divide-rule">
-              {RATE_LIMITS.map((r) => (
+              {rateLimits.map((r) => (
                 <tr key={r.action}>
                   <td className="px-4 py-2.5">{r.action}</td>
                   <td className="px-4 py-2.5 font-mono text-[12.5px] text-ink-2">{r.workspace}</td>

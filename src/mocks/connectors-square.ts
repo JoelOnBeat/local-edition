@@ -18,7 +18,7 @@ export const mockSquareLocations: SquareStatus["locations"] = SAMPLE_STORES.map(
 export const mockSquareEvents: SyncEvent[] = [
   { id: "sync_sq_05", provider: "square", at: at(3), direction: "in", kind: "menu.changed", summary: "Menu changed in Square: Cortado is now $5.00 (was $4.75).", storeId: null, editionId: null, ok: true },
   { id: "sync_sq_04", provider: "square", at: at(3), direction: "in", kind: "webhook.received", summary: "Square sent catalog.version.updated; signature verified.", storeId: null, editionId: null, ok: true },
-  { id: "sync_sq_03", provider: "square", at: at(130), direction: "out", kind: "special.published", summary: "Published \"Cardamom Morning Bun with orange zest\" to Square at Williamsburg.", storeId: "store_williamsburg", editionId: mockEditionId("store_williamsburg"), ok: true },
+  { id: "sync_sq_03", provider: "square", at: at(130), direction: "out", kind: "special.published", summary: "Published \"Orange Peel Cortado\" to Square at Williamsburg.", storeId: "store_williamsburg", editionId: mockEditionId("store_williamsburg"), ok: true },
   { id: "sync_sq_02", provider: "square", at: at(1500), direction: "in", kind: "menu.imported", summary: "Imported 20 menu items and 8 locations from Square.", storeId: null, editionId: null, ok: true },
   { id: "sync_sq_01", provider: "square", at: at(1501), direction: "in", kind: "connection.created", summary: "Connected Kettle & Kiln (sample chain) to Square sandbox.", storeId: null, editionId: null, ok: true },
 ];
@@ -59,15 +59,15 @@ export const mockDeliveries = (editionId: string): Delivery[] => {
   if (!store) return [];
   return [
     {
-      provider: "square", editionId, itemId: null, status: "sent", externalId: "KKMORNINGBUN7Q2XA",
-      url: "https://squareupsandbox.com/dashboard/items/library/KKMORNINGBUN7Q2XA", at: at(130),
+      provider: "square", editionId, itemId: null, status: "sent", externalId: "KKORANGEPEEL7Q2XA",
+      url: "https://squareupsandbox.com/dashboard/items/library/KKORANGEPEEL7Q2XA", at: at(130),
       note: `Limited item at ${store.name}, $5.00. Idempotency key kept, so re-approving updates it.`,
     },
   ];
 };
 
 export const mockSales: SalesResponse = {
-  sales: [{ itemId: "item_special_williamsburg", name: "Cardamom Morning Bun with orange zest", sold: 37, since: at(130), readAt: MOCK_NOW }],
+  sales: [{ itemId: "item_special_williamsburg", name: "Orange Peel Cortado", sold: 37, since: at(130), readAt: MOCK_NOW }],
 };
 
 const feedUrl = (token: string) => `https://localedition.pages.dev/api/calendar/${token}.ics`;

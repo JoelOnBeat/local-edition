@@ -38,13 +38,31 @@ export async function realBuildPorts(): Promise<BuildPorts & { env: PlatformEnv 
       if (params.storeIds?.some((id) => !all.includes(id))) return null;
       return params.storeIds ?? all;
     },
+    // A Slack Regenerate click: the rewrite and the message update (settles its own failures).
+    async regenerate(workspaceId, job) {
+      const { runRegenerateJob } = await import("../connectors/slack/regenerate");
+      const { liveCommsDeps } = await import("../connectors/comms/deps");
+      await runRegenerateJob(await liveCommsDeps(), workspaceId, job);
+    },
+    // Slack's head-office digest once the run is done; the digest swallows its own failures.
+    async afterBuild(params, editionIds) {
+      await (await import("../connectors/slack/after-build")).postDigestAfterBuild(params.workspaceId, editionIds);
+    },
+    // The week's Tavily batch, once, before the first store (it does not fit inside one agent tool call's 25 s).
+    async prefetchEvents(params, storeIds) {
+      const workspace = await repo.getWorkspace(params.workspaceId);
+      const chain = workspace && (await repo.getChain(workspace.chainId));
+      if (!chain) return;
+      const stores = (await repo.listStores(chain.id)).filter((s) => storeIds.includes(s.id));
+      await (await getAgentDeps()).tavily.prefetchWeek?.(stores, chain);
+    },
     // The existing per-store pipeline (tool loop, evidence check, copy, guardrails, persist); one store per call.
     buildStore(storeId, params): AsyncIterable<AgentEvent> {
       return (async function* () {
         const deps = await getAgentDeps();
         // The lock is the run's, lent to the build so it neither takes nor releases one per store.
         const lock = ownedBuildLock(params.workspaceId, params.runId);
-        yield* buildEditions({ workspaceId: params.workspaceId, storeIds: [storeId], weekOf: params.weekOf, runId: params.runId, force: params.force, lock }, deps);
+        yield* buildEditions({ workspaceId: params.workspaceId, storeIds: [storeId], weekOf: params.weekOf, runId: params.runId, force: params.force, lock, skipPrefetch: true }, deps);
       })();
     },
   };

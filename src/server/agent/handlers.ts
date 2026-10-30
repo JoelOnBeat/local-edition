@@ -1,6 +1,8 @@
 import { routes } from "@/contract";
 import { HttpError } from "../http/errors";
+import type { AgentEvent } from "@/contract";
 import { sseResponse } from "../http/sse";
+import { runInBackground } from "../jobs/background";
 import { limitSpend } from "../handlers/limit";
 import { buildSpec } from "../handlers/specs";
 import { wsRoute } from "../handlers/ws";
@@ -12,6 +14,16 @@ import { getAgentDeps } from "./deps";
 import { regenerateItem } from "./regenerate";
 import { reviewEditions } from "./review";
 import { loadEditionAccess } from "./workspace";
+
+/** The inline build's `run_done` starts the Slack head-office digest in the background (the Workflow does the same in its own step). */
+async function* digestWhenDone(events: AsyncGenerator<AgentEvent>, workspaceId: string): AsyncGenerator<AgentEvent> {
+  for await (const e of events) {
+    if (e.type === "run_done" && e.editionIds.length) {
+      runInBackground(import("../connectors/slack/after-build").then((m) => m.postDigestAfterBuild(workspaceId, e.editionIds)));
+    }
+    yield e;
+  }
+}
 
 /**
  * POST /api/editions/build: SSE of AgentEvent. Bad store ids, the rate limit and a build already running
@@ -27,7 +39,7 @@ export const buildRoute = wsRoute(buildSpec, async ({ body }, ctx) => {
   const lock = await acquireBuildLock(ctx.repo, ctx.workspace.id);
   try {
     // buildEditions releases the lock when the stream ends or the client leaves.
-    const events = buildEditions({ workspaceId: ctx.workspace.id, storeIds: body.storeIds, force: body.force, lock }, deps);
+    const events = digestWhenDone(buildEditions({ workspaceId: ctx.workspace.id, storeIds: body.storeIds, force: body.force, lock }, deps), ctx.workspace.id);
     return sseResponse(events, { signal: ctx.request.signal });
   } catch (e) {
     await releaseBuildLock(ctx.repo, lock);

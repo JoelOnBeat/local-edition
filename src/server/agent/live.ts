@@ -14,6 +14,7 @@ import type { EventChainBatch, EventChainResult } from "../tavily";
 import { weekPhrase } from "../tavily/request";
 import { getTokenFactory } from "../tokenfactory";
 import { liveStoreSignals } from "../connectors/mail/inbound";
+import { createLogger } from "../log";
 import { getRepo } from "../store";
 import type { Repo } from "../store/repo";
 import type {
@@ -92,6 +93,8 @@ function qlooPort(repo: Repo): QlooPort {
   };
 }
 
+const log = createLogger("agent:live");
+
 /** One prefetch per chain and week per isolate, for a quarter of an hour: the stores of one build ask in turn and share it. */
 const PREFETCH_TTL_MS = 15 * 60_000;
 const prefetches = new Map<string, { at: number; run: Promise<EventChainBatch> }>();
@@ -111,23 +114,39 @@ export function resetTavilyPrefetch(): void {
  * results saved.
  */
 function tavilyPort(repo: Repo): TavilyPort {
+  /** The demo workspace's live batch for every store of the chain, shared by the prefetch step and the first store that asks. */
+  const liveBatch = async (store: Store, chain: Chain): Promise<EventChainBatch | undefined> => {
+    const opts = { workspaceId: workspaceOfChain(chain) };
+    if (!isDemoWorkspace(opts.workspaceId) || tavilyModeFor(serverEnv()).run !== "live") return undefined;
+    const stores = await repo.listStores(chain.id);
+    const all = stores.some((s) => s.id === store.id) ? stores : [store, ...stores];
+    const key = `${chain.id}|${weekPhrase(new Date())}`;
+    const memo = prefetches.get(key);
+    let entry = memo && Date.now() - memo.at < PREFETCH_TTL_MS ? memo : undefined;
+    if (!entry) {
+      entry = { at: Date.now(), run: prefetchEventChains(all, chain, opts) };
+      prefetches.set(key, entry);
+      entry.run.catch(() => prefetches.delete(key));
+    }
+    return entry.run;
+  };
   return {
+    /**
+     * The week's whole Tavily prefetch (8 searches and one page read live) as its own step, before the agent loop: it does not fit
+     * inside one tool call's 25 s. Results are saved, so `events_this_week` then reads the cache. Never throws: a store the prefetch
+     * could not cover falls back to saved events exactly as before.
+     */
+    async prefetchWeek(stores: Store[], chain: Chain) {
+      if (!stores.length) return;
+      try {
+        await liveBatch(stores[0], chain);
+      } catch (e) {
+        log.warn("week events prefetch failed; the agent will use saved events", { err: e });
+      }
+    },
     async eventsThisWeek(store: Store, chain: Chain) {
       const opts = { workspaceId: workspaceOfChain(chain) };
-      let r: EventChainResult | undefined;
-      if (isDemoWorkspace(opts.workspaceId) && tavilyModeFor(serverEnv()).run === "live") {
-        const stores = await repo.listStores(chain.id);
-        const all = stores.some((s) => s.id === store.id) ? stores : [store, ...stores];
-        const key = `${chain.id}|${weekPhrase(new Date())}`;
-        const memo = prefetches.get(key);
-        let entry = memo && Date.now() - memo.at < PREFETCH_TTL_MS ? memo : undefined;
-        if (!entry) {
-          entry = { at: Date.now(), run: prefetchEventChains(all, chain, opts) };
-          prefetches.set(key, entry);
-          entry.run.catch(() => prefetches.delete(key));
-        }
-        r = (await entry.run).results.get(store.id);
-      }
+      let r: EventChainResult | undefined = (await liveBatch(store, chain))?.results.get(store.id);
       r ??= await eventChain(store, chain, opts);
       if (r.fallback === "tavily_budget") throw new TavilyBudgetError(r.budgetReason ?? "daily");
       // Only the events Lightning kept become candidates; each carries the evidence row that backs its tie-in.

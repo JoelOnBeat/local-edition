@@ -9,7 +9,8 @@ import "maplibre-gl/dist/maplibre-gl.css";
 
 const STYLE_LIGHT = "https://tiles.openfreemap.org/styles/positron";
 const STYLE_DARK = "https://tiles.openfreemap.org/styles/dark";
-const WORKER_HOST = "https://cdn.jsdelivr.net/npm";
+/** MapLibre's worker, served from our own origin (scripts/vendor-maplibre-worker.mjs copies it from node_modules). */
+const WORKER_PATH = "/vendor/maplibre-gl-worker.mjs";
 
 function isDark(): boolean {
   const t = document.documentElement.dataset.theme;
@@ -56,8 +57,9 @@ export function PortfolioMap({ stores, statusOf, hot, onHot, onOpen }: {
     (async () => {
       const ml = await import("maplibre-gl");
       if (cancelled || !box.current) return;
-      // Bundlers rename the worker chunk, so point MapLibre at the published, self-contained worker of the same version.
-      if (!ml.getWorkerUrl().includes(WORKER_HOST)) ml.setWorkerUrl(`${WORKER_HOST}/maplibre-gl@${ml.getVersion()}/dist/maplibre-gl-worker.mjs`);
+      // Bundlers rename the worker chunk, so point MapLibre at the self-contained worker of the same version, vendored under public/.
+      const workerUrl = new URL(WORKER_PATH, window.location.origin).href;
+      if (ml.getWorkerUrl() !== workerUrl) ml.setWorkerUrl(workerUrl);
       let m: MlMap;
       try {
         m = new ml.Map({
