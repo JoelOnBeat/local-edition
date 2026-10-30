@@ -166,4 +166,18 @@ describe("L3: tail cost control", () => {
     await res2.body!.cancel();
     expect(closes).toBe(3);
   });
+  it("finishes onClose BEFORE the response body ends (Workers may cancel work still pending once the response is complete)", async () => {
+    const c = clock();
+    const { runLog, dispose } = await freshLog(c.now);
+    disposers.push(dispose);
+    await runLog.start("r1", "ws_a", 1);
+    await runLog.finish("r1", "done");
+    let released = false;
+    const onClose = async () => { await new Promise((r) => setTimeout(r, 20)); released = true; };
+    const res = tailRun({ runLog, runId: "r1", now: c.now, sleep: c.sleep, onClose });
+    const reader = res.body!.getReader();
+    let r = await reader.read();
+    while (!r.done) r = await reader.read();
+    expect(released).toBe(true);
+  });
 });

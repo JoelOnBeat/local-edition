@@ -54,11 +54,15 @@ export function tailRun(opts: TailOptions): Response {
   const heartbeatMs = opts.heartbeatMs ?? 15_000;
   const deadline = now() + (opts.maxMs ?? 20 * 60_000);
   let stopped = false;
-  let closed = false;
-  const closeOnce = () => {
-    if (closed) return;
-    closed = true;
-    void Promise.resolve(opts.onClose?.()).catch(() => undefined);
+  let closing: Promise<void> | null = null;
+  /**
+   * Runs `onClose` once. The caller awaits it BEFORE closing the response stream: once the response is complete, Workers
+   * may cancel work that is still pending, which left the tail slot (a D1 lock) held for its whole 21-minute TTL after
+   * every build and, after two builds, answered 429 `too_many_streams` (found on the first deploy, 30 Oct).
+   */
+  const closeOnce = (): Promise<void> => {
+    if (!closing) closing = Promise.resolve(opts.onClose?.()).then(() => undefined, () => undefined);
+    return closing;
   };
 
   const stream = new ReadableStream<Uint8Array>({
@@ -69,8 +73,7 @@ export function tailRun(opts: TailOptions): Response {
       const stop = () => {
         if (stopped) return;
         stopped = true;
-        try { controller.close(); } catch { /* already closed */ }
-        closeOnce();
+        void closeOnce().then(() => { try { controller.close(); } catch { /* already closed */ } });
       };
       opts.signal?.addEventListener("abort", stop, { once: true });
       send(": open\n\n");
@@ -121,13 +124,14 @@ export function tailRun(opts: TailOptions): Response {
         log.error("tail failed", { err: e });
         send(frame(cursor + 1, { type: "error", code: "stream_failed", message: "The run stopped unexpectedly." }));
       } finally {
-        stop();
-        closeOnce();
+        stopped = true;
+        await closeOnce();
+        try { controller.close(); } catch { /* already closed */ }
       }
     },
     cancel() {
       stopped = true;
-      closeOnce();
+      void closeOnce();
     },
   });
 
