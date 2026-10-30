@@ -55,7 +55,7 @@ export const MenuItem = z.object({
   price: z.number().nonnegative().nullable(),
   currency: z.literal("USD"),
   description: z.string().max(240).nullable(),
-  source: z.enum(["vl", "manual"]),
+  source: z.enum(["vl", "manual", "square"]),
   /** From the VL verify pass: the item was found on the photo. Absent means true. */
   seen: z.boolean().optional(),
   /** From the VL verify pass: the price could be read. Absent means true; false shows amber. */
@@ -213,6 +213,11 @@ export const Edition = z.object({
   createdAt: isoDateTime,
   /** The Ultra reviewer's verdict on this edition. Null or absent before a review has run. */
   review: EditionReview.nullable().optional(),
+  /** Set when a connected tool changed something this edition builds on ("menu changed in Square at 14:07"). Head office sees it on the edition. */
+  sourceChange: z
+    .object({ provider: z.literal("square"), at: isoDateTime, summary: z.string().min(1).max(240) })
+    .nullable()
+    .optional(),
 });
 export type Edition = z.infer<typeof Edition>;
 

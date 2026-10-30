@@ -7,3 +7,4 @@ export * from "./upgrade-editions";
 export * from "./upgrade-data";
 export * from "./eval-rows";
 export * from "./events";
+export * from "./connectors-square";

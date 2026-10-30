@@ -5,3 +5,4 @@ export * from "./route-spec";
 export * from "./routes-upgrade";
 export * from "./routes";
 export * from "./connectors";
+export * from "./connectors-square";
