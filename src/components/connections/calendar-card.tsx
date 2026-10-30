@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import type { CalendarFeed } from "@/contract";
-import { Card, Chip, EmptyState, ProviderBadge, buttonClass } from "@/components/ui";
+import { Chip, buttonClass, cx } from "@/components/ui";
+import { Icon } from "@/components/app-ui/icons";
+import { CalendarPreview, ToolTile } from "./tool-tile";
 
 /** The calendar feed: nothing to authorise, just a private link that Google or Outlook Calendar subscribes to. */
 
@@ -19,6 +21,7 @@ function CopyButton({ text }: { text: string }) {
   };
   return (
     <button data-testid="cal-copy" type="button" onClick={copy} className={buttonClass("ghost", "sm")}>
+      <Icon name={state === "copied" ? "check" : "copy"} size={14} />
       {state === "copied" ? "Copied" : state === "failed" ? "Copy failed" : "Copy link"}
     </button>
   );
@@ -38,52 +41,56 @@ export function CalendarCard({ feeds }: { feeds: CalendarFeed[] }) {
   const chain = feeds.find((f) => f.scope === "chain");
   const stores = feeds.filter((f) => f.scope === "store");
   const total = chain?.eventCount ?? stores.reduce((a, f) => a + f.eventCount, 0);
+  const [open, setOpen] = useState(false);
 
   return (
-    <Card className="flex min-w-0 flex-col gap-4 p-5" data-testid="conn-card-calendar" data-status={feeds.length ? "connected" : "not_connected"}>
-      <div className="grid gap-2">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <ProviderBadge provider="calendar" label="Google and Outlook Calendar" className="text-[15px] font-semibold text-ink [&>span:first-child]:h-6 [&>span:first-child]:min-w-6 [&>span:first-child]:text-[11px]" />
-          <Chip tone={feeds.length ? "ok" : "neutral"} dot>{feeds.length ? "Feed ready" : "No feed yet"}</Chip>
-        </div>
-        <p className="text-[13.5px] text-muted">
-          A private feed of approved event nights. Subscribe once; new events appear as head office approves them.
-        </p>
+    <ToolTile
+      provider="calendar"
+      testId="conn-card-calendar"
+      dataStatus={feeds.length ? "connected" : "not_connected"}
+      preview={<CalendarPreview count={total} />}
+      status={<Chip tone={feeds.length ? "ok" : "neutral"} dot={feeds.length > 0}>{feeds.length ? "Feed ready" : "No feed yet"}</Chip>}
+    >
+      <div className="grid gap-1">
+        <h3 className="text-[14px] font-medium leading-5 text-ink">Google and Outlook Calendar</h3>
+        <p className="text-[14px] leading-5 text-ink-2">A private feed of approved event nights: subscribe once and new nights appear as head office approves them. Anyone with the link sees the feed, so keep it inside the team.</p>
       </div>
 
       {feeds.length === 0 ? (
-        <EmptyState title="No event nights yet" body="The feed appears once an edition with an event night is approved." className="py-6" />
+        <p className="flex gap-2 rounded-lg bg-paper-2 px-3 py-2.5 text-[13px] leading-5 text-ink-2 shadow-[inset_0_0_0_1px_var(--rule-subtle)]">
+          <Icon name="info" size={14} className="mt-[3px] shrink-0 text-faint" />
+          The feed appears once an edition with an event night is approved.
+        </p>
       ) : (
         <>
           {chain ? (
-            <div className="grid gap-2">
-              <p className="text-[14px] text-ink">
-                <span className="font-semibold" data-testid="cal-event-count" data-count={total}>Every store</span> · {total} {total === 1 ? "event night" : "event nights"} in the feed
+            <div className="grid gap-2.5">
+              <p className="text-[13px] leading-5 text-ink-2">
+                <span className="font-medium text-ink-strong" data-testid="cal-event-count" data-count={total}>Every store</span> · <span className="tnum">{total}</span> {total === 1 ? "event night" : "event nights"} in the feed
               </p>
               <FeedLinks feed={chain} />
             </div>
           ) : null}
           {stores.length ? (
-            <details className="group rounded-[var(--radius)] border border-rule">
-              <summary className="cursor-pointer list-none px-3 py-2 text-[13.5px] font-medium text-ink-2 marker:hidden">
-                <span className="mr-1 inline-block transition-transform group-open:rotate-90" aria-hidden>›</span>
-                One feed per store ({stores.length})
-              </summary>
-              <ul className="divide-y divide-rule border-t border-rule">
-                {stores.map((f) => (
-                  <li key={f.url} className="grid gap-2 px-3 py-3">
-                    <p className="text-[13.5px] text-ink">
-                      {f.label} <span className="font-mono text-[12px] text-muted">· {f.eventCount}</span>
-                    </p>
-                    <FeedLinks feed={f} />
-                  </li>
-                ))}
-              </ul>
-            </details>
+            <div className="rounded-lg shadow-[inset_0_0_0_1px_var(--rule)]">
+              <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className={cx("flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] font-medium text-ink-2 transition-colors hover:bg-stone-50", open && "bg-stone-50")}>
+                <Icon name="chevronRight" size={14} className={cx("shrink-0 text-faint transition-transform duration-200", open && "rotate-90")} />
+                One feed per store <span className="text-muted tnum">({stores.length})</span>
+              </button>
+              {open ? (
+                <ul className="le-pop divide-y divide-rule-row border-t border-rule-subtle">
+                  {stores.map((f) => (
+                    <li key={f.url} className="grid gap-2 px-3 py-3">
+                      <p className="text-[13px] font-medium text-ink-strong">{f.label} <span className="font-normal text-muted tnum">· {f.eventCount}</span></p>
+                      <FeedLinks feed={f} />
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
           ) : null}
-          <p className="text-[12.5px] text-muted">Treat these links as private: anyone with one can see that feed&apos;s events.</p>
         </>
       )}
-    </Card>
+    </ToolTile>
   );
 }

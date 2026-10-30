@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { ButtonLink, CardBand, EmptyState, ErrorState, Pill, Skeleton } from "../ui";
 import { Band, Gap, Page, PageHeader } from "../app-ui/frame";
 import { Icon } from "../app-ui/icons";
@@ -9,13 +9,14 @@ import { SkeletonRows } from "../app-ui/states";
 import { formatDate } from "../lib/format";
 import { useWorkspace } from "../app/workspace-context";
 import { WeekPicker, shortChainName } from "../app/shell-controls";
+import { LastRunCard } from "../runs/last-run-card";
 import { BuildButton } from "./build-button";
 import { PortfolioFilters, matches, type Filter } from "./portfolio-filters";
 import { MapLegend, PortfolioMap } from "./portfolio-map";
 import { StatusTable } from "./status-table";
 
 /** /app: the chain's week at a glance. Counts that filter, a search, the map beside the table, one primary action. */
-export function PortfolioView({ aside }: { aside?: ReactNode }) {
+export function PortfolioView() {
   const router = useRouter();
   const w = useWorkspace();
   const [hot, setHot] = useState<string | null>(null);
@@ -88,7 +89,7 @@ export function PortfolioView({ aside }: { aside?: ReactNode }) {
                 <CardBand title="Stores on the map" actions={<MapLegend />} flush bodyClassName="overflow-hidden">
                   <PortfolioMap stores={shown} statusOf={(id) => w.editionForStore(id)?.status ?? "none"} hot={hot} onHot={setHot} onOpen={open} />
                 </CardBand>
-                {aside}
+                <LastRunCard />
               </div>
               <StatusTable
                 stores={shown}

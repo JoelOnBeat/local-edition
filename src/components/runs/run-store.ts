@@ -24,6 +24,8 @@ export interface RunState {
   attempts: number;
   /** The server's id of the last event we hold (its event-log sequence); 0 until a replay has told us. */
   seq: number;
+  /** When this tab started the build (ms since epoch). Display only; absent for runs saved before it was recorded. */
+  startedAt?: number;
 }
 
 const runs = new Map<string, RunState>();
@@ -34,7 +36,7 @@ const MAX_RESUMES = 4;
 
 function save(s: RunState) {
   try {
-    sessionStorage.setItem(KEY(s.runId), JSON.stringify({ runId: s.runId, events: s.events, status: s.status, seq: s.seq }));
+    sessionStorage.setItem(KEY(s.runId), JSON.stringify({ runId: s.runId, events: s.events, status: s.status, seq: s.seq, startedAt: s.startedAt }));
   } catch {
     /* storage full or blocked: the in-memory copy still works */
   }
@@ -104,7 +106,7 @@ export function startBuild(body: { storeIds?: string[]; force?: boolean } = {}):
     const first = await stream.next();
     if (first.done || first.value.type !== "run_started") throw new Error("The build did not start. Try again.");
     const runId = first.value.runId;
-    runs.set(runId, { runId, events: [first.value], status: "streaming", attempts: 0, seq: 0 });
+    runs.set(runId, { runId, events: [first.value], status: "streaming", attempts: 0, seq: 0, startedAt: Date.now() });
     save(runs.get(runId)!);
     emit();
     const rest = { [Symbol.asyncIterator]: () => stream };
@@ -122,9 +124,9 @@ function hydrate(runId: string): RunState | undefined {
   try {
     const raw = sessionStorage.getItem(KEY(runId));
     if (!raw) return undefined;
-    const saved = JSON.parse(raw) as { events: AgentEvent[]; status: RunStatus; seq?: number };
+    const saved = JSON.parse(raw) as { events: AgentEvent[]; status: RunStatus; seq?: number; startedAt?: number };
     const done = saved.events.some(isTerminal);
-    runs.set(runId, { runId, events: saved.events, status: done ? "done" : "reconnecting", attempts: 0, seq: saved.seq ?? 0 });
+    runs.set(runId, { runId, events: saved.events, status: done ? "done" : "reconnecting", attempts: 0, seq: saved.seq ?? 0, startedAt: saved.startedAt });
     if (!done) queueMicrotask(() => void resume(runId));
     return runs.get(runId);
   } catch {
@@ -141,3 +143,30 @@ const subscribe = (l: () => void) => {
 export function useRun(runId: string): RunState | undefined {
   return useSyncExternalStore(subscribe, () => hydrate(runId), () => undefined);
 }
+
+/**
+ * Read-only: every run this tab knows (in memory, or saved in sessionStorage), newest first. It never re-attaches a stream, so
+ * listing runs on the portfolio or the runs page does not start any network work.
+ */
+export function listKnownRuns(): RunState[] {
+  const out = new Map<string, RunState>(runs);
+  if (typeof window !== "undefined") {
+    try {
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const key = sessionStorage.key(i);
+        if (!key?.startsWith("le-run:")) continue;
+        const id = key.slice("le-run:".length);
+        if (out.has(id)) continue;
+        const saved = JSON.parse(sessionStorage.getItem(key) ?? "null") as { events?: AgentEvent[]; status?: RunStatus; seq?: number; startedAt?: number } | null;
+        if (!saved?.events?.length) continue;
+        out.set(id, { runId: id, events: saved.events, status: saved.events.some(isTerminal) ? "done" : (saved.status ?? "detached"), attempts: 0, seq: saved.seq ?? 0, startedAt: saved.startedAt });
+      }
+    } catch {
+      /* storage blocked: the in-memory runs are still listed */
+    }
+  }
+  return [...out.values()].sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0));
+}
+
+/** Re-renders when any run changes; pairs with listKnownRuns(). */
+export const subscribeRuns = subscribe;
