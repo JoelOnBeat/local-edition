@@ -99,8 +99,10 @@ async function liveRequest<T>(o: FetchJsonOptions<T>): Promise<{ data: unknown; 
     try {
       let res: Response;
       try {
-        // redirect "error": a redirect could carry our custom auth header (e.g. X-Api-Key) to another origin.
-        res = await doFetch(o.url, { method, headers, body: payload, signal: ac.signal, redirect: "error" });
+        // redirect "manual": a redirect could carry our custom auth header (e.g. X-Api-Key) to another origin, so none is
+        // followed (a 3xx is refused below). "error" is the browser spelling but workerd throws a TypeError on it, which
+        // made every live call from a Worker fail as "Could not reach <provider>" (found on the first deploy, 30 Oct).
+        res = await doFetch(o.url, { method, headers, body: payload, signal: ac.signal, redirect: "manual" });
       } catch (e) {
         if (ac.signal.aborted) throw timedOut();
         if (last) throw new UpstreamError("network", o.provider, `Could not reach ${o.provider}.`, { retryable: true });
@@ -117,6 +119,9 @@ async function liveRequest<T>(o: FetchJsonOptions<T>): Promise<{ data: unknown; 
         log.warn("retryable status", { provider: o.provider, status: res.status, attempt });
         await sleep(backoffMs(attempt, random, res.headers.get("retry-after")));
         continue;
+      }
+      if (res.status >= 300 && res.status < 400) {
+        throw new UpstreamError("upstream_4xx", o.provider, `${o.provider} answered with a redirect (HTTP ${res.status}), which is not followed.`, { status: res.status });
       }
       if (res.status === 401 || res.status === 403) {
         throw new UpstreamError("unauthorized", o.provider, `${o.provider} rejected the credentials.`, { status: res.status });

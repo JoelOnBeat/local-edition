@@ -99,10 +99,16 @@ describe("M6 body size limits (413 before parsing)", () => {
 describe("LOW fetchJson hardening", () => {
   it("never follows redirects (a custom auth header must not reach another origin)", async () => {
     const fetchImpl = vi.fn(async (_u: string, init?: RequestInit) => {
-      expect(init?.redirect).toBe("error");
+      expect(init?.redirect).toBe("manual"); // workerd rejects "error"; manual + the 3xx refusal below never follows
       return ok({ a: 1 });
     });
     await fetchJson({ ...base, mode: "live", recorder: new MemoryRecorder(), fetchImpl: fetchImpl as never });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses a redirect answer instead of following it", async () => {
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 302, headers: { location: "https://example.org/" } }));
+    await expect(fetchJson({ ...base, mode: "live", retries: 0, recorder: new MemoryRecorder(), fetchImpl: fetchImpl as never })).rejects.toMatchObject({ code: "upstream_4xx" });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 

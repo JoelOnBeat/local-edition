@@ -33,10 +33,10 @@
 
   "d1_databases": [
     // Create with `wrangler d1 create local-edition`, paste the id here, then `wrangler d1 migrations apply LE_DB --remote`.
-    { "binding": "LE_DB", "database_name": "local-edition", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "migrations" }
+    { "binding": "LE_DB", "database_name": "local-edition", "database_id": "236b5ca1-cb3b-4c85-8d4b-38e5e29e748f", "migrations_dir": "migrations" }
   ],
   // Provider cache (Qloo, Tavily) with TTL. Create with `wrangler kv namespace create LE_KV`.
-  "kv_namespaces": [{ "binding": "LE_KV", "id": "00000000000000000000000000000000" }],
+  "kv_namespaces": [{ "binding": "LE_KV", "id": "725a5fb484954db4a5d12dc99ff0fb9a" }],
   // Menu photos: ws/<workspaceId>/<uuid>.<ext>. Create with `wrangler r2 bucket create local-edition-blobs`.
   "r2_buckets": [{ "binding": "LE_BLOB", "bucket_name": "local-edition-blobs" }],
 
