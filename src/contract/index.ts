@@ -6,3 +6,4 @@ export * from "./routes-upgrade";
 export * from "./routes";
 export * from "./connectors";
 export * from "./connectors-square";
+export * from "./connectors-comms";
