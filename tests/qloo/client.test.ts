@@ -76,10 +76,10 @@ describe("T4 error mapping", () => {
   const status = (code: number, headers: Record<string, string> = {}) => vi.fn(async () => new Response("{}", { status: code, headers }));
   const run = (f: ReturnType<typeof status>) => live(f as never).insights({ "filter.type": "urn:tag" });
 
-  it("401 -> unauthorized (bad key or wrong host), not forbidden", async () => {
+  it("401 -> qloo_unavailable (bad key or wrong host), not forbidden, and the key is not blamed in the message", async () => {
     const err = await run(status(401)).catch((e) => e);
     expect(err).toBeInstanceOf(UpstreamError);
-    expect(err).toMatchObject({ code: "unauthorized", status: 401 });
+    expect(err).toMatchObject({ code: "qloo_unavailable", status: 503 });
     expect(isForbidden(err)).toBe(false);
   });
 
@@ -90,29 +90,24 @@ describe("T4 error mapping", () => {
     expect(err.message).toContain("not enabled");
   });
 
-  it("429 retries once then maps to rate_limited; 5xx to upstream_5xx; 400 to upstream_4xx", async () => {
+  it("429, 5xx, 4xx, a non-JSON body and a malformed body all end as qloo_unavailable, never a sample answer", async () => {
     const f429 = status(429, { "retry-after": "0" });
-    await expect(run(f429)).rejects.toMatchObject({ code: "rate_limited", status: 429 });
+    await expect(run(f429)).rejects.toMatchObject({ code: "qloo_unavailable", status: 503 });
     expect(f429).toHaveBeenCalledTimes(2);
-    await expect(run(status(503))).rejects.toMatchObject({ code: "upstream_5xx" });
-    await expect(run(status(400))).rejects.toMatchObject({ code: "upstream_4xx", status: 400 });
-  });
-
-  it("maps a non-JSON body to bad_json and an array body to invalid_response, and never leaks the body", async () => {
+    await expect(run(status(503))).rejects.toMatchObject({ code: "qloo_unavailable" });
+    await expect(run(status(400))).rejects.toMatchObject({ code: "qloo_unavailable" });
     const html = vi.fn(async () => new Response("<html>secret upstream page</html>", { status: 200 }));
     const err = await run(html as never).catch((e) => e);
-    expect(err).toMatchObject({ code: "bad_json" });
+    expect(err).toMatchObject({ code: "qloo_unavailable" });
     expect(err.message).not.toContain("secret upstream page");
-    const arr = vi.fn(async () => ok([1, 2, 3]));
-    await expect(run(arr as never)).rejects.toMatchObject({ code: "invalid_response" });
-    const odd = vi.fn(async () => ok({ results: { entities: ["not-an-object"] } }));
-    await expect(run(odd as never)).rejects.toMatchObject({ code: "invalid_response" });
+    await expect(run(vi.fn(async () => ok([1, 2, 3])) as never)).rejects.toMatchObject({ code: "qloo_unavailable" });
+    await expect(run(vi.fn(async () => ok({ results: { entities: ["not-an-object"] } })) as never)).rejects.toMatchObject({ code: "qloo_unavailable" });
   });
 
-  it("times out as `timeout`", async () => {
+  it("a timeout ends as qloo_unavailable", async () => {
     const hang = vi.fn((_u: string, init: RequestInit) => new Promise<Response>((_r, rej) => init.signal?.addEventListener("abort", () => rej(new Error("aborted")))));
     const client = new QlooClient({ mode: "live", status: "live", apiKey: KEY, fetchImpl: hang as never, timeoutMs: 10, retries: 0, sleep: noSleep, recorder: new MemoryRecorder(), gate: async () => testGate() });
-    await expect(client.insights({ "filter.type": "urn:tag" })).rejects.toMatchObject({ code: "timeout" });
+    await expect(client.insights({ "filter.type": "urn:tag" })).rejects.toMatchObject({ code: "qloo_unavailable", message: expect.stringContaining("in time") });
   });
 });
 
@@ -139,7 +134,7 @@ describe("T2 modes and key handling", () => {
     expect(JSON.stringify(call.data)).toContain("Muji");
   });
 
-  it("the API key never reaches a recording, a recording key, or Evidence", async () => {
+  it("the API key never reaches Evidence, and a live answer is never recorded", async () => {
     const recorder = new MemoryRecorder();
     const body = { success: true, results: { tags: [{ tag_id: "urn:tag:ambience:qloo:cozy", name: "Cozy", query: { affinity: 0.7 } }] } };
     const fetchImpl = vi.fn(async () => ok(body));
@@ -147,15 +142,12 @@ describe("T2 modes and key handling", () => {
     const call = await client.insights({ "filter.type": "urn:tag", "signal.location": "POINT(-73.9573 40.7175)", "filter.tag.types": "urn:tag:ambience:qloo" });
     const ev = buildEvidence({ scope: "store_x", call, summary: "Cozy at the block.", now: NOW });
     Evidence.parse(ev);
-    expect(recorder.size()).toBe(1);
-    const dump = JSON.stringify([...(recorder as unknown as { entries: Map<string, unknown> }).entries]);
-    expect(dump).not.toContain(KEY);
+    // Real Qloo answers are never recorded: they live only in the KV response cache.
+    expect(recorder.size()).toBe(0);
     expect(JSON.stringify(ev)).not.toContain(KEY);
     expect(JSON.stringify(call)).not.toContain(KEY);
-    // The same request with a different key hits the same recording.
-    const other = new QlooClient({ mode: "replay", status: "replay", apiKey: "a-different-key", recorder, sleep: noSleep });
-    const replay = await other.insights({ "filter.type": "urn:tag", "signal.location": "POINT(-73.9573 40.7175)", "filter.tag.types": "urn:tag:ambience:qloo" });
-    expect(replay.mode).toBe("replay");
+    expect(ev.mode).toBe("live");
+    expect(ev.fetchedAt).toBe(call.at);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 

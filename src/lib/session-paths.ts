@@ -23,6 +23,7 @@ const PUBLIC_API: (string | RegExp)[] = [
   "/api/status",
   "/api/proof", // public reads
   "/api/limits",
+  "/api/landing/sample", // the landing's read-only view of the canonical demo workspace
   "/api/connectors/square/webhook", // Square signature
   "/api/connectors/slack/interactions", // Slack signature
   "/api/connectors/mail/webhook", // Composio signature

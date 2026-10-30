@@ -32,10 +32,13 @@ const PRODUCTION_DRIVERS: ReadonlyArray<ServerEnv["STORE_DRIVER"]> = ["kv", "d1"
 
 export function parseServerEnv(source: Record<string, string | undefined>): ServerEnv {
   const env = ServerEnv.parse(source);
-  if ((source.NODE_ENV ?? process.env.NODE_ENV) === "production" && !PRODUCTION_DRIVERS.includes(env.STORE_DRIVER)) {
+  const production = (source.NODE_ENV ?? process.env.NODE_ENV) === "production";
+  if (production && !PRODUCTION_DRIVERS.includes(env.STORE_DRIVER)) {
     throw new HttpError(503, "config_error", "The server is misconfigured: STORE_DRIVER must be kv or d1 in production.");
   }
-  return env;
+  // Production Qloo is live-only (Gabriel, 30 Oct): whatever QLOO_MODE says, replay and fixture are unreachable. No key means calls fail with
+  // `qloo_unavailable`; they never fall back to recorded or sample answers.
+  return production ? { ...env, QLOO_MODE: "live" } : env;
 }
 
 let cached: ServerEnv | undefined;

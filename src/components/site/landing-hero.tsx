@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { SampleChainLink } from "@/components/account/session-links";
 import { BrandGlyph, Chevron, StoreTile, cx, type Brand } from "@/components/ui";
-import { STORE_ROWS } from "./landing-data";
+import { SAMPLE_STORES } from "@/server/sample/chain";
 import { Container, Icon, Rule } from "./section";
 
 /** A brand chip set inline in the headline, tilted a degree (ByDefault's H1 chips). */
@@ -23,7 +23,7 @@ function InlineChip({ brand, tilt, children, accent }: { brand: Brand; tilt: "l"
 }
 
 export function LandingHero() {
-  const stack = STORE_ROWS.slice(0, 3);
+  const stack = SAMPLE_STORES.slice(0, 3);
   return (
     <section className="relative border-y border-rule">
       <div aria-hidden className="pointer-events-none absolute inset-x-0 -top-14 bottom-0 hidden overflow-hidden lg:block">

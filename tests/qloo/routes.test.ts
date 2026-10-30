@@ -83,9 +83,9 @@ describe("T3 GET /api/stores/:id/profile", () => {
     vi.stubGlobal("fetch", fetchMock);
     const { cookie, bundle } = await visit();
     const res = await profileGET(req("/x", cookie), idParams(bundle.stores[0].id));
-    expect(res.status).toBe(429);
+    expect(res.status).toBe(503);
     const text = await res.text();
-    expect(JSON.parse(text)).toMatchObject({ code: "rate_limited" });
+    expect(JSON.parse(text)).toMatchObject({ code: "qloo_unavailable" });
     expect(text).not.toContain("upstream internals");
     expect(text).not.toContain(KEY);
     for (const [url, init] of fetchMock.mock.calls as unknown as [string, RequestInit][]) {
@@ -94,13 +94,13 @@ describe("T3 GET /api/stores/:id/profile", () => {
     }
   });
 
-  it("maps 401 to a 502 unauthorized without blaming the visitor", async () => {
+  it("maps 401 to qloo_unavailable (503) without blaming the visitor", async () => {
     setEnv({ QLOO_MODE: "live", QLOO_API_KEY: KEY });
     vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 401 })));
     const { cookie, bundle } = await visit();
     const res = await profileGET(req("/x", cookie), idParams(bundle.stores[0].id));
-    expect(res.status).toBe(502);
-    expect(await res.json()).toMatchObject({ code: "unauthorized" });
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ code: "qloo_unavailable" });
   });
 });
 

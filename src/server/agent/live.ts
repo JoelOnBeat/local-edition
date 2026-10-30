@@ -2,7 +2,7 @@ import type { ChatCompletionMessageParam } from "openai/resources/chat/completio
 import type { Chain, Store } from "@/contract";
 import { checkCopyDetailed } from "../guardrails";
 import { repoCache } from "../qloo/deps";
-import { BLOCK_TAG_TYPES } from "../qloo/util";
+import { BLOCK_TAG_TYPES, baselineCacheKey } from "../qloo/util";
 import { serverEnv } from "@/lib/env";
 import { artistsLocal } from "../qloo/artists";
 import { blockProfile } from "../qloo/block";
@@ -38,7 +38,7 @@ import type {
  */
 
 /** The block profile's city baseline cache key (`qloo/block.ts`); the verifier reads it back to recompute lifts. */
-const baselineKey = (chain: Chain, group: string) => `qloo:baseline:v1:${chain.city.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}:${group}`;
+const baselineKey = (chain: Chain, group: string) => baselineCacheKey(chain.city.name, group);
 
 /**
  * The chain's anchors as real Qloo entity ids and names. The sample chain's anchors carry placeholder ids (`sample-blue-bottle-coffee`),

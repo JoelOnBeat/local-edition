@@ -1,6 +1,7 @@
-import type { Chain, StaffCard } from "@/contract";
+import type { Chain, Edition, StaffCard } from "@/contract";
 import { newId, newToken } from "@/lib/ids";
 import { SAMPLE_CITY } from "../sample/chain";
+import { seedableEditions } from "../sample/live-editions";
 import { ACCOUNT_ID_PREFIX, DEMO_WORKSPACE_ID, canonicalId, remapId, workspaceSuffix, WorkspaceExistsError, type Repo, type SeedWithId } from "../store";
 import { eraseWorkspace } from "./erase";
 
@@ -48,7 +49,7 @@ export async function adoptVisitorWorkspace(repo: Repo, fromId: string, chainNam
   const chain = (await repo.getChain(from.chainId))!;
   const stores = await repo.listStores(chain.id);
   const menu = await repo.listMenu(chain.id);
-  const editions = await repo.listEditions({ storeIds: stores.map((s) => s.id), finishedOnly: true });
+  const editions = seedableEditions(await repo.listEditions({ storeIds: stores.map((s) => s.id), finishedOnly: true }));
 
   const workspaceId = newAccountWorkspaceId();
   const suffix = workspaceSuffix(workspaceId);
@@ -63,7 +64,8 @@ export async function adoptVisitorWorkspace(repo: Repo, fromId: string, chainNam
   await repo.createWorkspace(seed);
 
   for (const edition of editions) {
-    const copy = { ...structuredClone(edition), id: remapId(canonicalId(edition.id), suffix), storeId: storeIds.get(edition.storeId)! };
+    const copy: Edition = { ...structuredClone(edition), id: remapId(canonicalId(edition.id), suffix), storeId: storeIds.get(edition.storeId)! };
+    if (copy.review) copy.review = { ...copy.review, clashWith: copy.review.clashWith.map((id) => storeIds.get(id) ?? remapId(canonicalId(id), suffix)) };
     await repo.putEdition(copy);
     const card = await repo.getStaffCardByEdition(edition.id);
     if (card) {

@@ -107,7 +107,7 @@ export function LimitsView() {
         </p>
         <p>
           Every Qloo answer is stored and reused, so judges read stored editions and regenerating an item never calls Qloo again. Live calls stop
-          at a hard cap of <strong>{qloo?.cap ?? 300}</strong>, at most <strong>{qloo?.dailyCap ?? 40} a day</strong>. Only coordinates, brand ids and tag ids go to Qloo.
+          at a hard cap of <strong>{qloo?.cap ?? 2000}</strong>, at most <strong>{qloo?.dailyCap ?? 200} a day</strong>. Only coordinates, brand ids and tag ids go to Qloo.
         </p>
       </Section>
 

@@ -5,6 +5,7 @@ import { HttpError } from "./http/errors";
 import { clientIp, ipHash } from "./limits";
 import { serial } from "./serial";
 import { sampleSeed } from "./sample/chain";
+import { seedableEditions } from "./sample/live-editions";
 import { getAuthStore } from "./auth";
 import { getPrincipal } from "./auth/sessions";
 import { DEMO_WORKSPACE_ID, getRepo, isAccountId, remapId, workspaceSuffix, WorkspaceExistsError, type Repo, type SeedWithId } from "./store";
@@ -88,12 +89,15 @@ export async function ensureDemoWorkspace(repo: Repo): Promise<Workspace> {
 }
 
 function copyEdition(edition: Edition, suffix: string): Edition {
-  return { ...structuredClone(edition), id: remapId(edition.id, suffix), storeId: remapId(edition.storeId, suffix) };
+  const copy: Edition = { ...structuredClone(edition), id: remapId(edition.id, suffix), storeId: remapId(edition.storeId, suffix) };
+  // The review's clash list names demo store ids; in a visitor workspace the same stores carry the remapped ids.
+  if (copy.review) copy.review = { ...copy.review, clashWith: copy.review.clashWith.map((id) => remapId(id, suffix)) };
+  return copy;
 }
 
 /**
  * Creates a seeded visitor workspace. The workspace record is written before the demo editions are
- * copied. Only each store's newest finished edition is copied: an edition that is still `drafting`
+ * copied. Only each store's newest finished edition built from live Qloo answers is copied (`seedableEditions`): an edition that is still `drafting`
  * (the weekly build is running) would stay stuck in the visitor's workspace, where nothing finishes it.
  */
 export async function createVisitorWorkspace(repo: Repo): Promise<Workspace> {
@@ -107,7 +111,7 @@ export async function createVisitorWorkspace(repo: Repo): Promise<Workspace> {
   const demo = await repo.getWorkspace(DEMO_WORKSPACE_ID);
   if (demo) {
     const demoStores = await repo.listStores(demo.chainId);
-    for (const edition of await repo.listEditions({ storeIds: demoStores.map((s) => s.id), finishedOnly: true })) {
+    for (const edition of seedableEditions(await repo.listEditions({ storeIds: demoStores.map((s) => s.id), finishedOnly: true }))) {
       const copy = copyEdition(edition, suffix);
       await repo.putEdition(copy);
       const card = await repo.getStaffCardByEdition(edition.id);

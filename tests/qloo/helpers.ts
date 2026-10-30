@@ -34,7 +34,7 @@ export function stubClient(handlers: Partial<Record<"insights" | "compare" | "tr
     (client as unknown as Record<string, unknown>)[method] = async (query: Record<string, unknown>) => {
       calls.push({ method, query });
       const data = await handler(query);
-      return { data, mode: "live", path: method === "insights" ? "/v2/insights" : `/${method}`, params: Object.fromEntries(Object.entries(query).map(([k, v]) => [k, String(v)])) };
+      return { data, mode: "live", at: NOW.toISOString(), path: method === "insights" ? "/v2/insights" : `/${method}`, params: Object.fromEntries(Object.entries(query).map(([k, v]) => [k, String(v)])) };
     };
   }
   return { client, calls };

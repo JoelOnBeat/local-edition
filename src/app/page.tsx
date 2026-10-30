@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
 import { LandingBand } from "@/components/site/landing-band";
 import { LandingEdition } from "@/components/site/landing-edition";
 import { LandingEvidence } from "@/components/site/landing-evidence";
@@ -7,6 +8,7 @@ import { BuiltOnStrip, LandingHero } from "@/components/site/landing-hero";
 import { LandingPortfolio } from "@/components/site/landing-portfolio";
 import { LandingTiles } from "@/components/site/landing-tiles";
 import { SiteShell } from "@/components/site/site-chrome";
+import { landingSample } from "@/server/landing/sample";
 
 export const metadata: Metadata = {
   title: { absolute: "Local Edition: a weekly edition for every store in your chain" },
@@ -14,17 +16,20 @@ export const metadata: Metadata = {
     "A special from your own menu, a sound brief, a neighbour partner and an event night for each store, built from the taste of its block with Qloo and NVIDIA Nemotron, approved by head office.",
 };
 
-export default function Home() {
+/** Dynamic: this week's sample editions and taste numbers are read from the demo workspace at request time (saved for ten minutes). */
+export default async function Home() {
+  await connection();
+  const sample = await landingSample();
   return (
     <SiteShell>
       <LandingHero />
       <BuiltOnStrip />
-      <LandingPortfolio />
-      <LandingEvidence />
+      <LandingPortfolio sample={sample} />
+      <LandingEvidence sample={sample} />
       <div className="h-12" aria-hidden />
-      <LandingBand />
+      <LandingBand sample={sample} />
       <LandingTiles />
-      <LandingEdition />
+      <LandingEdition sample={sample} />
       <LandingFaq />
     </SiteShell>
   );

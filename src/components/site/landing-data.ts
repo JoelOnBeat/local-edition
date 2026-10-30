@@ -1,54 +1,13 @@
-import type { EditionItem, ItemStatus } from "@/contract";
-import { mockEditions } from "@/mocks/editions";
-import { MOCK_WEEK_OF } from "@/mocks/helpers";
-import { tagsFor } from "@/mocks/profiles";
-import { SAMPLE_STORES } from "@/server/sample/chain";
 import type { Brand } from "@/components/ui";
 
 /**
- * Everything the landing shows. Store rows come from the labelled sample chain (Kettle & Kiln, src/mocks), so they never
- * drift from what "Try the sample chain" opens. Measured numbers come from docs/STATUS.md and the recorded NeMo job.
+ * What the landing shows that is not read from the demo workspace. This week's editions, taste tags and lifts come from live Qloo
+ * answers at request time (src/server/landing/sample.ts); nothing of them is written here. Measured numbers come from docs/STATUS.md and the recorded NeMo job.
  */
 
-export const WEEK_LABEL = new Date(`${MOCK_WEEK_OF}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
-
-const special = (items: EditionItem[]) => items.find((i) => i.kind === "special");
-const isDone = (s: ItemStatus) => s === "approved" || s === "edited";
-
-export interface StoreRow {
-  id: string;
-  name: string;
-  address: string;
-  colorIndex: number;
-  status: "approved" | "draft" | "flagged";
-  special: string;
-  approved: number;
-  total: number;
-  topTag: string;
-  lift: number;
-  evidence: number;
-}
-
-export const STORE_ROWS: StoreRow[] = SAMPLE_STORES.map((s) => {
-  const ed = mockEditions.find((e) => e.storeId === s.id)!;
-  const sp = special(ed.items);
-  const top = tagsFor(s.id)[0]!;
-  return {
-    id: s.id,
-    name: s.name,
-    address: s.addressLabel,
-    colorIndex: s.colorIndex,
-    status: ed.status === "flagged" ? "flagged" : ed.status === "approved" ? "approved" : "draft",
-    special: sp && "name" in sp ? sp.name : "",
-    approved: ed.items.filter((i) => isDone(i.status)).length,
-    total: ed.items.length,
-    topTag: top.name,
-    lift: top.lift,
-    evidence: ed.evidence.length,
-  };
-});
-
-export const LIFT_RANK = [...STORE_ROWS].sort((a, b) => b.lift - a.lift);
+/** "28 Oct" from an ISO Monday. */
+export const weekLabel = (weekOf: string): string =>
+  new Date(`${weekOf}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
 
 /** Measured, with where each number was recorded. */
 export const MEASURED = {
@@ -61,22 +20,6 @@ export const MEASURED = {
   benignTotal: 10,
   nemoJob: "local-edition-certify-eval-202610300615",
   date: "30 Oct 2026",
-};
-
-/** The Williamsburg evidence, as the evidence card shows it. */
-export const WILLIAMSBURG = (() => {
-  const s = SAMPLE_STORES[0]!;
-  const tags = tagsFor(s.id).slice(0, 4);
-  return { name: s.name, address: s.addressLabel, colorIndex: s.colorIndex, tags };
-})();
-
-/** The real guardrail rewrite in the sample chain (Astoria's special). */
-export const GUARDRAIL_DIFF = {
-  store: "Astoria",
-  before: "Honey sesame iced latte packed with natural energy to power your afternoon.",
-  after: "Iced latte shaken until frothy with a spoon of honey and a pinch of toasted sesame. A nod to the neighbourhood's long summers.",
-  rail: "no-health-claims",
-  reason: "Removed a claim that the drink boosts energy.",
 };
 
 export interface Integration {
@@ -123,7 +66,7 @@ export const FAQ: Array<{ q: string; a: string[] }> = [
   {
     q: "Is Kettle & Kiln a real customer?",
     a: [
-      "No. Kettle & Kiln is a labelled sample chain: eight coffee shops at real New York corners. Its partner shops and taste numbers are sample data, and every place that shows them says so.",
+      "No. Kettle & Kiln is a labelled sample chain: eight coffee shops at real New York corners. The chain, its stores and its menu are sample data, and every place that shows them says so. The taste numbers and editions come from live Qloo calls.",
     ],
   },
   {

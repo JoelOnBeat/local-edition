@@ -37,9 +37,9 @@ export function coverageGaps(stores: Store[], editions: Edition[]): string[] {
   const finished = editions.filter((e) => e.status !== "drafting");
 
   const qloo = finished.flatMap((e) => e.evidence.filter((ev) => ev.source === "qloo"));
-  const fixture = qloo.filter((ev) => ev.mode === "fixture").length;
-  if (fixture > 0) {
-    gaps.push(clip(`${fixture} of ${qloo.length} Qloo evidence records in these editions are sample data, not live Qloo responses.`));
+  const notLive = qloo.filter((ev) => ev.mode !== "live" && ev.mode !== "cache").length;
+  if (notLive > 0) {
+    gaps.push(clip(`${notLive} of ${qloo.length} Qloo evidence records in these editions did not come from a live Qloo call.`));
   }
 
   const byStore = new Map(finished.map((e) => [e.storeId, e]));

@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { parseServerEnv } from "@/lib/env";
 import { MemoryRecorder } from "@/server/http/recorder";
-import { QlooClient } from "@/server/qloo/client";
+import { QlooClient, createQlooClient, resolveQlooMode } from "@/server/qloo/client";
 import { memoryCache } from "@/server/qloo/deps";
 import { QLOO_DAILY_SLICE, QLOO_TOTAL_CAP, createQlooLedger, qlooCallsUsed } from "@/server/qloo/ledger";
 import { fakeBudgetStub, noSleep, ok, testGate } from "./helpers";
@@ -14,9 +15,9 @@ const liveClient = (fetchImpl: unknown, gate: ReturnType<typeof testGate> | null
   });
 
 describe("the hard Qloo call ledger", () => {
-  it("caps the whole app at 300 calls through 15 Dec and 40 a day", () => {
-    expect(QLOO_TOTAL_CAP).toBe(300);
-    expect(QLOO_DAILY_SLICE).toBe(40);
+  it("caps the whole app at 2,000 calls through 15 Dec and 200 a day", () => {
+    expect(QLOO_TOTAL_CAP).toBe(2000);
+    expect(QLOO_DAILY_SLICE).toBe(200);
   });
 
   it("refuses the call that would pass the daily slice, before any request goes out", async () => {
@@ -25,7 +26,7 @@ describe("the hard Qloo call ledger", () => {
     const client = liveClient(fetchImpl, gate);
     await client.insights({ "filter.type": "urn:entity:place", take: 1 });
     await client.insights({ "filter.type": "urn:entity:place", take: 2 });
-    await expect(client.insights({ "filter.type": "urn:entity:place", take: 3 })).rejects.toMatchObject({ code: "spend_cap", provider: "qloo" });
+    await expect(client.insights({ "filter.type": "urn:entity:place", take: 3 })).rejects.toMatchObject({ code: "qloo_budget", provider: "qloo" });
     expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(gate.stub.reserved).toBe(2);
   });
@@ -35,7 +36,7 @@ describe("the hard Qloo call ledger", () => {
     const fetchImpl = vi.fn(async () => ok(PLACES));
     const client = liveClient(fetchImpl, gate);
     await client.search({ query: "Muji" });
-    await expect(client.search({ query: "Blue Bottle" })).rejects.toMatchObject({ code: "spend_cap" });
+    await expect(client.search({ query: "Blue Bottle" })).rejects.toMatchObject({ code: "qloo_budget" });
   });
 
   it("serves a saved response without a call or a credit", async () => {
@@ -58,21 +59,21 @@ describe("the hard Qloo call ledger", () => {
     await warm.search({ query: "Muji" });
     const readOnly = liveClient(fetchImpl, gate, { cacheOnly: true });
     expect((await readOnly.search({ query: "Muji" })).mode).toBe("cache");
-    await expect(readOnly.search({ query: "Never asked before" })).rejects.toMatchObject({ code: "spend_cap" });
+    await expect(readOnly.search({ query: "Never asked before" })).rejects.toMatchObject({ code: "qloo_unavailable" });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(gate.stub.reserved).toBe(1);
   });
 
   it("a live client without a gate cannot reach Qloo at all", async () => {
     const fetchImpl = vi.fn(async () => ok(PLACES));
-    await expect(liveClient(fetchImpl, null).search({ query: "Muji" })).rejects.toMatchObject({ code: "spend_cap" });
+    await expect(liveClient(fetchImpl, null).search({ query: "Muji" })).rejects.toMatchObject({ code: "qloo_unavailable" });
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it("does not retry a live call (a retry is another billed call the ledger did not count)", async () => {
     const gate = testGate();
     const fetchImpl = vi.fn(async () => new Response("down", { status: 503 }));
-    await expect(liveClient(fetchImpl, gate).search({ query: "Muji" })).rejects.toMatchObject({ code: "upstream_5xx" });
+    await expect(liveClient(fetchImpl, gate).search({ query: "Muji" })).rejects.toMatchObject({ code: "qloo_unavailable" });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(gate.stub.reserved).toBe(1); // counted, never refunded
   });
@@ -81,7 +82,7 @@ describe("the hard Qloo call ledger", () => {
     const cache = memoryCache();
     const gate = testGate({}, cache);
     const bad = vi.fn(async () => ok([1, 2, 3]));
-    await expect(liveClient(bad, gate).search({ query: "Muji" })).rejects.toMatchObject({ code: "invalid_response" });
+    await expect(liveClient(bad, gate).search({ query: "Muji" })).rejects.toMatchObject({ code: "qloo_unavailable" });
     const good = vi.fn(async () => ok(PLACES));
     expect((await liveClient(good, gate).search({ query: "Muji" })).mode).toBe("live");
   });
@@ -97,7 +98,7 @@ describe("the hard Qloo call ledger", () => {
     const stub = { ...fakeBudgetStub(), reserve: async () => { throw new Error("DO down"); } };
     const gate = { ledger: createQlooLedger({ stub }), cache: memoryCache() };
     const fetchImpl = vi.fn(async () => ok(PLACES));
-    await expect(liveClient(fetchImpl, gate as never).search({ query: "Muji" })).rejects.toMatchObject({ code: "spend_cap" });
+    await expect(liveClient(fetchImpl, gate as never).search({ query: "Muji" })).rejects.toMatchObject({ code: "qloo_unavailable" });
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
@@ -105,28 +106,61 @@ describe("the hard Qloo call ledger", () => {
     const stub = fakeBudgetStub();
     const ledger = createQlooLedger({ stub });
     await ledger.reserve(3);
-    expect(await qlooCallsUsed(ledger)).toEqual({ total: 3, today: 3, totalCap: 300, dailyCap: 40 });
+    expect(await qlooCallsUsed(ledger)).toEqual({ total: 3, today: 3, totalCap: 2000, dailyCap: 200 });
   });
 
   it("the per-process fallback enforces the same caps", async () => {
     const ledger = createQlooLedger({ stub: null, totalCap: 1_000_001, dailyCap: 2 });
     await ledger.reserve();
     await ledger.reserve();
-    await expect(ledger.reserve()).rejects.toMatchObject({ code: "spend_cap" });
+    await expect(ledger.reserve()).rejects.toMatchObject({ code: "qloo_budget" });
   });
 
   it("regenerate has no way to reach Qloo (it rewrites one item from stored evidence)", () => {
     const src = readFileSync("src/server/agent/regenerate.ts", "utf8");
     expect(src).not.toMatch(/qloo/i);
   });
-  it("replay mode (the production default) serves a saved real answer first, with no call and no credit, then falls back to the fixtures", async () => {
+  it("a live call saves the real answer with the time Qloo gave it, and a later read says so", async () => {
     const gate = testGate();
-    const live = liveClient(vi.fn(async () => ok(PLACES)), gate);
-    await live.search({ query: "Muji", types: "urn:entity:brand" }); // a live answer, saved
-    const reserved = gate.stub.reserved;
-    const replay = new QlooClient({ mode: "replay", status: "replay", recorder: new MemoryRecorder(), sleep: noSleep, gate: async () => gate });
-    expect((await replay.search({ query: "Muji", types: "urn:entity:brand" })).mode).toBe("cache");
-    expect((await replay.search({ query: "Aesop", types: "urn:entity:brand" })).mode).toBe("fixture"); // nothing saved: synthetic
-    expect(gate.stub.reserved).toBe(reserved);
+    const first = await liveClient(vi.fn(async () => ok(PLACES)), gate).search({ query: "Muji", types: "urn:entity:brand" });
+    const second = await liveClient(vi.fn(async () => ok(PLACES)), gate).search({ query: "Muji", types: "urn:entity:brand" });
+    expect(first.mode).toBe("live");
+    expect(second.mode).toBe("cache");
+    expect(second.at).toBe(first.at);
+    expect(gate.stub.reserved).toBe(1);
+  });
+});
+
+describe("production Qloo is live-only: no replay, fixture or recorded answer can be reached", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("env.ts forces QLOO_MODE=live in production whatever it says", () => {
+    for (const mode of ["replay", "fixture", undefined]) {
+      const env = parseServerEnv({ NODE_ENV: "production", STORE_DRIVER: "d1", QLOO_MODE: mode });
+      expect(env.QLOO_MODE).toBe("live");
+    }
+    expect(parseServerEnv({ NODE_ENV: "test", QLOO_MODE: "fixture" }).QLOO_MODE).toBe("fixture");
+  });
+
+  it("without a key, production stays live (status missing-key) and never falls back to replay", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    expect(resolveQlooMode({ QLOO_MODE: "replay", QLOO_API_KEY: undefined })).toEqual({ mode: "live", status: "missing-key" });
+    expect(resolveQlooMode({ QLOO_MODE: "fixture", QLOO_API_KEY: "k" })).toEqual({ mode: "live", status: "live" });
+  });
+
+  it("a client built in fixture or replay mode refuses in production: no fetch, no sample answer", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const fetchImpl = vi.fn(async () => ok(PLACES));
+    for (const mode of ["fixture", "replay"] as const) {
+      const client = new QlooClient({ mode, status: mode, apiKey: "k", fetchImpl: fetchImpl as never, sleep: noSleep, recorder: new MemoryRecorder() });
+      await expect(client.search({ query: "Muji", types: "urn:entity:brand" })).rejects.toMatchObject({ code: "qloo_unavailable" });
+    }
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("a production client with no key fails with qloo_unavailable instead of serving a sample", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const client = createQlooClient({ env: parseServerEnv({ NODE_ENV: "production", STORE_DRIVER: "d1" }), gate: async () => testGate() });
+    await expect(client.insights({ "filter.type": "urn:entity:place", take: 1 })).rejects.toMatchObject({ code: "qloo_unavailable" });
   });
 });

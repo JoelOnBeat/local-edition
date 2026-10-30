@@ -1,5 +1,7 @@
 import { BrandGlyph, SampleBadge, StoreTile } from "@/components/ui";
-import { WEEK_LABEL, WILLIAMSBURG } from "./landing-data";
+import type { LandingSample } from "@/server/landing/types";
+import { weekLabel } from "./landing-data";
+import { SamplePending } from "./landing-pending";
 
 /** One tag's affinity here against the city baseline (baseline = affinity − lift, as Qloo reports lift). */
 function TagCell({ name, affinity, lift }: { name: string; affinity: number; lift: number }) {
@@ -34,16 +36,17 @@ function TagCell({ name, affinity, lift }: { name: string; affinity: number; lif
  * The evidence frame (ByDefault's case-study frame): the block profile behind one store, two of its strongest tags as
  * measured cells, and the special it produced quoted underneath with the key phrase underlined.
  */
-export function LandingEvidence() {
-  const [t1, t2] = WILLIAMSBURG.tags;
+export function LandingEvidence({ sample }: { sample: LandingSample | null }) {
+  const w = sample?.featured ?? null;
+  const [t1, t2] = w?.tags ?? [];
   return (
     <section className="relative border-y border-rule" aria-labelledby="evidence-title">
       <div className="mx-auto max-w-[1190px] p-2 sm:p-3"><div className="ring-after relative overflow-hidden rounded-xl bg-white">
         <div className="grid border-b border-rule-subtle md:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_300px_300px]">
           <div className="flex flex-col justify-between gap-14 border-b border-rule-subtle px-6 py-8 md:col-span-2 md:px-10 md:py-14 lg:col-span-1 lg:border-b-0 lg:border-r">
             <p className="flex items-center gap-2.5 text-[16px] leading-6 text-stone-500">
-              <StoreTile colorIndex={WILLIAMSBURG.colorIndex} name={WILLIAMSBURG.name} size="sm" />
-              <span className="font-medium text-ink">Williamsburg</span>
+              <StoreTile colorIndex={w?.colorIndex ?? 1} name={w?.name ?? "Williamsburg"} size="sm" />
+              <span className="font-medium text-ink">{w?.name ?? "Williamsburg"}</span>
               <span className="h-3.5 w-px bg-stone-200" aria-hidden />
               Block profile
               <SampleBadge>Sample</SampleBadge>
@@ -52,35 +55,34 @@ export function LandingEvidence() {
               Every pick shows the taste it came from.
             </h2>
             <p className="mt-3 max-w-[460px] text-[16px] leading-6 text-ink-2">
-              Within 800 m of {WILLIAMSBURG.address}, people over-index on indie rock and vintage shopping. The agent reads that
-              from Qloo before it touches the menu, and every line keeps a link back to it.
+              {t1 ? <>Within 800 m of {w!.address}, people over-index on {t1.name}{t2 ? ` and ${t2.name}` : ""}. The agent reads that
+              from Qloo before it touches the menu, and every line keeps a link back to it.</> : "The agent reads the block's taste from Qloo before it touches the menu, and every line keeps a link back to it."}
             </p></div>
           </div>
-          {t1 ? <TagCell name={t1.name} affinity={t1.affinity} lift={t1.lift} /> : null}
-          {t2 ? <TagCell name={t2.name} affinity={t2.affinity} lift={t2.lift} /> : null}
+          {t1 ? <TagCell name={t1.name} affinity={t1.affinity} lift={t1.lift} /> : <div className="px-6 py-10 md:col-span-2 md:px-8 md:py-14 lg:col-span-2"><SamplePending /></div>}
+          {t1 && t2 ? <TagCell name={t2.name} affinity={t2.affinity} lift={t2.lift} /> : null}
         </div>
-        <figure className="grid lg:grid-cols-[1fr_auto]">
+        {w?.special ? <figure className="grid lg:grid-cols-[1fr_auto]">
           <blockquote className="px-6 py-12 md:px-10 md:py-20">
             <p className="relative max-w-[640px] text-[24px] font-medium leading-8 tracking-[-0.02em] text-ink [text-wrap:balance] md:text-[30px] md:leading-10">
               <span className="absolute -translate-x-full" aria-hidden>&ldquo;</span>
-              Our cortado with a twist of <span className="hand-underline">fresh orange peel</span> and a pinch of dark chocolate.
-              Bright up front, round at the finish.&rdquo;
+              {w.special.description}&rdquo;
             </p>
           </blockquote>
           <figcaption className="flex items-end border-t border-rule-subtle px-6 py-6 md:px-8 md:pb-10 lg:min-w-[300px] lg:border-l lg:border-t-0 lg:pt-20">
             <div className="flex items-center gap-3">
               <span className="flex size-11 items-center justify-center rounded-full bg-white ring-1 ring-[#E5E5E5]">
-                <StoreTile colorIndex={WILLIAMSBURG.colorIndex} name={WILLIAMSBURG.name} size="lg" />
+                <StoreTile colorIndex={w.colorIndex} name={w.name} size="lg" />
               </span>
               <span>
-                <span className="block text-[16px] font-medium leading-6 text-ink">Orange Peel Cortado</span>
+                <span className="block text-[16px] font-medium leading-6 text-ink">{w.special.name}</span>
                 <span className="block text-[16px] leading-6 text-muted">
-                  <span className="definition-underline">The special</span> · {WEEK_LABEL}
+                  <span className="definition-underline">The special</span> · {sample ? weekLabel(sample.weekOf) : ""}
                 </span>
               </span>
             </div>
           </figcaption>
-        </figure>
+        </figure> : null}
       </div></div>
     </section>
   );

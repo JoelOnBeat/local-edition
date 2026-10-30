@@ -136,7 +136,7 @@ describe("T3 blockProfile in fixture mode (all eight sample stores)", () => {
     const first = spy.mock.calls.length;
     expect(first).toBe(14); // 7 tag types: local + baseline
     const params = spy.mock.calls.map(([q]) => q as Record<string, unknown>);
-    expect(params.filter((q) => q["signal.location.query"] === "New York")).toHaveLength(7);
+    expect(params.filter((q) => q["signal.location.query"] === "New York City")).toHaveLength(7);
     expect(params.filter((q) => String(q["signal.location"]).startsWith("POINT(-73.9573 40.7175)"))).toHaveLength(7);
     await computeBlock(store("astoria"), chain, deps);
     expect(spy.mock.calls.length - first).toBe(7);

@@ -1,6 +1,5 @@
 import type { QlooEntityRef } from "@/contract";
-import { suggestAnchors } from "@/lib/anchor-suggestions";
-import { UpstreamError } from "../http/errors";
+import { HttpError } from "../http/errors";
 import { serial } from "../serial";
 import type { Repo } from "../store/repo";
 import { brandSearchKey, searchBrands } from "./anchors";
@@ -8,20 +7,14 @@ import { repoCache, resolveDeps, type QlooDeps } from "./deps";
 
 /**
  * Brand search for the setup page, built so a visitor's typing cannot spend the hackathon key's Qloo credits:
- *  1. a saved answer (KV, two weeks) is always served first and costs nothing;
+ *  1. a saved answer (KV, two weeks, real Qloo answers only) is always served first and costs nothing;
  *  2. only a miss may go live, and only while the workspace has live searches left today (3), on top of the app-wide ledger
- *     (300 total, 40 a day) the client checks before every live call;
- *  3. otherwise, or when the ledger refuses, the answer is suggested brands with `code: "qloo_budget"`. Nothing is called.
- * Replay and fixture runs make no live call and are not counted.
+ *     (2,000 total, 200 a day) the client checks before every live call;
+ *  3. otherwise the search fails with `qloo_budget` (or `qloo_unavailable` when Qloo cannot answer) and the page says so with a retry.
+ *     No suggested or sample brands stand in for a Qloo answer.
  */
 export const LIVE_SEARCHES_PER_WORKSPACE_PER_DAY = 3;
 export const QLOO_BUDGET_CODE = "qloo_budget";
-
-export interface AnchorSearchResult {
-  refs: QlooEntityRef[];
-  /** `qloo_budget` when the refs are suggestions because no live search was allowed. */
-  code: typeof QLOO_BUDGET_CODE | null;
-}
 
 const dayOf = (d: Date) => d.toISOString().slice(0, 10);
 const counterKey = (workspaceId: string, now: Date) => `qloo:anchors:live:${workspaceId}:${dayOf(now)}`;
@@ -42,17 +35,12 @@ export async function searchAnchorsGuarded(
   workspaceId: string,
   q: string,
   partial: Partial<QlooDeps> = {},
-): Promise<AnchorSearchResult> {
+): Promise<QlooEntityRef[]> {
   const deps = resolveDeps({ ...partial, cache: partial.cache ?? repoCache(repo) });
   const saved = await deps.cache.get<QlooEntityRef[]>(brandSearchKey(q));
-  if (saved) return { refs: saved, code: null };
+  if (saved) return saved;
   if (deps.client.mode === "live" && !(await takeLiveSearch(repo, workspaceId, deps.now()))) {
-    return { refs: suggestAnchors(q), code: QLOO_BUDGET_CODE };
+    throw new HttpError(429, QLOO_BUDGET_CODE, `This workspace has used its ${LIVE_SEARCHES_PER_WORKSPACE_PER_DAY} live Qloo searches for today. Searches you have already made still work. Try again tomorrow.`);
   }
-  try {
-    return { refs: await searchBrands(q, deps), code: null };
-  } catch (e) {
-    if (e instanceof UpstreamError && e.code === "spend_cap") return { refs: suggestAnchors(q), code: QLOO_BUDGET_CODE };
-    throw e;
-  }
+  return searchBrands(q, deps);
 }

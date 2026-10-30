@@ -74,7 +74,7 @@ describe("T3 compareStores in fixture mode", () => {
     expect(seen).toHaveLength(1);
     expect(String(seen[0]["a.signal.interests.entities"]).split(",")).toHaveLength(5);
     expect(String(seen[0]["b.signal.interests.entities"]).split(",")).toHaveLength(5);
-    expect(seen[0]).toMatchObject({ "filter.type": "urn:entity:place", "filter.location.query": "New York", model: "descriptive" });
+    expect(seen[0]).toMatchObject({ "filter.type": "urn:entity:place", "filter.location.query": "New York City", model: "descriptive" });
   });
 
   it("still answers when Qloo's compare is rate limited (evidence layer only)", async () => {

@@ -5,6 +5,7 @@ import { UpstreamError } from "../http/errors";
 import { fetchJson, type ProviderRunMode } from "../http/fetch-json";
 import type { Recorder } from "../http/recorder";
 import { getRepo } from "../store";
+import { qlooLiveOnly } from "./mode";
 import { createQlooLedger, QLOO_RESPONSE_TTL_SECONDS, type QlooLedger } from "./ledger";
 import {
   AudiencesEnvelope,
@@ -32,8 +33,10 @@ export interface QlooGate {
 
 export interface QlooCall<T> {
   data: T;
-  /** `cache` = a saved live response served without a call or a credit. */
+  /** `cache` = a saved live response served without a call or a credit. `replay` and `fixture` exist only outside production (unit tests, `next dev`). */
   mode: "live" | "replay" | "fixture" | "cache";
+  /** When Qloo answered: now for a live call, the time the answer was saved for a cached one. ISO 8601. Absent offline (tests, `next dev`). */
+  at?: string;
   /** Path only, never a host or key. */
   path: string;
   /** Query params exactly as sent (the key travels in a header, never here). */
@@ -52,7 +55,7 @@ export interface QlooClientConfig {
   /**
    * Live runs only. Resolved per call (a Worker isolate outlives requests, so the repo is found at use time). Every live call
    * checks the response cache first, then reserves one call from the ledger BEFORE it goes out. Without a gate a live client
-   * refuses to call (`spend_cap`): there is no way to reach Qloo around the ledger.
+   * refuses to call (`qloo_unavailable`): there is no way to reach Qloo around the ledger.
    */
   gate?: () => Promise<QlooGate | null>;
   /** Live runs only: answer from saved responses, never call (regenerate and page loads use this). */
@@ -63,14 +66,20 @@ export interface QlooClientConfig {
   random?: () => number;
 }
 
-/** Live without a key falls back to replay (then fixture); the status reports `missing-key`. */
+/**
+ * Production: always `live`; without a key the status says `missing-key` and every call fails with `qloo_unavailable`.
+ * Elsewhere, live without a key falls back to replay (then fixture), as before, so dev and tests need no key.
+ */
 export function resolveQlooMode(env: Pick<ServerEnv, "QLOO_MODE" | "QLOO_API_KEY">): {
   mode: ProviderRunMode;
   status: ProviderMode;
 } {
+  if (qlooLiveOnly()) return { mode: "live", status: env.QLOO_API_KEY ? "live" : "missing-key" };
   if (env.QLOO_MODE === "live" && !env.QLOO_API_KEY) return { mode: "replay", status: "missing-key" };
   return { mode: env.QLOO_MODE, status: env.QLOO_MODE };
 }
+
+const unavailable = (message: string, status = 503) => new UpstreamError("qloo_unavailable", QLOO_PROVIDER, message, { status, retryable: true });
 
 export function normalizeParams(params: Params): Record<string, string> {
   const out: Record<string, string> = {};
@@ -100,11 +109,17 @@ async function takeSlot(): Promise<() => void> {
   };
 }
 
-/** `qloo:resp:v1:<sha256 of path and sorted params>`: the key (header) is never part of it. */
+/** What the response cache holds: a real Qloo answer and when we got it. */
+interface SavedResponse {
+  at: string;
+  data: unknown;
+}
+
+/** `qloo:resp:v2:<sha256 of path and sorted params>`: the key (header) is never part of it. v1 (raw bodies, no time) is no longer read. */
 async function responseKey(path: string, params: Record<string, string>): Promise<string> {
   const text = `${path}?${Object.entries(params).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([k, v]) => `${k}=${v}`).join("&")}`;
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return `qloo:resp:v1:${[...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 40)}`;
+  return `qloo:resp:v2:${[...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 40)}`;
 }
 
 /** The production gate: the global ledger and the app's repo cache (KV on Workers). */
@@ -131,59 +146,81 @@ export class QlooClient {
     this.status = cfg.status;
   }
 
-  /** One GET through `fetchJson`. Replay misses fall back to the synthetic fixture for these params. */
+  /**
+   * One GET. Live: the saved real answer first (no call, no credit), else one call reserved on the ledger BEFORE it goes out, and the
+   * answer is saved for two weeks. Failures throw `qloo_unavailable` or `qloo_budget`; no sample answer ever stands in. Replay and
+   * fixture modes exist for unit tests and `next dev` only and are refused where `qlooLiveOnly()`.
+   */
   async call<T>(path: string, query: Params, schema: z.ZodType<T>): Promise<QlooCall<T>> {
     const params = normalizeParams(query);
-    const url = buildUrl(this.cfg.baseUrl ?? QLOO_HOST, path, params);
-    let gate: QlooGate | null = null;
-    let cacheKey = "";
-    if (this.mode === "live" || this.mode === "replay") {
-      gate = (await this.cfg.gate?.().catch(() => null)) ?? null;
-      if (this.mode === "live" && !gate) throw new UpstreamError("spend_cap", QLOO_PROVIDER, "Live Qloo calls are not available right now. Using the saved taste data instead.");
-      if (gate) {
-        cacheKey = await responseKey(path, params);
-        // Saved real answers come first in both modes: replay (production default) serves them with no call and no credit, then falls back
-        // to recordings and the synthetic fixtures; live goes on to the ledger only when nothing is saved.
-        const saved = await gate.cache.get<unknown>(cacheKey).catch(() => null);
-        const parsed = saved === null ? null : schema.safeParse(saved);
-        if (parsed?.success) return { data: parsed.data, mode: "cache", path, params };
-      }
-      if (this.mode === "live") {
-        if (this.cfg.cacheOnly) throw new UpstreamError("spend_cap", QLOO_PROVIDER, "This page uses saved Qloo data and makes no new call.");
-        await gate!.ledger.reserve(1); // throws the spend_cap UpstreamError when the total or today's slice is spent
-      }
+    if (this.mode !== "live") {
+      if (qlooLiveOnly()) throw unavailable("Qloo is only called live in production. This answer is not available.");
+      return this.callOffline(path, params, schema);
     }
-    const release = this.mode === "live" ? await takeSlot() : () => {};
+    if (!this.cfg.apiKey) throw unavailable("Qloo is not connected on this server. Nothing was called.");
+    const gate = (await this.cfg.gate?.().catch(() => null)) ?? null;
+    if (!gate) throw unavailable("The Qloo call ledger is not available, so no live call was made. Try again.");
+
+    const cacheKey = await responseKey(path, params);
+    const saved = await gate.cache.get<SavedResponse>(cacheKey).catch(() => null);
+    const parsed = saved && typeof saved.at === "string" ? schema.safeParse(saved.data) : null;
+    if (saved && parsed?.success) return { data: parsed.data, mode: "cache", at: saved.at, path, params };
+    if (this.cfg.cacheOnly) throw unavailable("This page uses saved Qloo answers and makes no new call.");
+
+    await gate.ledger.reserve(1); // throws `qloo_budget` (a cap is spent) or `qloo_unavailable` (the ledger cannot be read)
+    const release = await takeSlot();
     try {
       const res = await fetchJson<T>({
         provider: QLOO_PROVIDER,
         method: "GET",
-        url,
-        headers: this.cfg.apiKey ? { "X-Api-Key": this.cfg.apiKey } : {},
-        mode: this.mode,
+        url: buildUrl(this.cfg.baseUrl ?? QLOO_HOST, path, params),
+        headers: { "X-Api-Key": this.cfg.apiKey },
+        mode: "live",
         schema,
-        fixture: async () => {
-          const { respond } = await import("./fixtures/router");
-          return respond(path, params) as T;
-        },
         timeoutMs: this.cfg.timeoutMs ?? 20_000,
         // A retry is another billed call at Qloo, and the ledger counted one: live calls are not retried.
-        retries: this.mode === "live" ? (this.cfg.retries ?? 0) : this.cfg.retries,
-        recorder: this.cfg.recorder,
+        retries: this.cfg.retries ?? 0,
+        // Real Qloo answers live only in the KV response cache, never in a recorder or a repo.
+        record: false,
         fetchImpl: this.cfg.fetchImpl,
         sleep: this.cfg.sleep,
         random: this.cfg.random,
       });
-      if (gate && this.mode === "live" && res.mode === "live") await gate.cache.put(cacheKey, res.data, QLOO_RESPONSE_TTL_SECONDS).catch(() => undefined);
-      return { data: res.data, mode: res.mode, path, params };
+      const at = new Date().toISOString();
+      await gate.cache.put<SavedResponse>(cacheKey, { at, data: res.data }, QLOO_RESPONSE_TTL_SECONDS).catch(() => undefined);
+      return { data: res.data, mode: "live", at, path, params };
     } catch (e) {
       if (e instanceof UpstreamError && e.code === "unauthorized" && e.status === 403) {
         throw new UpstreamError("unauthorized", QLOO_PROVIDER, "Qloo has not enabled this kind of data for this key.", { status: 403 });
       }
-      throw e;
+      if (e instanceof UpstreamError && e.code === "qloo_unavailable") throw e;
+      throw unavailable(e instanceof UpstreamError && e.code === "timeout" ? "Qloo did not answer in time. Try again." : "Qloo could not answer this request. Try again.");
     } finally {
       release();
     }
+  }
+
+  /** Recorded and sample answers for unit tests and `next dev`. Unreachable in production (see `call`). */
+  private async callOffline<T>(path: string, params: Record<string, string>, schema: z.ZodType<T>): Promise<QlooCall<T>> {
+    const res = await fetchJson<T>({
+      provider: QLOO_PROVIDER,
+      method: "GET",
+      url: buildUrl(this.cfg.baseUrl ?? QLOO_HOST, path, params),
+      headers: this.cfg.apiKey ? { "X-Api-Key": this.cfg.apiKey } : {},
+      mode: this.mode,
+      schema,
+      fixture: async () => {
+        const { respond } = await import("./fixtures/router");
+        return respond(path, params) as T;
+      },
+      timeoutMs: this.cfg.timeoutMs ?? 20_000,
+      retries: this.cfg.retries,
+      recorder: this.cfg.recorder,
+      fetchImpl: this.cfg.fetchImpl,
+      sleep: this.cfg.sleep,
+      random: this.cfg.random,
+    });
+    return { data: res.data, mode: res.mode, path, params };
   }
 
   search(query: Params) {
@@ -219,7 +256,7 @@ export function createQlooClient(overrides: Partial<QlooClientConfig> & { env?: 
   const { mode, status } = resolveQlooMode(env);
   const { env: _env, ...rest } = overrides;
   void _env;
-  return new QlooClient({ mode, status, apiKey: env.QLOO_API_KEY, gate: mode === "live" || mode === "replay" ? defaultGate : undefined, ...rest });
+  return new QlooClient({ mode, status, apiKey: env.QLOO_API_KEY, gate: mode === "live" ? defaultGate : undefined, ...rest });
 }
 
 let shared: QlooClient | undefined;

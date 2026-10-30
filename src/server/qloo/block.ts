@@ -5,7 +5,7 @@ import { resolveDeps, TTL, type QlooDeps } from "./deps";
 import { buildEvidence } from "./evidence";
 import { clamp, pointWkt, round } from "./geo";
 import { entitiesOf, tagIdOf, tagsOf } from "./parse";
-import { BLOCK_TAG_TYPES, kindForTag, mapLimit, median, signed, type BlockTagType } from "./util";
+import { BLOCK_TAG_TYPES, baselineCacheKey, isQlooOutage, kindForTag, mapLimit, median, qlooCity, signed, type BlockTagType } from "./util";
 
 const log = createLogger("qloo:block");
 
@@ -25,8 +25,6 @@ export interface BlockResult {
   /** Every scored tag (not cut to 12), for compare. */
   allTags: BlockTag[];
 }
-
-const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
 export function rawTagsOf(env: Parameters<typeof tagsOf>[0]): RawTag[] {
   const out: RawTag[] = [];
@@ -82,13 +80,13 @@ interface TypeOutcome {
 }
 
 async function cityBaseline(chain: Chain, spec: BlockTagType, deps: QlooDeps): Promise<{ tags: RawTag[]; mode: TypeOutcome["baselineMode"] } | null> {
-  const key = `qloo:baseline:v1:${slug(chain.city.name)}:${spec.type}`;
+  const key = baselineCacheKey(chain.city.name, spec.type);
   const hit = await deps.cache.get<RawTag[]>(key);
   if (hit) return { tags: hit, mode: "cache" };
   try {
     const call = await deps.client.insights({
       "filter.type": "urn:tag",
-      "signal.location.query": chain.city.name,
+      "signal.location.query": qlooCity(chain.city.name),
       "filter.tag.types": spec.type,
       take: 50,
     });
@@ -96,6 +94,8 @@ async function cityBaseline(chain: Chain, spec: BlockTagType, deps: QlooDeps): P
     if (tags.length) await deps.cache.put(key, tags, TTL.baseline);
     return { tags, mode: call.mode };
   } catch (e) {
+    // No baseline would mean lifts ranked against the block's own median: a different number, so an outage fails the profile (retry).
+    if (isQlooOutage(e)) throw e;
     log.warn("city baseline unavailable", { type: spec.type, code: (e as { code?: string }).code });
     return null;
   }
@@ -130,7 +130,7 @@ function typeEvidence(store: Store, chain: Chain, o: TypeOutcome, deps: QlooDeps
   const baselineNote =
     o.baselineMode === "none"
       ? "ranked within this block (no city baseline available)"
-      : `against the ${chain.city.name} baseline`;
+      : `against the ${qlooCity(chain.city.name)} baseline`;
   const list = top.map((t) => `${t.name} ${t.affinity.toFixed(2)} (${signed(t.lift)})`).join(", ");
   return buildEvidence({
     scope: store.id,
@@ -145,14 +145,15 @@ function typeEvidence(store: Store, chain: Chain, o: TypeOutcome, deps: QlooDeps
 async function placeFallback(store: Store, chain: Chain, deps: QlooDeps): Promise<{ tags: BlockTag[]; evidence: Evidence[] }> {
   const query = { "filter.type": "urn:entity:place", "filter.tags": "urn:tag:genre:place:restaurant", take: 50 } as const;
   const local = await deps.client.insights({ ...query, "filter.location": pointWkt(store), "filter.location.radius": 800, sort_by: "affinity" });
-  const cacheKey = `qloo:baseline:v1:${slug(chain.city.name)}:places`;
+  const cacheKey = baselineCacheKey(chain.city.name, "places");
   let cityShares = await deps.cache.get<Record<string, number>>(cacheKey);
   if (!cityShares) {
     try {
-      const city = await deps.client.insights({ ...query, "filter.location.query": chain.city.name, "filter.location.radius": 0 });
+      const city = await deps.client.insights({ ...query, "filter.location.query": qlooCity(chain.city.name), "filter.location.radius": 0 });
       cityShares = tagShares(entitiesOf(city.data));
       if (Object.keys(cityShares).length) await deps.cache.put(cacheKey, cityShares, TTL.baseline);
     } catch (e) {
+      if (isQlooOutage(e)) throw e;
       log.warn("city place baseline unavailable", { code: (e as { code?: string }).code });
     }
   }
@@ -210,6 +211,9 @@ export async function computeBlock(store: Store, chain: Chain, partial?: Partial
   const outcomes = await mapLimit(BLOCK_TAG_TYPES, 4, (spec) => oneType(store, chain, spec, deps));
   const forbidden = outcomes.some((o) => o.forbidden);
   const failures = outcomes.filter((o) => o.error && !o.forbidden);
+  // A tag group that could not be asked (Qloo down, ledger spent) must not leave a quietly partial profile that gets cached: fail, retry later.
+  const outage = failures.find((o) => isQlooOutage(o.error));
+  if (outage) throw outage.error;
   let allTags = outcomes.flatMap((o) => o.tags);
   const evidence = outcomes.flatMap((o) => typeEvidence(store, chain, o, deps) ?? []);
 

@@ -52,3 +52,22 @@ export const median = (xs: number[]): number => {
   const m = Math.floor(s.length / 2);
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 };
+
+/**
+ * The city string Qloo's `*.location.query` should resolve. "New York" resolves to the STATE (probe, 30 Oct: query.localities.filter[0] is
+ * New York state), so the sample chain's city is asked as "New York City". Every other name passes through.
+ */
+export function qlooCity(name: string): string {
+  return name.trim().toLowerCase() === "new york" ? "New York City" : name.trim();
+}
+
+export const citySlug = (name: string): string => qlooCity(name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+/** The city baseline cache key (v2: v1 baselines may have come from recorded or sample answers, or the New York state query). Read back by the verifier. */
+export const baselineCacheKey = (cityName: string, group: string): string => `qloo:baseline:v2:${citySlug(cityName)}:${group}`;
+
+/** Errors that mean Qloo could not answer (so the whole result must fail), as opposed to 403 "type not enabled for this key". */
+export function isQlooOutage(e: unknown): boolean {
+  const code = (e as { code?: string } | null)?.code;
+  return code === "qloo_unavailable" || code === "qloo_budget";
+}

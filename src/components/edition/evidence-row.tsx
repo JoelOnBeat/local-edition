@@ -14,6 +14,12 @@ const MODE: Record<Evidence["mode"], { label: string; tone: "ok" | "warn" | "neu
   cache: { label: "Cached", tone: "neutral" },
 };
 
+/** Qloo answers are only ever live or a saved live answer; the label says which, and the row's time is when Qloo answered. */
+const QLOO_MODE: Partial<Record<Evidence["mode"], { label: string; tone: "ok" | "neutral"; when: string }>> = {
+  live: { label: "Live Qloo call", tone: "ok", when: "Called" },
+  cache: { label: "Cached live Qloo answer", tone: "neutral", when: "Answered" },
+};
+
 /**
  * Which mark an evidence row earns: Token Factory calls are NVIDIA Nemotron only when the model is one; other models
  * (the Qwen embedding and reranker) show the Nebius Token Factory mark that served them.
@@ -49,7 +55,8 @@ export function EvidenceRow({ e }: { e: Evidence }) {
   const provider = evidenceProvider(e);
   const head = headlineMetric(e);
   const params = Object.entries(e.params).map(([k, v]) => `${k}=${v}`).join("\n");
-  const mode = MODE[e.mode];
+  const qloo = e.source === "qloo" ? QLOO_MODE[e.mode] : undefined;
+  const mode = qloo ?? MODE[e.mode];
 
   return (
     <li className="rounded-xl bg-white p-4 shadow-ring-xs">
@@ -77,7 +84,7 @@ export function EvidenceRow({ e }: { e: Evidence }) {
       ) : null}
       {params ? <CodeFrame text={params} /> : null}
       <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted">
-        <span className="font-mono">{formatDateTime(e.fetchedAt)} NY</span>
+        <span className="font-mono">{qloo ? `${qloo.when} ` : ""}{formatDateTime(e.fetchedAt)} NY</span>
         {e.url ? (
           <a href={e.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 font-medium text-ink-2 underline decoration-stone-300 underline-offset-[3px] hover:text-ink">
             Source<Icon name="arrowUpRight" size={12} />

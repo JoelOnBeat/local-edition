@@ -16,11 +16,10 @@
     "BUILD_MODE": "workflow",
     // Provider modes. Unset, env.ts defaults every one of these to `replay` (recorded sample data), so a deployment
     // without them would never call a model or Tavily. TF_MODE and TAVILY_MODE are live in production.
-    // QLOO_MODE stays `replay` (recorded Qloo answers) until Qloo's key exists: it becomes `live` when QLOO_API_KEY is set
-    // (change this value in the same deploy that runs `wrangler secret put QLOO_API_KEY`).
+    // Qloo is live-only in production (Gabriel, 30 Oct 23:02 MYT: no replay, no sample answers). env.ts forces `live` whatever this says.
     "TF_MODE": "live",
     "TAVILY_MODE": "live",
-    "QLOO_MODE": "replay",
+    "QLOO_MODE": "live",
     // Secrets, set with `wrangler secret put`: LE_JOB_SECRET (the Worker only verifies the Nebius job's signatures with it), NEBIUS_API_KEY
     // (Token Factory), QLOO_API_KEY, TAVILY_API_KEY. Never .dev.vars. NEBIUS_SA_CREDENTIALS is NEVER a Worker secret: no Worker, cron or
     // Workflow calls the Nebius AI Cloud control plane (it answers Cloudflare egress with a 522, docs/NEBIUS-REST.md). NeMo

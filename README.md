@@ -83,7 +83,7 @@ flowchart LR
 
 - Kettle & Kiln is **sample data**, labelled so in the app. It is not a customer.
 - Square, Slack and Gmail/Outlook are **not connected** on the live app yet (see the connectors table); only the calendar feed runs without an account.
-- **Qloo**: the code, ledger and tests are in place and used under the hackathon's terms, but as committed `QLOO_MODE` is `replay`, which serves synthetic Qloo-shaped fixtures (`fixtures/qloo/`, invented numbers, badged "Sample data" and counted as a coverage gap on `/limits`) until a Qloo key is set on the Worker. Real Qloo responses are never committed; recordings go to the gitignored `.recordings/`.
+- **Qloo**: live-only in production. Every Qloo result comes from a live Qloo call or a saved real answer (KV, 14 days); replay, fixture and recording fallbacks are unreachable there, and a failed call shows a retry state, never sample data. Calls go through a hard ledger (2,000 through 15 Dec, 200 a day). Real Qloo responses are never committed. Fixtures under `fixtures/qloo/` exist for unit tests and `next dev` only.
 - NeMo Guardrails runs only when someone starts the job from the CLI; the weekly cron does not call Nebius.
 - The first live Tavily prefetch of a week can take longer than the agent's 25 s tool timeout; the work finishes and is cached.
 - `docs/` holds working notes and smoke-test records from the build; `docs/CONTRACT.md`, `docs/CLOUDFLARE.md` and `docs/DEPLOY.md` are the reference ones.
@@ -93,7 +93,7 @@ flowchart LR
 ```sh
 npm install
 NEXT_PUBLIC_DATA_MODE=mock npm run dev   # UI on typed mock data, no server calls
-npm run dev                              # DATA_MODE=app: real routes; providers default to replay/fixture without keys
+npm run dev                              # DATA_MODE=app: real routes; providers default to replay/fixture without keys (never in production)
 ```
 
 Open http://localhost:3000. Add `NEBIUS_API_KEY`, `TAVILY_API_KEY` and `QLOO_API_KEY` to `.env.local` and set `TF_MODE`, `TAVILY_MODE`, `QLOO_MODE` to `live` to use real providers; `.env*` is gitignored. `scripts/deploy.sh` and `scripts/deploy-secrets.sh` deploy to your own Cloudflare account and read credentials through a local `~/.secret-store/inject.sh` helper, so adapt them to your own secret handling.

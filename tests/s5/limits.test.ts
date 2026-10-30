@@ -51,11 +51,11 @@ describe("GET /api/limits", () => {
     expect(own.res.headers.get("set-cookie")).toBeNull();
   });
 
-  it("reports the Tavily total and daily slice, Qloo's calls against 300 and 40, the rate limits and the visitor budgets from the server", async () => {
+  it("reports the Tavily total and daily slice, Qloo's calls against 2,000 and 200, the rate limits and the visitor budgets from the server", async () => {
     await recordTavily(repo, 3);
     const { body } = await limits();
     expect(body.tavily).toEqual({ used: 3, cap: 80, dailyUsed: 3, dailyCap: 10 });
-    expect(body.qloo).toMatchObject({ cap: 300, dailyCap: 40 });
+    expect(body.qloo).toMatchObject({ cap: 2000, dailyCap: 200 });
     expect(body.qloo!.used).toBeGreaterThanOrEqual(0);
     expect(body.rateLimits.map((r) => r.action)).toEqual(expect.arrayContaining(["Build editions", "Search Qloo brands", "Read a menu photo"]));
     expect(body.rateLimits.find((r) => r.action === "Build editions")).toEqual({ action: "Build editions", workspace: "4, then 1 a minute", ip: "12, then 3 a minute" });

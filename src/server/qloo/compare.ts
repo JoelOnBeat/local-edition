@@ -2,11 +2,12 @@ import type { BlockTag, Chain, CompareResult, Evidence, Store } from "@/contract
 import { createLogger } from "../log";
 import { anchorIds, resolveAnchors } from "./anchors";
 import { computeBlock } from "./block";
+import { qlooLiveOnly } from "./mode";
 import { resolveDeps, TTL, type QlooDeps } from "./deps";
 import { buildEvidence } from "./evidence";
 import { compareTagsOf, type SharedTag } from "./parse";
 import { placesNear } from "./places";
-import { BLOCK_TAG_TYPES, toPct } from "./util";
+import { BLOCK_TAG_TYPES, qlooCity, toPct } from "./util";
 
 const log = createLogger("qloo:compare");
 
@@ -65,13 +66,15 @@ interface CachedCompare {
   path: string;
   params: Record<string, string>;
   mode: "live" | "replay" | "fixture" | "cache";
+  /** When Qloo answered (the evidence's fetchedAt). */
+  at?: string;
   entityIds: string[];
 }
 
 async function qlooCompare(a: Store, b: Store, chain: Chain, deps: QlooDeps): Promise<{ data: CachedCompare; cached: boolean } | null> {
   const key = `qloo:compare:v1:${[a.id, b.id].sort().join(":")}`;
   const hit = await deps.cache.get<CachedCompare>(key);
-  if (hit) return { data: hit, cached: true };
+  if (hit && (!qlooLiveOnly() || hit.mode === "live" || hit.mode === "cache")) return { data: hit, cached: true };
   try {
     const anchors = anchorIds(await resolveAnchors(chain, deps));
     const [pa, pb] = await Promise.all(
@@ -84,7 +87,7 @@ async function qlooCompare(a: Store, b: Store, chain: Chain, deps: QlooDeps): Pr
       "a.signal.interests.entities": idsA,
       "b.signal.interests.entities": idsB,
       "filter.type": "urn:entity:place",
-      "filter.location.query": chain.city.name,
+      "filter.location.query": qlooCity(chain.city.name),
       model: "descriptive",
       take: 20,
     });
@@ -93,6 +96,7 @@ async function qlooCompare(a: Store, b: Store, chain: Chain, deps: QlooDeps): Pr
       path: call.path,
       params: call.params,
       mode: call.mode,
+      at: call.at,
       entityIds: [...idsA, ...idsB],
     };
     await deps.cache.put(key, data, TTL.compare);
@@ -127,7 +131,7 @@ export async function compareStores(
     evidence.push(
       buildEvidence({
         scope: [a.id, b.id].sort().join("+"),
-        call: { path: remote.data.path, params: remote.data.params, mode: remote.data.mode },
+        call: { path: remote.data.path, params: remote.data.params, mode: remote.data.mode, at: remote.data.at },
         mode: remote.cached ? "cache" : remote.data.mode,
         summary: `Qloo compares the top ${PLACES_PER_SIDE} nearby places of ${a.name} and ${b.name}: shared taste includes ${top.join(", ")}.`,
         metrics: { relevance: remote.data.shared[0].score ?? undefined },

@@ -3,7 +3,9 @@ import Link from "next/link";
 import { SampleChainLink } from "@/components/account/session-links";
 import { BrandGlyph, Chevron, StoreTile, buttonClass, cx, type Brand } from "@/components/ui";
 import { SAMPLE_MENU } from "@/server/sample/chain";
-import { GUARDRAIL_DIFF, MEASURED, WILLIAMSBURG } from "./landing-data";
+import type { LandingSample } from "@/server/landing/types";
+import { MEASURED } from "./landing-data";
+import { SamplePending } from "./landing-pending";
 import { LogoWall } from "./landing-integrations";
 import { Stepper, type Step } from "./landing-stepper";
 import { Container, Icon, Rule, SectionHeader } from "./section";
@@ -36,7 +38,9 @@ function Row({ left, right, own }: { left: ReactNode; right: ReactNode; own?: bo
 
 const MENU_PICK = ["cortado", "banana-bread", "iced-latte", "chai", "nitro"];
 
-function panes(): Step[] {
+function panes(sample: LandingSample | null): Step[] {
+  const w = sample?.featured ?? null;
+  const g = sample?.guardrail ?? null;
   const menu = SAMPLE_MENU.filter((m) => MENU_PICK.includes(m.id.replace("menu_", "")));
   return [
     {
@@ -54,8 +58,10 @@ function panes(): Step[] {
       body: "Qloo says what the people around each store over-index on, and by how much against the city.",
       pane: (
         <TraceCard brand="qloo" label="qloo /v2/insights" meta="800 m radius">
-          <p className="px-2.5 pb-2 text-[13px] text-band-ink-3">Around {WILLIAMSBURG.address}</p>
-          {WILLIAMSBURG.tags.map((t, i) => <Row key={t.name} own={i === 0} left={t.name} right={`+${t.lift.toFixed(2)} lift`} />)}
+          {w && w.tags.length ? <>
+            <p className="px-2.5 pb-2 text-[13px] text-band-ink-3">Around {w.address}</p>
+            {w.tags.map((t, i) => <Row key={t.name} own={i === 0} left={t.name} right={`+${t.lift.toFixed(2)} lift`} />)}
+          </> : <SamplePending dark className="px-2.5" />}
         </TraceCard>
       ),
     },
@@ -65,14 +71,16 @@ function panes(): Step[] {
       pane: (
         <div className="grid gap-3">
           <TraceCard brand="nvidia" label="nemotron-3.5-super-vl · plan" meta={`${MEASURED.buildSeconds} s · ${MEASURED.buildCost}`}>
-            <Row own left="Special · Orange Peel Cortado" right="from Cortado" />
-            <Row left="Partner · Tern & Tallow Vintage" right="2 min walk" />
-            <Row left="Event · Vinyl and Cortado Night" right="Thu 19:00" />
+            {w ? <>
+              {w.special ? <Row own left={`Special · ${w.special.name}`} right={w.special.flavourTags[0] ? `from ${w.special.flavourTags[0]}` : ""} /> : null}
+              {w.partner ? <Row left={`Partner · ${w.partner.name}`} right={`${Math.max(1, Math.round(w.partner.distanceM / 80))} min walk`} /> : null}
+              {w.event ? <Row left={`Event · ${w.event.title}`} right={w.event.when} /> : null}
+            </> : <SamplePending dark className="px-2.5" />}
           </TraceCard>
-          <TraceCard brand="nvidia" label={`guardrails · ${GUARDRAIL_DIFF.rail}`} meta={GUARDRAIL_DIFF.store}>
-            <p className="rounded-md border-l-2 border-[#8A5A3D] bg-[#2a2320] px-3 py-2 text-[14px] leading-6 text-[#d7b8a6] line-through decoration-[#d7b8a6]/60">{GUARDRAIL_DIFF.before}</p>
-            <p className="mt-2 px-1 text-[13px] text-band-ink-3">{GUARDRAIL_DIFF.reason}</p>
-          </TraceCard>
+          {g ? <TraceCard brand="nvidia" label={`guardrails · ${g.rail}`} meta={g.store}>
+            <p className="rounded-md border-l-2 border-[#8A5A3D] bg-[#2a2320] px-3 py-2 text-[14px] leading-6 text-[#d7b8a6] line-through decoration-[#d7b8a6]/60">{g.before}</p>
+            <p className="mt-2 px-1 text-[13px] text-band-ink-3">{g.reason}</p>
+          </TraceCard> : null}
         </div>
       ),
     },
@@ -81,12 +89,12 @@ function panes(): Step[] {
       body: "Head office approves on one map or from Slack. Each store gets a one-page staff card, an email and a calendar feed for its event night.",
       pane: (
         <div className="grid gap-3">
-          <TraceCard brand="slack" label="slack · #williamsburg">
+          <TraceCard brand="slack" label={`slack · #${(w?.name ?? "williamsburg").toLowerCase().replace(/\s+/g, "-")}`}>
             <div className="flex gap-3 px-1">
-              <StoreTile colorIndex={1} name="Williamsburg" size="lg" />
+              <StoreTile colorIndex={w?.colorIndex ?? 1} name={w?.name ?? "Williamsburg"} size="lg" />
               <div className="min-w-0 text-[14px] leading-6">
                 <p className="font-medium text-band-ink">This week&apos;s edition is ready</p>
-                <p className="text-band-ink-2">Orange Peel Cortado · Vinyl and Cortado Night, Thu 19:00</p>
+                {w ? <p className="text-band-ink-2">{[w.special?.name, w.event ? `${w.event.title}, ${w.event.when}` : null].filter(Boolean).join(" · ")}</p> : <SamplePending dark />}
                 <div className="mt-2.5 flex gap-2">
                   <span className="rounded-md bg-[#007a5a] px-2.5 py-1 text-[13px] font-medium text-white">Approve</span>
                   <span className="rounded-md px-2.5 py-1 text-[13px] text-band-ink shadow-[inset_0_0_0_1px_rgb(255_255_255/.14)]">Regenerate</span>
@@ -94,8 +102,8 @@ function panes(): Step[] {
               </div>
             </div>
           </TraceCard>
-          <TraceCard brand="gcal" label="calendar · williamsburg.ics">
-            <Row own left="Vinyl and Cortado Night" right="Thu 19:00" />
+          <TraceCard brand="gcal" label={`calendar · ${(w?.name ?? "williamsburg").toLowerCase().replace(/\s+/g, "-")}.ics`}>
+            {w?.event ? <Row own left={w.event.title} right={w.event.when} /> : <SamplePending dark className="px-2.5" />}
           </TraceCard>
         </div>
       ),
@@ -104,7 +112,7 @@ function panes(): Step[] {
 }
 
 /** The dark band: how it works (four steps) and the integrations wall. */
-export function LandingBand() {
+export function LandingBand({ sample }: { sample: LandingSample | null }) {
   return (
     <section id="how-it-works" className="band-dither relative scroll-mt-16 text-band-ink" aria-labelledby="how-title">
       <Rails dark />
@@ -120,7 +128,7 @@ export function LandingBand() {
             </>
           }
         />
-        <div className="mt-14"><Stepper steps={panes()} /></div>
+        <div className="mt-14"><Stepper steps={panes(sample)} /></div>
       </Container>
       <Rule dark />
       <div id="integrations" className="relative scroll-mt-16">

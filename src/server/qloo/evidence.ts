@@ -31,7 +31,7 @@ export function evidenceId(scope: string, path: string, params: Record<string, s
 export interface EvidenceInput {
   /** Store id (or pair) the evidence is about; part of the id so two stores never share one. */
   scope: string;
-  call: Pick<QlooCall<unknown>, "path" | "params" | "mode">;
+  call: Pick<QlooCall<unknown>, "path" | "params" | "mode"> & { at?: string };
   summary: string;
   metrics?: EvidenceMetrics;
   entityIds?: string[];
@@ -58,7 +58,8 @@ export function buildEvidence(i: EvidenceInput): Evidence {
     summary: i.summary.trim() || "Qloo result",
     metrics,
     entityIds: i.entityIds ?? [],
-    fetchedAt: i.now.toISOString(),
+    /** When Qloo answered: the live call's time, or the time a cached answer was saved. */
+    fetchedAt: i.call.at ?? i.now.toISOString(),
     mode: i.mode ?? i.call.mode,
   };
 }

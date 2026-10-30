@@ -1,7 +1,9 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { BrandGlyph, Chip, SampleBadge, StoreTile, type Brand } from "@/components/ui";
+import type { LandingFeatured } from "@/server/landing/types";
 import { MEASURED } from "./landing-data";
+import { SamplePending } from "./landing-pending";
 import { Icon } from "./section";
 
 function FeatureCard({ preview, title, body }: { preview: ReactNode; title: string; body: ReactNode }) {
@@ -15,17 +17,17 @@ function FeatureCard({ preview, title, body }: { preview: ReactNode; title: stri
 }
 
 /** Staff card preview: the phone page a store sees. */
-function StaffCardPreview() {
-  const rows: Array<[string, string, string]> = [
-    ["This week's special", "Orange Peel Cortado", "Peel cut fresh each morning"],
-    ["On the speakers", "Big Thief, Yo La Tengo", "Low until noon"],
-    ["Event", "Vinyl and Cortado Night", "Thu 19:00"],
-  ];
+function StaffCardPreview({ featured }: { featured: LandingFeatured | null }) {
+  if (!featured) return <SamplePending />;
+  const rows: Array<[string, string, string]> = [];
+  if (featured.special) rows.push(["This week's special", featured.special.name, featured.special.flavourTags.slice(0, 2).join(", ")]);
+  if (featured.sound) rows.push(["On the speakers", featured.sound.artists.slice(0, 2).join(", "), featured.sound.mood]);
+  if (featured.event) rows.push(["Event", featured.event.title, featured.event.when]);
   return (
     <div className="w-[236px] translate-y-6 rounded-[18px] bg-white p-1.5 shadow-ring-lg">
       <div className="flex items-center gap-2 px-2.5 pb-2 pt-2">
-        <StoreTile colorIndex={1} name="Williamsburg" size="sm" />
-        <span className="text-[12px] font-medium text-ink">Williamsburg</span>
+        <StoreTile colorIndex={featured.colorIndex} name={featured.name} size="sm" />
+        <span className="text-[12px] font-medium text-ink">{featured.name}</span>
         <SampleBadge className="ml-auto h-[18px] px-1.5 text-[10px]">Sample</SampleBadge>
       </div>
       {rows.map(([label, title, meta]) => (
@@ -88,10 +90,10 @@ function ProofPreview() {
   );
 }
 
-export function LandingCards() {
+export function LandingCards({ featured }: { featured: LandingFeatured | null }) {
   return (
     <div className="mt-20 grid gap-x-8 gap-y-12 md:grid-cols-3">
-      <FeatureCard preview={<StaffCardPreview />} title="A staff card on any phone" body="One page per store: the special, the music, the partner and the night. No app, no login." />
+      <FeatureCard preview={<StaffCardPreview featured={featured} />} title="A staff card on any phone" body="One page per store: the special, the music, the partner and the night. No app, no login." />
       <FeatureCard preview={<SyncLogPreview />} title="Every send, in one log" body={<>What went to Square, Slack and each inbox, and what came back. <span className="text-muted">(Sample timeline.)</span></>} />
       <FeatureCard
         preview={<ProofPreview />}

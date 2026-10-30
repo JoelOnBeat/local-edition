@@ -10,9 +10,9 @@ function wranglerVars(): Record<string, string> {
 }
 
 describe("L9: the deployed Worker's provider modes", () => {
-  it("sets TF_MODE and TAVILY_MODE live and QLOO_MODE replay (live once QLOO_API_KEY is set)", () => {
+  it("sets TF_MODE, TAVILY_MODE and QLOO_MODE live", () => {
     const vars = wranglerVars();
-    expect(vars).toMatchObject({ TF_MODE: "live", TAVILY_MODE: "live", QLOO_MODE: "replay" });
+    expect(vars).toMatchObject({ TF_MODE: "live", TAVILY_MODE: "live", QLOO_MODE: "live" });
   });
 
   it("keeps the other production vars", () => {

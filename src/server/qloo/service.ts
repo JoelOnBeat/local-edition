@@ -2,6 +2,7 @@ import type { Chain, CompareResponse, Evidence, ProfileResponse, Store } from "@
 import { HttpError } from "../http/errors";
 import type { Repo } from "../store/repo";
 import { anchorIds, resolveAnchors } from "./anchors";
+import { qlooLiveOnly } from "./mode";
 import { blockProfile } from "./block";
 import { compareStores } from "./compare";
 import { repoCache, resolveDeps, TTL, type QlooDeps } from "./deps";
@@ -11,8 +12,12 @@ import { hash53 } from "./evidence";
 
 type Cached<T> = T & { cachedAt: string };
 
-/** Evidence served from the cache keeps `fixture` (so the UI still badges sample data), else becomes `cache`. */
+/** Evidence served from the cache is a saved answer: mode `cache`, `fetchedAt` stays the time Qloo answered. */
+/** (Offline sample evidence, dev and tests only, keeps its `fixture` label.) */
 const asCached = (ev: Evidence[]): Evidence[] => ev.map((e) => (e.mode === "fixture" ? e : { ...e, mode: "cache" as const }));
+
+/** Only saved REAL answers are served. Anything a recorded or sample run left behind (`replay`, `fixture`) is ignored, never shown. */
+const isRealAnswer = (ev: Evidence[]): boolean => !qlooLiveOnly() || ev.every((e) => e.mode === "live" || e.mode === "cache");
 
 function depsFor(repo: Repo, partial?: Partial<QlooDeps>): QlooDeps {
   return resolveDeps({ cache: repoCache(repo), ...partial });
@@ -28,7 +33,7 @@ export async function profileForStore(repo: Repo, store: Store, chain: Chain, pa
   const deps = depsFor(repo, partial);
   const key = await profileKey(store, chain, deps);
   const hit = await deps.cache.get<Cached<ProfileResponse>>(key);
-  if (hit) return { profile: hit.profile, evidence: asCached(hit.evidence) };
+  if (hit && isRealAnswer(hit.evidence)) return { profile: hit.profile, evidence: asCached(hit.evidence) };
 
   const result = await blockProfile(store, chain, deps);
   if (result.evidence.length) await repo.putEvidence(result.evidence);
