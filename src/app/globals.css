@@ -178,13 +178,47 @@ body {
   animation: le-enter 220ms ease-out both;
 }
 
+@keyframes le-slide-up {
+  from { transform: translateY(24px); }
+  to { transform: none; }
+}
+@keyframes le-slide-left {
+  from { transform: translateX(32px); }
+  to { transform: none; }
+}
+.le-slide {
+  animation: le-slide-up 200ms ease-out both;
+}
+@media (min-width: 640px) {
+  .le-slide {
+    animation-name: le-slide-left;
+  }
+}
+
 .le-live-dot {
   animation: le-pulse 1.4s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .le-enter,
-  .le-live-dot {
+  @keyframes le-slide-up {
+  from { transform: translateY(24px); }
+  to { transform: none; }
+}
+@keyframes le-slide-left {
+  from { transform: translateX(32px); }
+  to { transform: none; }
+}
+.le-slide {
+  animation: le-slide-up 200ms ease-out both;
+}
+@media (min-width: 640px) {
+  .le-slide {
+    animation-name: le-slide-left;
+  }
+}
+
+.le-live-dot {
     animation: none;
   }
 }
