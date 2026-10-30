@@ -113,7 +113,7 @@ export type CalendarFeedsResponse = z.infer<typeof CalendarFeedsResponse>;
 
 const tokenParams = z.object({ token: z.string().min(1).max(80) });
 const none = { bodyKind: "none", sse: false } as const;
-// Stream "E": every other src/app/api route (docs/BUILD.md). The handlers live in src/server/connectors/.
+// Stream "E": every other src/app/api route. The handlers live in src/server/connectors/.
 const base = { stream: "E" } as const;
 
 /** Route table for the Square and calendar connectors. Merge into docs/CONTRACT.md and the api-client. */

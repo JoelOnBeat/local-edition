@@ -103,7 +103,6 @@ it is labelled sample data (the routes set `x-le-mode`, `/api/status` reports ea
   `buildEditionsForJob` in the jobs route (`src/server/jobs/wiring-agent.ts`), guardrails `checkCopy`
   in C's copy step and E's edit route, Tavily in the agent's `events_this_week` tool.
 - Dependencies: none added. No stream's handback needed a new package.
-- `docs/BUILD.md` ownership table now lists `src/server/handlers/` and `src/server/session.ts` under E.
 
 ## Open items before keys arrive (Day-1 live tests, architect)
 

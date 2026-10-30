@@ -55,7 +55,7 @@
     "bindings": [
       { "name": "SPEND_METER", "class_name": "SpendMeterDO" },
       { "name": "BUILD_LOCK", "class_name": "BuildLockDO" },
-      // The global Tavily credit ledger (80 credits through 15 Dec, 6 a day), counted across every workspace.
+      // The global Tavily credit ledger (80 credits through 15 Dec, 10 a day), counted across every workspace.
       { "name": "TAVILY_BUDGET", "class_name": "TavilyBudgetDO" }
     ]
   },

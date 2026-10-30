@@ -2,7 +2,7 @@ import type { z } from "zod";
 
 /** Shape of one entry in the route tables (routes.ts and routes-upgrade.ts). */
 
-/** Owning backend stream: A-E per docs/BUILD.md, S2-S5 are the upgrade workflow's streams. */
+/** Owning backend stream: A-E, S2-S5 are the upgrade workflow's streams. */
 export type StreamOwner = "A" | "B" | "C" | "E" | "S2" | "S3" | "S4" | "S5";
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export type BodyKind = "none" | "json" | "csv" | "multipart";
