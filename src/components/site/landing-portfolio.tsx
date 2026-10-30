@@ -91,12 +91,12 @@ export function LandingPortfolio() {
     <section id="portfolio" className="relative scroll-mt-20 py-20 md:py-28">
       <Container className="px-4 sm:px-6 xl:px-7">
         <SectionHeader
-          pill="Head office" pillIcon={Icon.grid}
-          title="Every store's week, on one page."
+          pill="Portfolio" pillIcon={Icon.grid}
+          title="See every store's week at a glance."
           lede="See which stores are ready, what each one is serving, and which taste of its block it was built from."
           actions={
             <>
-              <Link href="/signin" className={buttonClass("primary", "sm", "pr-2.5")}>Get started<Chevron /></Link>
+              <Link href="/signin" className={buttonClass("primary", "sm", "gap-1.5 pr-2.5")}>Start free<Chevron className="size-3.5" /></Link>
               <SampleChainLink className={buttonClass("secondary", "sm")} signedOutLabel="Try the sample chain" />
             </>
           }

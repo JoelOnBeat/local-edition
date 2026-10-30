@@ -14,7 +14,11 @@ export default function PrivacyPage() {
       intro="Local Edition is a hackathon build. It stores as little as it needs to write a weekly edition for each store, and it never sends anything about your customers to anyone."
     >
       <LegalSection title="What we store">
-        <p>Each visitor gets a private workspace, identified by a cookie. In it we keep:</p>
+        <p>
+          If you create an account we keep your name, your email address and a salted hash of your password (never the password
+          itself); sign-in codes are stored only as hashes and expire after ten minutes. Each account, and each visitor who opens the
+          sample chain, gets a private workspace identified by a session cookie. In it we keep:
+        </p>
         <ul>
           <li>The chain&apos;s name, brand voice lines and up to three brands it resembles.</li>
           <li>Store names, street corners and coordinates.</li>
@@ -62,6 +66,9 @@ export default function PrivacyPage() {
             staff card, the card email.
           </li>
           <li>
+            <strong>Google (Gmail)</strong> delivers sign-in codes, so it receives your email address and the code.
+          </li>
+          <li>
             <strong>Composio</strong> carries the Google and Microsoft requests (mail and calendar).
           </li>
         </ul>
@@ -76,7 +83,8 @@ export default function PrivacyPage() {
 
       <LegalSection title="Deletion">
         <p>
-          You can disconnect any tool at any time from the connections page. To delete a workspace and everything in it, email{" "}
+          You can disconnect any tool at any time from the connections page, and delete your account and its workspace yourself
+          from the account menu inside the app. To have anything else deleted, email{" "}
           <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> from the address you connected, or tell us the workspace&apos;s
           chain name. We delete it within seven days and confirm by reply. Visitor workspaces also expire on
           their own and are deleted with everything in them.

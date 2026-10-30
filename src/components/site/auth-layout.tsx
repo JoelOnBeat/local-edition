@@ -1,12 +1,12 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { BrandGlyph, Lockup, Pill, StoreTile, cx } from "@/components/ui";
+import { BrandGlyph, LogoMark, Pill, StoreTile, cx } from "@/components/ui";
 import { MEASURED, STORE_ROWS } from "./landing-data";
 import { Icon } from "./section";
 
 function Joint({ className }: { className: string }) {
   return (
-    <svg width="25" height="25" viewBox="0 0 25 25" className={cx("absolute hidden lg:block", className)} aria-hidden>
+    <svg width="25" height="25" viewBox="0 0 25 25" className={cx("absolute hidden sm:block", className)} aria-hidden>
       <rect width="25" height="25" fill="var(--paper)" />
       <path d="M12.5 4v17M4 12.5h17" stroke="#E7E5E4" />
     </svg>
@@ -15,7 +15,7 @@ function Joint({ className }: { className: string }) {
 
 /** The product visual on the right: a dark band with this week's stores and one store's staff card. */
 function AuthVisual() {
-  const rows = STORE_ROWS.slice(0, 4);
+  const rows = STORE_ROWS.slice(0, 6);
   return (
     <aside className="band-dither relative m-2 hidden flex-col overflow-hidden rounded-[22px] text-band-ink shadow-[inset_0_0_0_1px_rgb(255_255_255/.06)] lg:flex">
       <div aria-hidden className="pointer-events-none absolute -right-40 top-24 size-[560px] rounded-full border border-white/[.05]" />
@@ -26,7 +26,7 @@ function AuthVisual() {
           Every store gets its own front page, every Monday.
         </p>
       </div>
-      <div className="relative mt-12 flex-1 px-12 xl:px-16">
+      <div className="relative flex flex-1 items-center px-12 py-12 xl:px-16">
         <div className="w-full max-w-[400px] rounded-xl bg-band-card shadow-[0_0_0_1px_rgb(255_255_255/.08)]">
           <p className="border-b border-white/[.06] px-4 py-3 text-[13px] font-medium text-band-ink-2">Editions this week</p>
           {rows.map((r) => (
@@ -39,7 +39,7 @@ function AuthVisual() {
             </div>
           ))}
         </div>
-        <div className="absolute right-10 top-24 w-[248px] rotate-[1.5deg] rounded-[18px] bg-white p-1.5 text-ink shadow-ring-xl xl:right-16">
+        <div className="absolute right-8 top-1/2 w-[248px] -translate-y-[38%] rotate-[1.5deg] rounded-[18px] bg-white p-1.5 text-ink shadow-ring-xl xl:right-16">
           <div className="flex items-center gap-2 px-2.5 py-2">
             <StoreTile colorIndex={1} name="Williamsburg" size="sm" />
             <span className="text-[12px] font-medium">Williamsburg staff card</span>
@@ -69,28 +69,35 @@ function AuthVisual() {
  */
 export function AuthLayout({ title, lede, children, below }: { title: string; lede?: ReactNode; children: ReactNode; below?: ReactNode }) {
   return (
-    <div className="grid min-h-dvh bg-paper lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-      <div className="relative flex min-w-0 flex-col overflow-hidden">
-        <div aria-hidden className="pointer-events-none absolute inset-y-0 left-1/2 hidden w-[512px] -translate-x-1/2 border-x border-rule sm:block" />
+    <div className="grid min-h-svh bg-paper lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="relative flex min-h-svh min-w-0 flex-col overflow-hidden">
+        <div aria-hidden className="pointer-events-none absolute inset-y-0 left-1/2 hidden w-[560px] -translate-x-1/2 border-x border-stone-200 sm:block" />
         <div className="relative flex h-14 items-center px-4 sm:px-6">
-          <Link href="/" className="-ml-2 inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[14px] text-ink-2 transition-colors hover:bg-hover-tint hover:text-ink">
+          <Link href="/" className="-ml-2.5 inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[14px] text-ink-2 transition-colors duration-150 hover:bg-hover-tint hover:text-ink">
             <span className="size-4" aria-hidden>{Icon.arrowLeft}</span>Back to home
           </Link>
         </div>
-        <main className="relative flex flex-1 flex-col items-center justify-center px-2 pb-16 pt-6 sm:px-0">
-          <Link href="/" aria-label="Local Edition home" className="rounded-md"><Lockup size="sm" /></Link>
-          <h1 className="mt-6 text-center text-[24px] font-medium leading-8 tracking-[-0.02em] text-ink">{title}</h1>
-          {lede ? <p className="mt-1.5 max-w-[400px] px-4 text-center text-[15px] leading-6 text-ink-2">{lede}</p> : null}
-          <div className="relative mt-8 w-full sm:w-[488px]">
-            <span aria-hidden className="absolute -left-[50vw] -right-[50vw] -top-3 hidden h-px bg-rule sm:block" />
-            <span aria-hidden className="absolute -bottom-3 -left-[50vw] -right-[50vw] hidden h-px bg-rule sm:block" />
-            <Joint className="-left-[24.5px] -top-[24.5px]" />
-            <Joint className="-right-[24.5px] -top-[24.5px]" />
-            <Joint className="-bottom-[24.5px] -left-[24.5px]" />
-            <Joint className="-bottom-[24.5px] -right-[24.5px]" />
-            <div className="ring-after relative rounded-xl bg-white px-5 pb-8 pt-7 sm:px-9 sm:pb-9 sm:pt-9">{children}</div>
+        <main className="relative mx-auto flex w-full max-w-[560px] flex-1 flex-col justify-center pb-20 pt-4">
+          <Link href="/" aria-label="Local Edition home" className="mx-auto inline-flex items-center gap-2 rounded-md">
+            <LogoMark size={22} />
+            <span className="text-[16px] font-medium leading-6 tracking-tight text-ink">Local Edition</span>
+          </Link>
+          <div className="relative mt-8 sm:border-y sm:border-stone-200 sm:p-3">
+            <span aria-hidden className="absolute -top-px right-[calc(100%+12px)] hidden h-px w-[50vw] bg-stone-200 sm:block" />
+            <span aria-hidden className="absolute -top-px left-[calc(100%+12px)] hidden h-px w-[50vw] bg-stone-200 sm:block" />
+            <span aria-hidden className="absolute -bottom-px right-[calc(100%+12px)] hidden h-px w-[50vw] bg-stone-200 sm:block" />
+            <span aria-hidden className="absolute -bottom-px left-[calc(100%+12px)] hidden h-px w-[50vw] bg-stone-200 sm:block" />
+            <Joint className="-left-[12.5px] top-0 -translate-y-1/2" />
+            <Joint className="-right-[12.5px] top-0 -translate-y-1/2" />
+            <Joint className="-left-[12.5px] bottom-0 translate-y-1/2" />
+            <Joint className="-right-[12.5px] bottom-0 translate-y-1/2" />
+            <div className="ring-after relative mx-2 rounded-xl bg-white px-4 py-10 sm:mx-0 sm:px-[60px]">
+              <h1 className="text-[20px] font-medium leading-7 tracking-[-0.02em] text-ink [text-wrap:balance]">{title}</h1>
+              {lede ? <p className="mt-1 text-[14px] leading-5 text-ink-2">{lede}</p> : null}
+              <div className="mt-7">{children}</div>
+            </div>
           </div>
-          <div className="mt-8 grid max-w-[440px] justify-items-center gap-3 px-4 text-center text-[14px] leading-5 text-muted">{below}</div>
+          <div className="mt-6 grid justify-items-center gap-3 px-6 text-center text-[14px] leading-5 text-muted">{below}</div>
         </main>
       </div>
       <AuthVisual />

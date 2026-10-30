@@ -1,31 +1,44 @@
+import { Pill } from "@/components/ui";
+import { Icon } from "./section";
 import { SiteShell } from "./site-chrome";
 
-/** Shared layout for the privacy and terms pages: a plain document with a dated header. */
+/** Shared layout for the privacy and terms pages: an inner-hero frame, then the text in a two-column content frame. */
 
 export const LEGAL_UPDATED = "30 October 2026";
 
 export function LegalPage({ title, intro, children }: { title: string; intro: string; children: React.ReactNode }) {
   return (
-    <SiteShell>
-      <article className="mx-auto max-w-[760px] px-4 py-12 sm:px-6 md:py-16">
-        <p className="font-(family-name:--font-mono) text-[12px] uppercase tracking-[0.08em] text-(--muted)">
-          Last updated {LEGAL_UPDATED}
-        </p>
-        <h1 className="mt-2 font-(family-name:--font-display) text-[clamp(36px,6vw,56px)] font-extrabold leading-none tracking-[-0.03em]">
-          {title}
-        </h1>
-        <p className="mt-5 border-b border-(--rule) pb-6 text-[18px] leading-[1.55] text-(--ink-2)">{intro}</p>
-        <div className="grid gap-8 pt-8">{children}</div>
-      </article>
+    <SiteShell cta={false}>
+      <section className="relative border-b border-rule">
+        <div className="mx-auto max-w-[1190px] p-2 sm:p-3">
+          <div className="ring-after relative rounded-xl bg-white px-6 pb-14 pt-14 text-center md:px-10 md:pb-16 md:pt-20">
+            <Pill icon={Icon.doc}>Legal</Pill>
+            <h1 className="mx-auto mt-8 max-w-[680px] text-[36px] font-medium leading-[39.6px] tracking-[-0.02em] text-ink [text-wrap:balance] sm:text-[44px] sm:leading-[48.4px]">
+              {title}
+            </h1>
+            <p className="mx-auto mt-[26px] max-w-[560px] text-[18px] leading-7 text-ink-2 [text-wrap:pretty]">{intro}</p>
+            <p className="mt-6 text-[14px] leading-5 text-muted">Last updated {LEGAL_UPDATED}</p>
+          </div>
+        </div>
+      </section>
+      <div className="h-12" aria-hidden />
+      <section className="relative border-y border-rule">
+        <div className="mx-auto max-w-[1190px] p-2 sm:p-3">
+          <article className="ring-after relative rounded-xl bg-white px-6 py-8 md:px-8 md:py-10">
+            <div className="mx-auto max-w-[880px]">{children}</div>
+          </article>
+        </div>
+      </section>
+      <div className="h-24" aria-hidden />
     </SiteShell>
   );
 }
 
 export function LegalSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="grid gap-3">
-      <h2 className="font-(family-name:--font-display) text-[22px] font-bold leading-tight">{title}</h2>
-      <div className="grid gap-3 text-[16px] leading-[1.65] text-(--ink-2) [&_li]:ml-5 [&_li]:list-disc [&_li]:pl-1 [&_ul]:grid [&_ul]:gap-1.5 [&_a]:font-semibold [&_a]:text-(--ink) [&_a]:underline [&_a]:underline-offset-4 [&_strong]:font-semibold [&_strong]:text-(--ink)">
+    <section className="grid gap-x-8 gap-y-3 border-t border-rule-subtle pt-7 first:border-t-0 first:pt-0 [&:not(:first-child)]:mt-7 md:grid-cols-[220px_minmax(0,1fr)]">
+      <h2 className="text-[18px] font-medium leading-[26px] tracking-[-0.01em] text-ink">{title}</h2>
+      <div className="grid gap-4 text-[16px] leading-[26px] text-ink-2 [overflow-wrap:anywhere] [&_a]:text-ink [&_a]:underline [&_a]:decoration-rule-strong [&_a]:underline-offset-4 hover:[&_a]:decoration-accent [&_li]:pl-1 [&_strong]:font-medium [&_strong]:text-ink [&_ul]:grid [&_ul]:list-disc [&_ul]:gap-2 [&_ul]:pl-5 [&_ul]:marker:text-faint">
         {children}
       </div>
     </section>

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { SampleChainLink, StartLink } from "@/components/account/session-links";
-import { BrandGlyph, LogoMark, Lockup, buttonClass, cx, type Brand } from "@/components/ui";
+import { BrandGlyph, LogoMark, buttonClass, cx, type Brand } from "@/components/ui";
 import { Container, Rule } from "./section";
 import { SiteHeader } from "./site-header";
 
@@ -18,45 +18,53 @@ export function Rails({ dark }: { dark?: boolean }) {
   );
 }
 
-const ORBIT: Array<{ brand: Brand; x: number; y: number }> = [
-  { brand: "qloo", x: -260, y: 96 },
-  { brand: "nvidia", x: -130, y: 24 },
-  { brand: "nebius", x: 0, y: 0 },
-  { brand: "tavily", x: 130, y: 24 },
-  { brand: "cloudflare", x: 260, y: 96 },
+const ARC: Array<{ brand: Brand; cls: string; glyph: string }> = [
+  { brand: "qloo", cls: "hidden sm:flex translate-y-[45px] md:translate-y-[94px]", glyph: "size-[22px] md:size-[26px]" },
+  { brand: "nvidia", cls: "flex translate-y-[10px] md:translate-y-[21px]", glyph: "size-6 md:size-[30px]" },
+  { brand: "nebius", cls: "flex", glyph: "size-6 md:size-[30px]" },
+  { brand: "tavily", cls: "flex translate-y-[10px] md:translate-y-[21px]", glyph: "size-6 md:size-[30px]" },
+  { brand: "cloudflare", cls: "hidden sm:flex translate-y-[45px] md:translate-y-[94px]", glyph: "size-[22px] md:size-[26px]" },
 ];
+
+/** [diameter, top, mobile] of the three concentric circles behind the CTA. */
+const CIRCLES: Array<[number, number, boolean]> = [[904, 59, false], [816, 103, false], [732, 145, false], [452, 66, true], [408, 88, true], [366, 109, true]];
 
 /** Dark closing band: an arc of the partners' marks over our tile, the last call to action. */
 function ClosingCta() {
   return (
-    <section className="relative overflow-hidden pt-20 md:pt-24" aria-labelledby="cta-title">
-      <div aria-hidden className="pointer-events-none absolute left-1/2 top-[60px] -translate-x-1/2">
-        {[904, 816, 732].map((d, i) => (
-          <div key={d} className="absolute left-1/2 -translate-x-1/2 rounded-full border border-white/[.05]" style={{ width: d, height: d, top: i * 44 }} />
+    <section className="relative isolate overflow-hidden" aria-labelledby="cta-title">
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        {CIRCLES.map(([d, t, mobile]) => (
+          <div key={`${d}-${t}`} className={cx("absolute left-1/2 -translate-x-1/2 rounded-full border border-white/[.05]", mobile ? "md:hidden" : "hidden md:block")} style={{ width: d, height: d, top: t }} />
         ))}
       </div>
-      <Container className="relative flex flex-col items-center px-4 text-center">
-        <div className="relative h-[150px] w-full max-w-[600px] scale-[.62] sm:scale-100" aria-hidden>
-          {ORBIT.map((o) => (
-            <span
-              key={o.brand}
-              className="absolute left-1/2 top-0 flex size-[60px] -translate-x-1/2 items-center justify-center rounded-full bg-band-chip text-band-ink shadow-[0_0_0_1px_rgb(255_255_255/.06),0_8px_24px_rgb(0_0_0/.35)]"
-              style={{ marginLeft: o.x, top: o.y }}
-            >
-              <BrandGlyph brand={o.brand} className="size-6" />
+      <Container className="relative flex flex-col items-center px-6 pb-16 pt-16 text-center md:px-10 md:pb-[72px] md:pt-[73px]">
+        <div className="relative w-full" aria-hidden>
+          <div className="flex items-start justify-center gap-4 md:gap-[70px]">
+            {ARC.map((a) => (
+              <span
+                key={a.brand}
+                className={cx(
+                  "size-12 shrink-0 items-center justify-center rounded-full bg-band-chip text-[#E4E4E7] shadow-[0_0_0_1px_rgb(255_255_255/.06),0_18px_47px_rgb(0_0_0/.25),0_4px_10px_rgb(0_0_0/.2)] md:size-[60px]",
+                  a.cls,
+                )}
+              >
+                <BrandGlyph brand={a.brand} className={a.glyph} />
+              </span>
+            ))}
+          </div>
+          <div className="mt-6 flex justify-center md:mt-[67px]">
+            <span className="flex size-[53px] items-center justify-center rounded-[14px] bg-band-chip-2 shadow-[inset_0_1px_0_rgb(255_255_255/.08),0_0_0_1px_rgb(255_255_255/.08),0_17px_23px_rgb(0_0_0/.25)]">
+              <LogoMark size={28} dark />
             </span>
-          ))}
-          <span className="absolute left-1/2 top-[98px] flex size-[53px] -translate-x-1/2 items-center justify-center rounded-[14px] bg-band-chip-2 shadow-[inset_0_1px_0_rgb(255_255_255/.08),0_0_0_1px_rgb(255_255_255/.04)]">
-            <LogoMark size={26} dark />
-          </span>
+          </div>
         </div>
-        <h2 id="cta-title" className="mt-8 max-w-[640px] text-[32px] font-medium leading-[35.2px] tracking-[-0.02em] text-band-ink sm:text-[44px] sm:leading-[48.4px]">
+        <h2 id="cta-title" className="mt-7 max-w-[732px] text-[36px] font-medium leading-[41.4px] tracking-[-0.02em] text-zinc-100 [text-wrap:balance] md:text-[44px] md:leading-[47.52px]">
           Give every store its own week.
         </h2>
-        <p className="mt-3 max-w-[460px] text-[16px] leading-6 text-band-ink-2">Free to use. Open the sample chain first, or start with your own stores.</p>
-        <div className="mt-8 flex flex-wrap justify-center gap-2.5 pb-14">
-          <StartLink signedOutLabel="Get started" className={buttonClass("primary", "md")} />
-          <SampleChainLink className={buttonClass("dark", "md")} signedOutLabel="Try the sample chain" />
+        <div className="mt-12 flex flex-wrap justify-center gap-2.5">
+          <StartLink signedOutLabel="Start free" className={buttonClass("primary", "sm", "gap-1.5")} />
+          <SampleChainLink className={buttonClass("dark", "sm")} signedOutLabel="Try the sample chain" />
         </div>
       </Container>
     </section>
@@ -65,9 +73,11 @@ function ClosingCta() {
 
 function FooterLink({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <Link href={href} className="text-[16px] leading-6 text-band-ink-2 transition-colors duration-150 hover:text-band-ink-hover">
-      {children}
-    </Link>
+    <li>
+      <Link href={href} className="text-[16px] leading-6 text-[#9F9FA9] transition-colors duration-150 ease-quint hover:text-white">
+        {children}
+      </Link>
+    </li>
   );
 }
 
@@ -77,36 +87,45 @@ export function SiteFooter({ cta = true }: { cta?: boolean }) {
       <Rails dark />
       {cta ? <ClosingCta /> : null}
       {cta ? <Rule dark /> : null}
-      <Container className="relative grid gap-x-10 gap-y-12 px-6 pb-10 pt-14 md:grid-cols-[2.55fr_1fr_1.35fr] md:px-10">
+      <Container className="relative grid gap-x-10 gap-y-12 px-6 pb-12 pt-14 md:grid-cols-[2.55fr_1fr_1.35fr] md:px-10">
         <div>
-          <Lockup size="sm" dark />
-          <p className="mt-5 max-w-[360px] text-[16px] leading-[26px] text-band-ink-2">
+          <span className="inline-flex items-center gap-2">
+            <LogoMark size={22} dark />
+            <span className="text-[16px] font-medium leading-6 tracking-tight text-white">Local Edition</span>
+          </span>
+          <p className="mt-4 max-w-[380px] text-[16px] leading-[26px] text-[#9F9FA9] [text-wrap:pretty]">
             A weekly edition for every store in a chain: a special, a sound brief, a neighbour to partner with and an event night,
             each written from the taste of the store&apos;s block and shipped with its evidence.
           </p>
         </div>
-        <nav aria-label="Product" className="grid content-start gap-2">
-          <p className="mb-2 text-[16px] font-medium leading-6 text-band-ink">Product</p>
-          <FooterLink href="/#how-it-works">How it works</FooterLink>
-          <FooterLink href="/#edition">The edition</FooterLink>
-          <FooterLink href="/#integrations">Integrations</FooterLink>
-          <FooterLink href="/proof">Proof</FooterLink>
-          <FooterLink href="/limits">Limits</FooterLink>
+        <nav aria-label="Product">
+          <h3 className="text-[16px] font-medium leading-6 text-white">Product</h3>
+          <ul className="mt-5 space-y-2">
+            <FooterLink href="/#how-it-works">How it works</FooterLink>
+            <FooterLink href="/#edition">The edition</FooterLink>
+            <FooterLink href="/#integrations">Integrations</FooterLink>
+            <FooterLink href="/proof">Proof</FooterLink>
+            <FooterLink href="/limits">Limits</FooterLink>
+          </ul>
         </nav>
-        <nav aria-label="Legal" className="grid content-start gap-2">
-          <p className="mb-2 text-[16px] font-medium leading-6 text-band-ink">Company</p>
-          <FooterLink href="/privacy">Privacy</FooterLink>
-          <FooterLink href="/terms">Terms</FooterLink>
-          <FooterLink href="/signin">Sign in</FooterLink>
-          <a href={`mailto:${CONTACT_EMAIL}`} className="break-all text-[16px] leading-6 text-band-ink-2 transition-colors hover:text-band-ink-hover">
-            {CONTACT_EMAIL}
-          </a>
+        <nav aria-label="Legal">
+          <h3 className="text-[16px] font-medium leading-6 text-white">Legal</h3>
+          <ul className="mt-5 space-y-2">
+            <FooterLink href="/privacy">Privacy</FooterLink>
+            <FooterLink href="/terms">Terms</FooterLink>
+            <FooterLink href="/signin">Sign in</FooterLink>
+            <li>
+              <a href={`mailto:${CONTACT_EMAIL}`} className="break-all text-[16px] leading-6 text-[#9F9FA9] transition-colors duration-150 ease-quint hover:text-white">
+                {CONTACT_EMAIL}
+              </a>
+            </li>
+          </ul>
         </nav>
       </Container>
-      <Container className="relative -mb-[3.2%] px-0">
-        <svg viewBox="0 0 1190 150" className="block w-full" aria-hidden>
-          <text x="595" y="140" textAnchor="middle" textLength="1180" lengthAdjust="spacingAndGlyphs" fill="rgb(255 255 255 / .04)"
-            style={{ font: "500 172px var(--font-geist), Geist, sans-serif", letterSpacing: "-0.02em" }}>
+      <Container className="relative px-0">
+        <svg viewBox="0 0 1190 161" className="block h-auto w-full" aria-hidden>
+          <text x="595" y="196" textAnchor="middle" textLength="1186" lengthAdjust="spacingAndGlyphs" fill="rgb(255 255 255 / .04)"
+            style={{ font: "600 228px var(--font-geist), Geist, sans-serif", letterSpacing: "-0.02em" }}>
             LOCAL EDITION
           </text>
         </svg>

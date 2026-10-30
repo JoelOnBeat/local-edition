@@ -115,7 +115,7 @@ export function LandingBand() {
           lede="One agent per store reads the menu and the neighbourhood, writes the week, checks it, and waits for head office."
           actions={
             <>
-              <Link href="/signin" className={buttonClass("primary", "sm", "pr-2.5")}>Get started<Chevron /></Link>
+              <Link href="/signin" className={buttonClass("primary", "sm", "gap-1.5 pr-2.5")}>Start free<Chevron className="size-3.5" /></Link>
               <SampleChainLink className={buttonClass("dark", "sm")} signedOutLabel="Try the sample chain" />
             </>
           }

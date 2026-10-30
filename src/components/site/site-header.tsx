@@ -17,7 +17,7 @@ export const NAV = [
 /**
  * Sticky site header. At the top of the page it sits on the ground; after a few pixels of scroll a white rounded pill
  * fades in behind it. Below 768px the nav folds into a menu that grows inside the pill. Session-aware: signed out shows
- * "Sign in" + "Get started"; signed in or a guest shows one primary link back into the app.
+ * "Sign in" + "Start free"; signed in or a guest shows one primary link back into the app.
  */
 export function SiteHeader() {
   const { me } = useSession();
@@ -41,7 +41,7 @@ export function SiteHeader() {
   const signedIn = Boolean(me?.session);
   return (
     <header className="sticky top-0 z-40 h-16">
-      <div className="relative mx-auto max-w-[1190px] px-2 pt-1.5 sm:px-3 lg:px-4">
+      <div className="relative mx-auto max-w-[1190px] px-2 pt-1.5 sm:px-3 md:px-6">
         <div className="relative">
           <div
             aria-hidden
@@ -50,31 +50,31 @@ export function SiteHeader() {
               scrolled || open ? "opacity-100" : "opacity-0",
             )}
           />
-          <div className="relative flex h-[52px] items-center gap-3 pl-3.5 pr-2">
+          <div className="relative flex h-[52px] items-center gap-3 pl-3.5 pr-2.5 md:pr-2">
             <Link href="/" aria-label="Local Edition home" className="rounded-md transition-opacity hover:opacity-80" onClick={() => setOpen(false)}>
               <Lockup />
             </Link>
-            <nav aria-label="Site" className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 lg:flex">
+            <nav aria-label="Site" className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1.5 lg:flex">
               {NAV.map((n) => (
-                <Link key={n.href} href={n.href} className="rounded-md px-2.5 py-1.5 text-[16px] leading-6 text-ink-strong transition-colors duration-150 hover:bg-hover-tint">
+                <Link key={n.href} href={n.href} className="rounded-md px-2.5 py-1.5 text-[16px] leading-6 text-stone-800 transition-colors duration-150 hover:bg-stone-900/[.04]">
                   {n.label}
                 </Link>
               ))}
             </nav>
-            <div className="ml-auto flex items-center gap-1.5">
+            <div className="ml-auto flex items-center gap-2">
               {signedIn ? (
                 <StartLink data-testid="site-open-app" className={buttonClass("primary", "md", "h-9 text-[15px]")} />
               ) : (
                 <>
-                  <span className="hidden sm:contents"><StartLink data-testid="site-open-app" className={buttonClass("ghost", "md", "h-9 text-[16px] text-ink-strong")} /></span>
-                  <Link href="/signin" className={buttonClass("primary", "md", "h-9 pl-3.5 pr-3 text-[15px] sm:text-[16px]")}>
-                    Get started<Chevron />
+                  <span className="hidden sm:contents"><StartLink data-testid="site-open-app" className={buttonClass("ghost", "sm", "h-8 px-3 text-[16px] font-normal text-stone-800 hover:bg-stone-900/[.04] hover:text-stone-800")} /></span>
+                  <Link href="/signin" className={buttonClass("primary", "md", "h-9 gap-1.5 px-2.5 text-[16px]")}>
+                    Start free<Chevron />
                   </Link>
                 </>
               )}
               <button
                 type="button"
-                className="ml-1 flex size-8 items-center justify-center rounded-md text-ink-strong transition-colors hover:bg-hover-tint lg:hidden"
+                className="flex size-8 items-center justify-center rounded-md text-ink-2 transition-colors hover:bg-neutral-100 hover:text-ink lg:hidden"
                 aria-expanded={open}
                 aria-controls="site-menu"
                 aria-label={open ? "Close menu" : "Open menu"}

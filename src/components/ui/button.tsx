@@ -57,7 +57,7 @@ export function buttonClass(variant: Variant = "secondary", size: Size = "md", e
 export function Chevron({ className }: { className?: string }) {
   return (
     <svg
-      className={cx("size-4 shrink-0 -mr-1 transition-transform duration-200 ease-quint group-hover/btn:translate-x-0.5", className)}
+      className={cx("shrink-0 transition-transform duration-150 ease-quint group-hover/btn:translate-x-0.5", className?.includes("size-") ? null : "size-4", className)}
       viewBox="0 0 16 16" fill="none" aria-hidden
     >
       <path d="M6.5 4.5 10 8l-3.5 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />

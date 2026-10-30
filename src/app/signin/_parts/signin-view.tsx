@@ -34,7 +34,7 @@ function CodeForm({ next, onPassword, prefill }: { next: string | null; onPasswo
             </Checkbox>
           ) : null}
           <ErrorLine error={f.error} testId="signin-error" />
-          <Button data-testid="signin-send-code" type="submit" variant="primary" size="md" className="mt-1 h-10 w-full" loading={f.busy}>
+          <Button data-testid="signin-send-code" type="submit" variant="primary" size="sm" className="mt-1 h-10 w-full gap-2 px-6" loading={f.busy}>
             Email me a code
           </Button>
         </form>
@@ -50,7 +50,7 @@ function CodeForm({ next, onPassword, prefill }: { next: string | null; onPasswo
             <CodeBoxes value={f.code} onChange={f.setCode} onComplete={(c) => void f.verify(c)} disabled={f.busy} />
           </div>
           <ErrorLine error={f.error} testId="signin-error" />
-          <Button data-testid="signin-verify" type="submit" variant="primary" size="md" className="h-10 w-full" loading={f.busy} disabled={f.code.length < CODE_LENGTH}>
+          <Button data-testid="signin-verify" type="submit" variant="primary" size="sm" className="h-10 w-full gap-2 px-6" loading={f.busy} disabled={f.code.length < CODE_LENGTH}>
             Sign in
           </Button>
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-rule-subtle pt-4">
@@ -89,7 +89,7 @@ function PasswordForm({ next, onCode, prefill }: { next: string | null; onCode: 
           value={values.password} onChange={(e) => set("password", e.target.value)} aria-invalid={form.error ? true : undefined} />
       </FormField>
       <ErrorLine error={form.error} testId="signin-pw-error" />
-      <Button data-testid="signin-submit" type="submit" variant="primary" size="md" className="mt-1 h-10 w-full" loading={form.busy}>
+      <Button data-testid="signin-submit" type="submit" variant="primary" size="sm" className="mt-1 h-10 w-full gap-2 px-6" loading={form.busy}>
         Sign in
       </Button>
       {onCode ? (

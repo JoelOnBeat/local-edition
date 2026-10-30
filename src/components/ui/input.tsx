@@ -21,7 +21,7 @@ export function Textarea({ className, ...rest }: ComponentProps<"textarea">) {
 export function FormField({ label, help, error, htmlFor, className, children }: { label: ReactNode; help?: ReactNode; error?: ReactNode; htmlFor?: string; className?: string; children: ReactNode }) {
   return (
     <div className={cx("grid gap-2", className)}>
-      <label htmlFor={htmlFor} className="text-[14px] font-medium leading-5 text-ink">{label}</label>
+      <label htmlFor={htmlFor} className="flex select-none items-center gap-1 text-[14px] font-medium leading-[14px] text-ink-strong">{label}</label>
       {children}
       {error ? <p className="text-[13px] leading-5 text-flag" role="alert">{error}</p> : help ? <p className="text-[13px] leading-5 text-muted">{help}</p> : null}
     </div>

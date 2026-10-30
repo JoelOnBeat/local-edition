@@ -54,7 +54,7 @@ export function SignupView() {
           </span>
         ) : null}
         <ErrorLine error={form.error} testId="signup-error" />
-        <Button data-testid="signup-submit" type="submit" variant="primary" size="md" className="mt-1 h-10 w-full" loading={form.busy}>
+        <Button data-testid="signup-submit" type="submit" variant="primary" size="sm" className="mt-1 h-10 w-full gap-2 px-6" loading={form.busy}>
           Create account
         </Button>
       </form>
