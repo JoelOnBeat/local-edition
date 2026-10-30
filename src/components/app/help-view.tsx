@@ -45,7 +45,7 @@ const QA: { q: string; a: ReactNode }[] = [
   },
 ];
 
-/** /app/help: short answers in the product's own words, as ByDefault's FAQ accordion. */
+/** /app/help: short answers in the product's own words, as the design system's FAQ accordion. */
 export function HelpView() {
   const [open, setOpen] = useState<number | null>(0);
   return (

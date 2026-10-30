@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Pill } from "@/components/ui";
 import { Container, Rule } from "@/components/site/section";
 
-/** Inner-page hero frame for the public proof and limits pages (ByDefault report hero): pill, H1, lede, actions, centred. */
+/** Inner-page hero frame for the public proof and limits pages (design-system report hero): pill, H1, lede, actions, centred. */
 export function PublicHero({ pill, pillIcon, title, lede, actions, meta }: { pill: string; pillIcon: ReactNode; title: ReactNode; lede: ReactNode; actions?: ReactNode; meta?: ReactNode }) {
   return (
     <>

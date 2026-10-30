@@ -13,7 +13,7 @@ import { LANE_STATUS } from "./store-lane";
 import { DarkChip, TraceLine, usd } from "./trace-entry";
 
 /**
- * The dark run panel (ByDefault's how-it-works panel): the pipeline steps on the left, the picked store's stream of tool
+ * The dark run panel (the design system's how-it-works panel): the pipeline steps on the left, the picked store's stream of tool
  * calls, model calls and drafted items on the right. Below lg the steps sit under the stream.
  */
 export function TracePanel({ lane, store, live, menuSource }: { lane: Lane | undefined; store?: Store; live: boolean; menuSource?: MenuItem["source"] }) {

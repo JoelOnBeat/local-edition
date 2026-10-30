@@ -5,7 +5,7 @@ import { Icon } from "@/components/app-ui/icons";
 import { LogoTile } from "@/components/app-ui/tiles";
 
 /**
- * A connection tile (ByDefault §9 Tile): white 14px card with a preview well on top holding the tool's official mark, its
+ * A connection tile (design-system §9 Tile): white 14px card with a preview well on top holding the tool's official mark, its
  * status chip and a tiny picture of what it does, then the text and actions below.
  */
 export function ToolTile({ provider, status, preview, children, testId, dataStatus }: {

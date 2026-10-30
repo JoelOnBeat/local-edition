@@ -3,7 +3,7 @@ import { cx } from "@/components/ui";
 import { Icon } from "./icons";
 
 /**
- * ByDefault's data table: column headers sit on the stone-50 frame, rows on a white plate (57px, stone-100 hairlines,
+ * the design system's data table: column headers sit on the stone-50 frame, rows on a white plate (57px, stone-100 hairlines,
  * stone-50/70 hover, an arrow that fades in), a footer strip below. Rows are CSS grids sharing one `grid` template, so
  * columns drop by breakpoint and nothing scrolls sideways.
  */
@@ -35,7 +35,7 @@ export function DataTable({ head, grid, children, footer, className, label, elev
   );
 }
 
-/** One row. Pass `onClick` for a clickable row (arrow on hover); `selected` tints it like ByDefault's own-brand row. */
+/** One row. Pass `onClick` for a clickable row (arrow on hover); `selected` tints it like the design system's own-brand row. */
 export function DataRow({ grid, children, onClick, selected, className, arrow = true, ...rest }: {
   grid: string;
   children: ReactNode;

@@ -5,7 +5,7 @@ import { Icon } from "./icons";
 import "./app-ui.css";
 
 /**
- * The ByDefault page frame for app pages. With the sidebar present only the horizontal hairline rules stay (no rails or
+ * The page frame for app pages. With the sidebar present only the horizontal hairline rules stay (no rails or
  * joints, DESIGN-SYSTEM §10.4): white frame cards inside bands, and header-band cards for data.
  */
 

@@ -5,7 +5,7 @@ import { cx } from "@/components/ui";
 import "./app-ui.css";
 
 /**
- * Chrome-less focused layout (ByDefault's sign-in page): a 56px top bar, one centred column framed by rails at xl, and
+ * Chrome-less focused layout (the design system's sign-in page): a 56px top bar, one centred column framed by rails at xl, and
  * bands whose full-bleed rules meet the rails at small joints. `width` is the column's outer width in px.
  */
 

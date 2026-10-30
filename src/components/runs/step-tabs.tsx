@@ -7,7 +7,7 @@ import type { StepView } from "./run-steps";
 import { usd } from "./trace-entry";
 
 /**
- * The left tablist of the dark panel (ByDefault's how-it-works stepper): one row per pipeline step. The expanded row shows
+ * The left tablist of the dark panel (the design system's how-it-works stepper): one row per pipeline step. The expanded row shows
  * what the step does, its calls, model time and cost, and a 2px flame bar that tracks the step's answered calls.
  */
 export function StepTabs({ steps, expanded, selected, onSelect }: {

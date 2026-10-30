@@ -3,7 +3,7 @@ import { cx } from "@/components/ui";
 import { Icon, type IconName } from "./icons";
 
 /**
- * KPI cells in ByDefault's case-study style (icon + 16/500 label, 32/40 value, caption) laid out as a strip inside one
+ * KPI cells in the design system's case-study style (icon + 16/500 label, 32/40 value, caption) laid out as a strip inside one
  * white card with hairline dividers, plus a usage meter bar.
  */
 
@@ -68,7 +68,7 @@ export function UsageMeter({ used, cap, label, testId, className }: { used: numb
   );
 }
 
-/** ByDefault's table frame: a soft grey well around a white plate. */
+/** the design system's table frame: a soft grey well around a white plate. */
 export function TableFrame({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <div className={cx("rounded-2xl bg-black/[.04] p-1", className)}>

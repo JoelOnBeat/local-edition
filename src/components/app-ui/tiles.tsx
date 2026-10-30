@@ -65,7 +65,7 @@ export function BrandMark({ brand, size = 16, className }: { brand: Brand; size?
 
 const TILE = { xs: { box: "size-[18px] rounded-[5px]", mark: 12 }, sm: { box: "size-6 rounded-md", mark: 14 }, md: { box: "size-7 rounded-[7px]", mark: 16 }, lg: { box: "size-10 rounded-[10px]", mark: 22 } } as const;
 
-/** A white tile holding a provider's mark (ByDefault's brand favicon tiles). `muted` greys out an absent provider. */
+/** A white tile holding a provider's mark (the design system's brand favicon tiles). `muted` greys out an absent provider. */
 export function LogoTile({ provider, size = "sm", muted, className, title }: { provider: Provider; size?: keyof typeof TILE; muted?: boolean; className?: string; title?: string }) {
   const t = TILE[size];
   const brand = BRAND_OF[provider];
