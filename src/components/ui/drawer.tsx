@@ -40,6 +40,7 @@ export function Drawer({ open, onClose, title, kicker, children, footer, width =
       <div
         ref={panel}
         role="dialog"
+        data-testid="drawer"
         aria-modal="true"
         tabIndex={-1}
         className={cx(
@@ -54,7 +55,7 @@ export function Drawer({ open, onClose, title, kicker, children, footer, width =
             {kicker ? <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">{kicker}</p> : null}
             <h2 className="mt-0.5 font-display text-xl font-semibold leading-tight tracking-tight">{title}</h2>
           </div>
-          <button type="button" onClick={onClose} className="-mr-2 rounded-[var(--radius)] p-2 text-muted hover:bg-paper-2 hover:text-ink" aria-label="Close">
+          <button type="button" data-testid="drawer-close" onClick={onClose} className="-mr-2 rounded-[var(--radius)] p-2 text-muted hover:bg-paper-2 hover:text-ink" aria-label="Close">
             <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
           </button>
         </div>

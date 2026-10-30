@@ -31,6 +31,8 @@ export function StatusTable({ stores, editionFor, hot, onHot, onOpen }: {
           return (
             <TR
               key={s.id}
+              data-testid={`store-row-${s.id}`}
+              data-status={e?.status ?? "none"}
               interactive
               onMouseEnter={() => onHot(s.id)}
               onMouseLeave={() => onHot(null)}

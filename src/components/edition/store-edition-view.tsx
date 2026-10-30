@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import type { Delivery, EditionItem } from "@/contract";
+import type { EditionItem } from "@/contract";
 import { getApi } from "@/lib/api-client";
 import { Button, Dot, EmptyState, ErrorState, Masthead, Notice, Skeleton, SkeletonText, StatusChip } from "../ui";
 import { formatDate, modelName } from "../lib/format";
@@ -16,10 +16,8 @@ import { ItemBlock } from "./item-block";
 import { EventContent, PartnerContent, SoundContent, SpecialContent } from "./item-content";
 import { ReviewNote } from "./review-note";
 import { StaffCardButton } from "./staff-card-button";
+import { useDeliveries } from "./use-deliveries";
 import { useItemActions } from "./use-item-actions";
-
-/** Deliveries come from the connector routes once they exist; until then the strip renders nothing. */
-const NO_DELIVERIES: Delivery[] = [];
 
 /** /app/stores/[storeId]: the store's edition as a small front page. */
 export function StoreEditionView({ storeId }: { storeId: string }) {
@@ -29,6 +27,7 @@ export function StoreEditionView({ storeId }: { storeId: string }) {
   const edition = w.editionForStore(storeId);
   const profile = useAsync(store ? `profile:${storeId}` : null, () => api.getStoreProfile(storeId));
   const actions = useItemActions(edition);
+  const deliveries = useDeliveries(edition?.id);
   const [drawer, setDrawer] = useState<EditionItem | null>(null);
 
   if (w.error && !w.bundle) return <ErrorState message={w.error.message} onRetry={w.reload} />;
@@ -81,7 +80,7 @@ export function StoreEditionView({ storeId }: { storeId: string }) {
           colorIndex={store.colorIndex}
           dateline={
             <>
-              <StatusChip status={edition.status} />
+              <span data-testid="edition-status" data-status={edition.status}><StatusChip status={edition.status} /></span>
               <span>Week of {formatDate(edition.weekOf)}</span><Dot />
               <span className="min-w-0 [overflow-wrap:anywhere]">{store.addressLabel}</span><Dot />
               <span className="text-muted">Built by {modelName(edition.generatedBy.agentModel)}</span>
@@ -92,7 +91,7 @@ export function StoreEditionView({ storeId }: { storeId: string }) {
               <>
                 {allApproved ? <StaffCardButton editionId={edition.id} /> : null}
                 {!allApproved ? (
-                  <Button variant="primary" size="sm" loading={actions.busy === "approve-all"} disabled={actions.busy !== null} onClick={actions.approveAll}>
+                  <Button data-testid="approve-all" variant="primary" size="sm" loading={actions.busy === "approve-all"} disabled={actions.busy !== null} onClick={actions.approveAll}>
                     Approve all
                   </Button>
                 ) : null}
@@ -100,9 +99,9 @@ export function StoreEditionView({ storeId }: { storeId: string }) {
             )
           }
         />
-        {actions.notice ? <Notice tone="ok" className="mt-3">{actions.notice}</Notice> : null}
+        {actions.notice ? <Notice tone="ok" className="mt-3" data-testid="approve-all-notice">{actions.notice}</Notice> : null}
         {actions.problem && actions.problem.itemId === null ? (
-          <Notice tone={actions.problem.tone} className="mt-3"
+          <Notice tone={actions.problem.tone} className="mt-3" data-testid="edition-problem"
             action={actions.problem.fix === "reload" ? <Button size="sm" onClick={() => actions.fix(actions.problem!)}>Reload</Button> : undefined}>
             {actions.problem.message}
           </Notice>
@@ -123,7 +122,7 @@ export function StoreEditionView({ storeId }: { storeId: string }) {
         {block(event, event ? <EventContent item={event} /> : null)}
       </div>
 
-      <DeliveryStrip deliveries={NO_DELIVERIES} />
+      <DeliveryStrip deliveries={deliveries} />
       {w.bundle.chain.isSample ? (
         <p className="border-t border-rule pt-3 text-[12px] text-muted">
           Sample chain: the stores, partner places and event listings are invented for the demo. Nothing here is a real customer.

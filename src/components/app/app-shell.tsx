@@ -51,6 +51,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <li key={n.href}>
                   <Link
                     href={n.href}
+                    data-testid={`nav-${n.label.toLowerCase()}`}
                     aria-current={active ? "page" : undefined}
                     className={cx(
                       "-mb-px inline-block border-b-2 pb-2 text-[14px] transition-colors",
@@ -78,6 +79,7 @@ function WeekSelect() {
     <label className="relative inline-flex items-center">
       <span className="sr-only">Week</span>
       <select
+        data-testid="week-select"
         value={week}
         onChange={(e) => setWeek(e.target.value)}
         className="h-8 appearance-none rounded-[var(--radius)] border border-rule bg-paper pl-3 pr-8 text-[13px] font-medium text-ink hover:border-ink-2"

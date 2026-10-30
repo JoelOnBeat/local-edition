@@ -47,9 +47,9 @@ export function PortfolioView() {
           </h1>
           {editions.length ? (
             <dl className="mt-4 flex flex-wrap gap-x-8 gap-y-3">
-              <Stat label="Approved" value={count("approved")} color="var(--ok)" />
-              <Stat label="Flagged" value={count("flagged")} color="var(--flag)" />
-              <Stat label="Waiting on you" value={count("draft") + count("drafting")} color="var(--muted)" />
+              <Stat id="approved" label="Approved" value={count("approved")} color="var(--ok)" />
+              <Stat id="flagged" label="Flagged" value={count("flagged")} color="var(--flag)" />
+              <Stat id="draft" label="Waiting on you" value={count("draft") + count("drafting")} color="var(--muted)" />
             </dl>
           ) : null}
         </div>
@@ -89,9 +89,9 @@ export function PortfolioView() {
   );
 }
 
-function Stat({ label, value, color }: { label: string; value: number; color: string }) {
+function Stat({ id, label, value, color }: { id: string; label: string; value: number; color: string }) {
   return (
-    <div className="flex items-baseline gap-2">
+    <div className="flex items-baseline gap-2" data-testid={`count-${id}`} data-value={value}>
       <dd className="font-display text-[28px] font-semibold leading-none tabular-nums" style={{ color: value ? color : "var(--muted)" }}>{value}</dd>
       <dt className="text-[13px] text-ink-2">{label}</dt>
     </div>

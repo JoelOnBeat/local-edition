@@ -27,12 +27,13 @@ export function ItemBlock({ edition, item, actions, onEvidence, lead, readOnly, 
   const problem = actions.problem?.itemId === item.id ? actions.problem : null;
   const approved = item.status === "approved" || item.status === "edited";
   const g = item.guardrail;
+  const k = item.kind;
 
   return (
-    <article className={cx("flex min-w-0 flex-col border-t-2 border-ink pt-3", item.status === "rejected" && "opacity-60")} aria-label={KICKER[item.kind]}>
+    <article data-testid={`item-${k}`} data-status={item.status} data-guardrail={g.status} data-version={item.version} className={cx("flex min-w-0 flex-col border-t-2 border-ink pt-3", item.status === "rejected" && "opacity-60")} aria-label={KICKER[item.kind]}>
       <div className="flex items-center justify-between gap-3">
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink">{KICKER[item.kind]}</p>
-        <StatusChip status={item.status} />
+        <span data-testid={`item-status-${k}`}><StatusChip status={item.status} /></span>
       </div>
 
       <div className={cx("mt-3", lead && "sm:mt-4")}>
@@ -53,7 +54,7 @@ export function ItemBlock({ edition, item, actions, onEvidence, lead, readOnly, 
 
       {g.status === "blocked" || g.status === "rewritten" || g.status === "unchecked" ? (
         <div className={cx("mt-4 border-l-2 pl-3 text-[13px] leading-relaxed", g.status === "blocked" ? "border-flag" : "border-warn")}>
-          <GuardrailChip status={g.status} />
+          <span data-testid={`guardrail-${k}`}><GuardrailChip status={g.status} /></span>
           {g.reasons.map((r) => <p key={r} className="mt-1.5 text-ink-2">{r}</p>)}
           {g.original ? <p className="mt-1 text-muted line-through decoration-[color-mix(in_oklab,var(--flag)_60%,transparent)]">{g.original}</p> : null}
         </div>
@@ -61,16 +62,16 @@ export function ItemBlock({ edition, item, actions, onEvidence, lead, readOnly, 
 
       <div className="mt-4 flex flex-wrap gap-1.5">
         {evidence.map((e) => <EvidenceChip key={e.id} evidence={e} onClick={() => onEvidence(item)} />)}
-        <button type="button" onClick={() => onEvidence(item)} className="h-7 px-1 text-[12.5px] font-medium text-ink-2 underline decoration-rule underline-offset-4 hover:text-ink hover:decoration-ink">
+        <button type="button" data-testid={`evidence-${k}`} onClick={() => onEvidence(item)} className="h-7 px-1 text-[12.5px] font-medium text-ink-2 underline decoration-rule underline-offset-4 hover:text-ink hover:decoration-ink">
           Why this?
         </button>
       </div>
 
-      {regen ? <RegenProgress phase={regen.phase} steps={regen.steps} /> : null}
+      {regen ? <RegenProgress testId={`regen-progress-${k}`} phase={regen.phase} steps={regen.steps} /> : null}
       {problem ? (
-        <Notice tone={problem.tone} className="mt-3"
+        <Notice tone={problem.tone} className="mt-3" data-testid={`item-problem-${k}`}
           action={problem.fix ? (
-            <Button size="sm" onClick={() => actions.fix(problem, item)}>{problem.fix === "reload" ? "Reload" : "Approve anyway"}</Button>
+            <Button size="sm" data-testid={`item-problem-fix-${k}`} onClick={() => actions.fix(problem, item)}>{problem.fix === "reload" ? "Reload" : "Approve anyway"}</Button>
           ) : undefined}>
           {problem.message}
         </Notice>
@@ -79,12 +80,12 @@ export function ItemBlock({ edition, item, actions, onEvidence, lead, readOnly, 
       {mode === "regen" ? (
         <form className="mt-3 flex flex-col gap-2 sm:flex-row" onSubmit={(e) => { e.preventDefault(); setMode("view"); void actions.regenerate(item, hint.trim() || undefined); setHint(""); }}>
           <input
-            autoFocus maxLength={280} value={hint} onChange={(e) => setHint(e.target.value)}
+            data-testid={`regen-hint-${k}`} autoFocus maxLength={280} value={hint} onChange={(e) => setHint(e.target.value)}
             placeholder="Steer it (optional): less sweet, mention the park…"
             className="h-8 min-w-0 flex-1 rounded-[var(--radius)] border border-rule bg-paper px-3 text-[13px] text-ink placeholder:text-muted focus:border-ink focus:outline-none"
           />
           <div className="flex gap-2">
-            <Button type="submit" size="sm" variant="primary">Regenerate</Button>
+            <Button type="submit" size="sm" variant="primary" data-testid={`regen-submit-${k}`}>Regenerate</Button>
             <Button size="sm" variant="ghost" onClick={() => setMode("view")}>Cancel</Button>
           </div>
         </form>
@@ -95,14 +96,14 @@ export function ItemBlock({ edition, item, actions, onEvidence, lead, readOnly, 
           {approved ? (
             <span className="mr-auto text-[13px] font-medium text-ok">Approved{item.status === "edited" ? " with your edits" : ""}</span>
           ) : (
-            <Button size="sm" variant="ok" loading={busy("approve")} disabled={anyBusy || g.status === "blocked" || item.status === "flagged" || item.status === "rejected"} onClick={() => actions.approve(item)}>
+            <Button data-testid={`approve-${k}`} size="sm" variant="ok" loading={busy("approve")} disabled={anyBusy || g.status === "blocked" || item.status === "flagged" || item.status === "rejected"} onClick={() => actions.approve(item)}>
               Approve
             </Button>
           )}
-          <Button size="sm" disabled={anyBusy} onClick={() => setMode("edit")}>Edit</Button>
-          <Button size="sm" disabled={anyBusy} loading={busy("regen")} onClick={() => setMode("regen")}>Regenerate</Button>
+          <Button data-testid={`edit-${k}`} size="sm" disabled={anyBusy} onClick={() => setMode("edit")}>Edit</Button>
+          <Button data-testid={`regenerate-${k}`} size="sm" disabled={anyBusy} loading={busy("regen")} onClick={() => setMode("regen")}>Regenerate</Button>
           {!approved && item.status !== "rejected" ? (
-            <Button size="sm" variant="ghost" disabled={anyBusy} loading={busy("reject")} onClick={() => actions.reject(item)} className="ml-auto">Reject</Button>
+            <Button data-testid={`reject-${k}`} size="sm" variant="ghost" disabled={anyBusy} loading={busy("reject")} onClick={() => actions.reject(item)} className="ml-auto">Reject</Button>
           ) : null}
         </div>
       ) : null}
@@ -110,10 +111,10 @@ export function ItemBlock({ edition, item, actions, onEvidence, lead, readOnly, 
   );
 }
 
-function RegenProgress({ phase, steps }: { phase: "writing" | "checking" | "done"; steps: { model: string; usd: number; role: string }[] }) {
+function RegenProgress({ phase, steps, testId }: { phase: "writing" | "checking" | "done"; steps: { model: string; usd: number; role: string }[]; testId: string }) {
   const label = phase === "writing" ? "Rewriting" : phase === "checking" ? "Checking the new copy" : "Rewritten and checked";
   return (
-    <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-[var(--radius)] bg-paper-2 px-3 py-2 text-[12.5px] text-ink-2" role="status">
+    <div data-testid={testId} data-phase={phase} className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-[var(--radius)] bg-paper-2 px-3 py-2 text-[12.5px] text-ink-2" role="status">
       {phase === "done" ? <span className="h-2 w-2 rounded-full bg-ok" /> : <Spinner className="h-3.5 w-3.5" />}
       <span className="font-medium text-ink">{label}</span>
       {steps.map((s, i) => (

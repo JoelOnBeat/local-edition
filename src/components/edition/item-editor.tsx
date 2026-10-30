@@ -41,9 +41,9 @@ export function ItemEditor({ item, busy, onSave, onCancel }: {
         <label key={f.key} className="block">
           <span className="mb-1 block text-[12px] font-medium text-ink-2">{f.label}</span>
           {f.long ? (
-            <textarea rows={3} maxLength={600} className={input} value={values[f.key]} onChange={(e) => setValues({ ...values, [f.key]: e.target.value })} />
+            <textarea data-testid={`edit-field-${f.key}`} rows={3} maxLength={600} className={input} value={values[f.key]} onChange={(e) => setValues({ ...values, [f.key]: e.target.value })} />
           ) : (
-            <input maxLength={600} className={input} value={values[f.key]} onChange={(e) => setValues({ ...values, [f.key]: e.target.value })} />
+            <input data-testid={`edit-field-${f.key}`} maxLength={600} className={input} value={values[f.key]} onChange={(e) => setValues({ ...values, [f.key]: e.target.value })} />
           )}
         </label>
       ))}
@@ -63,8 +63,8 @@ export function ItemEditor({ item, busy, onSave, onCancel }: {
       ) : null}
       <p className="text-[12px] text-muted">Saving re-checks the copy with guardrails. Health, diet and allergen claims are removed or blocked.</p>
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" variant="primary" size="sm" loading={busy} disabled={!Object.keys(changed).length || empty}>Save and re-check</Button>
-        <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button data-testid={`edit-save-${item.kind}`} type="submit" variant="primary" size="sm" loading={busy} disabled={!Object.keys(changed).length || empty}>Save and re-check</Button>
+        <Button data-testid={`edit-cancel-${item.kind}`} size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
       </div>
     </form>
   );

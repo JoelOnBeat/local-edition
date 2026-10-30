@@ -25,6 +25,8 @@ function pin(store: Store, status: StoreWeekStatus, onOpen: (id: string) => void
   el.className = "le-pin group flex items-center gap-1.5 bg-transparent p-0";
   el.setAttribute("aria-label", `${store.name}: ${meta.label}`);
   el.dataset.storeId = store.id;
+  el.setAttribute("data-testid", `map-pin-${store.id}`);
+  el.dataset.status = status;
   el.innerHTML = `
     <span class="relative block h-[15px] w-[15px] rounded-full transition-transform group-hover:scale-110 group-data-[hot=true]:scale-125"
       style="background:${storeColor(store.colorIndex)};box-shadow:0 0 0 2px var(--paper),0 0 0 ${meta.dashed ? "3px" : "4px"} ${meta.ring}">

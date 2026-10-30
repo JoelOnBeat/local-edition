@@ -46,7 +46,7 @@ export function RunView({ runId }: { runId: string }) {
   return (
     <div className="space-y-6">
       <section className="border-b border-ink pb-5">
-        <p className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
+        <p data-testid="run-status" data-status={run.status} data-finished={model.finished} className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
           <span className={cx("h-2 w-2 rounded-full", live ? "le-live-dot bg-accent" : model.finished ? "bg-ok" : "bg-warn")} aria-hidden />
           {run.status === "reconnecting" ? "Reconnecting, replaying from the run log" : live ? "Live agent trace" : model.finished ? "Run finished" : "Stream ended"}
           <span className="font-mono normal-case tracking-normal">· {runId}</span>
@@ -54,7 +54,7 @@ export function RunView({ runId }: { runId: string }) {
         <h1 className="mt-1 font-display text-[32px] font-bold leading-[1.02] tracking-[-0.02em] sm:text-[44px]">
           {model.finished ? `${model.lanes.filter((l) => l.status === "done").length} editions drafted` : `Building ${model.total} edition${model.total === 1 ? "" : "s"}`}
         </h1>
-        <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-paper-2" role="progressbar" aria-valuenow={model.done} aria-valuemax={model.total}>
+        <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-paper-2" data-testid="run-progress" role="progressbar" aria-valuenow={model.done} aria-valuemax={model.total}>
           <div className="h-full rounded-full bg-ink transition-[width] duration-500" style={{ width: `${Math.max(2, ratio * 100)}%` }} />
         </div>
         <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-5">
@@ -62,7 +62,7 @@ export function RunView({ runId }: { runId: string }) {
           <Stat label="Tool calls" value={formatInt(model.toolCalls)} />
           <Stat label="Tokens" value={formatInt(model.promptTokens + model.completionTokens)} />
           <Stat label="Prompt cache" value={pct(cacheShare)} />
-          <Stat label="Model cost" value={formatUsd(model.usd)} />
+          <Stat label="Model cost" value={formatUsd(model.usd)} testId="run-cost" />
         </dl>
       </section>
 
@@ -106,16 +106,16 @@ export function RunView({ runId }: { runId: string }) {
               {model.finished ? <BuildButton storeIds={skipped} force size="sm" label="Rebuild and replace approvals" /> : null}
             </section>
           ) : null}
-          {model.finished ? <ButtonLink href="/app" variant="primary" className="w-full">Review on the portfolio</ButtonLink> : null}
+          {model.finished ? <ButtonLink data-testid="run-back" href="/app" variant="primary" className="w-full">Review on the portfolio</ButtonLink> : null}
         </aside>
       </div>
     </div>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, testId }: { label: string; value: string; testId?: string }) {
   return (
-    <div>
+    <div data-testid={testId}>
       <dt className="text-[11.5px] text-muted">{label}</dt>
       <dd className="font-mono text-[20px] font-medium leading-tight text-ink">{value}</dd>
     </div>

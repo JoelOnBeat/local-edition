@@ -8,7 +8,7 @@ const TONE: Record<Delivery["status"], "ok" | "warn" | "flag" | "neutral"> = { s
 export function DeliveryStrip({ deliveries }: { deliveries: Delivery[] }) {
   if (!deliveries.length) return null;
   return (
-    <section className="border-t border-rule pt-4">
+    <section data-testid="delivery-strip" className="border-t border-rule pt-4">
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">Where it went</p>
       <ul className="mt-2 flex flex-wrap gap-2">
         {deliveries.map((d, i) => {
@@ -20,7 +20,7 @@ export function DeliveryStrip({ deliveries }: { deliveries: Delivery[] }) {
             </>
           );
           return (
-            <li key={`${d.provider}-${d.itemId ?? "all"}-${i}`} title={d.note ?? undefined}>
+            <li key={`${d.provider}-${d.itemId ?? "all"}-${i}`} title={d.note ?? undefined} data-testid={`delivery-${d.provider}`} data-status={d.status}>
               {d.url ? (
                 <a href={d.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-rule px-2.5 py-1.5 hover:border-ink-2">{body}</a>
               ) : (

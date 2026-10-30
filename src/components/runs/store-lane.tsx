@@ -19,8 +19,8 @@ const STATUS: Record<Lane["status"], { label: string; tone: "neutral" | "info" |
 export function StoreLane({ lane, store, open, onToggle }: { lane: Lane; store?: Store; open: boolean; onToggle: () => void }) {
   const s = STATUS[lane.status];
   return (
-    <section className={cx("rounded-[var(--radius)] border bg-paper", lane.status === "working" ? "border-ink-2" : "border-rule")}>
-      <button type="button" onClick={onToggle} aria-expanded={open}
+    <section data-testid={`lane-${lane.storeId}`} data-status={lane.status} className={cx("rounded-[var(--radius)] border bg-paper", lane.status === "working" ? "border-ink-2" : "border-rule")}>
+      <button type="button" data-testid={`lane-toggle-${lane.storeId}`} onClick={onToggle} aria-expanded={open}
         className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-left">
         <span className="flex min-w-0 flex-1 text-[15px] font-semibold text-ink">
           <StoreSwatch colorIndex={store?.colorIndex ?? 1} name={store?.name ?? lane.storeId} size="lg" />
@@ -56,7 +56,7 @@ function Entry({ e }: { e: TraceEntry }) {
     const t = toolInfo(e.tool);
     const args = formatArgs(e.args);
     return (
-      <li className="le-enter grid grid-cols-[18px_1fr] gap-x-2 py-1.5">
+      <li data-testid="trace-tool" data-tool={e.tool} data-ok={e.result?.ok} className="le-enter grid grid-cols-[18px_1fr] gap-x-2 py-1.5">
         <span className="pt-0.5 font-mono text-[12px] text-muted">→</span>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -78,7 +78,7 @@ function Entry({ e }: { e: TraceEntry }) {
     const s = e.step;
     const cached = s.promptTokens ? Math.round((s.cachedTokens / s.promptTokens) * 100) : 0;
     return (
-      <li className="le-enter grid grid-cols-[18px_1fr] gap-x-2 py-0.5">
+      <li data-testid="trace-model" data-model={s.model} className="le-enter grid grid-cols-[18px_1fr] gap-x-2 py-0.5">
         <span className="font-mono text-[12px] text-muted">⋯</span>
         <p className="font-mono text-[11.5px] leading-relaxed text-muted [overflow-wrap:anywhere]">
           <span className="text-ink-2">{modelName(s.model)}</span> · {s.role}{s.tool ? ` · ${s.tool}` : ""} · {formatInt(s.promptTokens)}→{formatInt(s.completionTokens)} tok
@@ -89,7 +89,7 @@ function Entry({ e }: { e: TraceEntry }) {
   }
   if (e.kind === "item") {
     return (
-      <li className="le-enter grid grid-cols-[18px_1fr] gap-x-2 py-1.5">
+      <li data-testid="trace-item" data-kind={e.item.kind} data-guardrail={e.guardrail?.status} className="le-enter grid grid-cols-[18px_1fr] gap-x-2 py-1.5">
         <span className="font-mono text-[12px] text-ink">✎</span>
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
           <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">{KICKER[e.item.kind]}</span>

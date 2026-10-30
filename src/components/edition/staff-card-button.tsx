@@ -12,7 +12,7 @@ export function StaffCardButton({ editionId }: { editionId: string }) {
   return (
     <span className="inline-flex items-center gap-2">
       {error ? <span className="text-[12px] text-flag">{error}</span> : null}
-      <Button size="sm" loading={busy} onClick={async () => {
+      <Button data-testid="staff-card" size="sm" loading={busy} onClick={async () => {
         setBusy(true);
         setError(null);
         try {

@@ -36,11 +36,11 @@ export function BuildButton({ storeIds, force, label = "Build this week's editio
   };
   return (
     <div className="flex flex-col items-stretch gap-2 sm:items-end">
-      <Button variant="primary" size={size} loading={busy} onClick={go}>
+      <Button data-testid={force ? "build-force" : storeIds?.length === 1 ? "build-store" : "build-editions"} variant="primary" size={size} loading={busy} onClick={go}>
         {busy ? "Starting the agent…" : label}
       </Button>
       {error ? (
-        <Notice tone="flag" className="max-w-md">
+        <Notice tone="flag" className="max-w-md" data-testid="build-error">
           {(error.code && PLAIN[error.code]) || error.message}
         </Notice>
       ) : null}

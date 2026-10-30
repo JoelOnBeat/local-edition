@@ -46,8 +46,8 @@ export function CompareView() {
           <span style={{ color: storeColor(b.colorIndex) }}>{b.name}</span>
         </h1>
         <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-          <StorePicker label="Store A" value={a.id} stores={stores} onChange={(id) => pick("a", id)} />
-          <StorePicker label="Store B" value={b.id} stores={stores} onChange={(id) => pick("b", id)} />
+          <StorePicker testId="compare-a" label="Store A" value={a.id} stores={stores} onChange={(id) => pick("a", id)} />
+          <StorePicker testId="compare-b" label="Store B" value={b.id} stores={stores} onChange={(id) => pick("b", id)} />
         </div>
       </section>
 
@@ -62,7 +62,7 @@ export function CompareView() {
           <p className="max-w-[70ch] text-[15px] leading-relaxed text-ink-2">
             {summary(a, b, cmp.data.result.shared.length, cmp.data.result.onlyA.length, cmp.data.result.onlyB.length)}
           </p>
-          <div className="grid gap-8 md:grid-cols-3 lg:gap-10">
+          <div data-testid="compare-result" data-shared={cmp.data.result.shared.length} className="grid gap-8 md:grid-cols-3 lg:gap-10">
             <TagColumn title="Only here" store={a} tags={cmp.data.result.onlyA} empty={`Nothing in ${a.name}'s top tags is unique to it.`} />
             <SharedColumn a={a} b={b} tags={cmp.data.result.shared} bTags={profB.data?.profile.tags} />
             <TagColumn title="Only here" store={b} tags={cmp.data.result.onlyB} empty={`Nothing in ${b.name}'s top tags is unique to it.`} />
@@ -90,13 +90,13 @@ function summary(a: Store, b: Store, shared: number, onlyA: number, onlyB: numbe
   return `${a.name} and ${b.name} share ${shared} top tag${shared === 1 ? "" : "s"}. ${a.name} has ${onlyA} the other block lacks and ${b.name} has ${onlyB}; those differences are what the agent builds each edition from.`;
 }
 
-function StorePicker({ label, value, stores, onChange }: { label: string; value: string; stores: Store[]; onChange: (id: string) => void }) {
+function StorePicker({ testId, label, value, stores, onChange }: { testId: string; label: string; value: string; stores: Store[]; onChange: (id: string) => void }) {
   const current = stores.find((s) => s.id === value);
   return (
     <label className="flex min-w-0 flex-1 items-center gap-2 rounded-[var(--radius)] border border-rule bg-paper px-3 sm:max-w-xs">
       <span className="h-3 w-3 shrink-0 rounded-[2px]" style={{ background: storeColor(current?.colorIndex ?? 1) }} aria-hidden />
       <span className="shrink-0 text-[12px] text-muted">{label}</span>
-      <select value={value} onChange={(e) => onChange(e.target.value)} className="h-10 min-w-0 flex-1 bg-transparent text-[14px] font-medium text-ink focus:outline-none">
+      <select data-testid={testId} value={value} onChange={(e) => onChange(e.target.value)} className="h-10 min-w-0 flex-1 bg-transparent text-[14px] font-medium text-ink focus:outline-none">
         {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
       </select>
     </label>
