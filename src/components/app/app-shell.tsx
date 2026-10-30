@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { AccountMenu } from "../account/account-menu";
 import { Chip, cx, Skeleton } from "../ui";
 import { formatDate, previousWeeks } from "../lib/format";
 import { useWorkspace } from "./workspace-context";
@@ -42,6 +43,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             )}
           </div>
           <WeekSelect />
+          <AccountMenu />
         </div>
         <nav aria-label="Head office" className="mx-auto w-full max-w-[1320px] overflow-x-auto px-4 sm:px-6">
           <ul className="flex min-w-max gap-5 pt-2">

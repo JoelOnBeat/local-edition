@@ -57,6 +57,11 @@ export interface Repo {
   /** Atomically create a workspace plus its seeded chain, stores and menu. */
   createWorkspace(seed: WorkspaceSeed): Promise<Workspace>;
   getWorkspace(id: string): Promise<Workspace | null>;
+  /**
+   * Removes the workspace and everything it owns in this repo: chain, stores (with their editions, staff cards and cached profiles),
+   * menu. Not the connector tables, photos or accounts (src/server/auth/erase.ts). False when there was no such workspace.
+   */
+  deleteWorkspace(id: string): Promise<boolean>;
   /** Scans the `ws:` keys (no hot index key); meant for tests and tooling, not a request path. */
   listWorkspaces(): Promise<Workspace[]>;
 

@@ -51,6 +51,17 @@ export class HttpError extends Error {
   }
 }
 
+/** An HttpError that tells the client when to try again (sent as `Retry-After`, in seconds). */
+export class RetryAfterError extends HttpError {
+  readonly retryAfterSeconds: number;
+
+  constructor(status: number, code: string, message: string, retryAfterSeconds: number) {
+    super(status, code, message);
+    this.name = "RetryAfterError";
+    this.retryAfterSeconds = Math.max(1, Math.ceil(retryAfterSeconds));
+  }
+}
+
 export function upstreamHttpStatus(err: UpstreamError): number {
   switch (err.code) {
     case "spend_cap": return 402;

@@ -27,8 +27,9 @@ export const Chain = z.object({
   id,
   name: z.string().min(1).max(80),
   category: ChainCategory,
-  brandVoice: z.array(z.string().min(1).max(140)).min(1).max(3),
-  anchors: z.array(QlooEntityRef).min(1).max(3),
+  /** Empty until onboarding fills them in (a new account starts with neither); a build refuses a chain without anchors. */
+  brandVoice: z.array(z.string().min(1).max(140)).max(3),
+  anchors: z.array(QlooEntityRef).max(3),
   city: z.object({ name: z.string().min(1).max(80), lat: z.number().min(-90).max(90), lon: z.number().min(-180).max(180) }),
   isSample: z.boolean(),
 });

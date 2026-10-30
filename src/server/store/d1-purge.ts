@@ -19,6 +19,8 @@ const WORKSPACE_TABLES = ["staff_cards", "editions", "stores", "menus", "chains"
 export const CONNECTOR_TABLES = [
   "comms_docs", "connector_connections", "connector_events", "connector_deliveries", "square_locations", "calendar_tokens", "connector_oauth_state",
 ] as const;
+/** Onboarding progress (migration 0005) is keyed by workspace too; an expired visitor workspace takes its record with it. Accounts never expire. */
+const GUARDED_WORKSPACE_TABLES = [...CONNECTOR_TABLES, "onboarding"] as const;
 /** Idempotency claims (button clicks, digests, sample quotas) are only useful for a short while. */
 export const COMMS_CLAIM_KEEP_MS = 14 * 24 * 3600 * 1000;
 
@@ -47,7 +49,7 @@ export async function purgeExpiredRows(getDb: () => Promise<D1Like>, now: number
       }
     }
     // Before the workspace rows go: the ids are re-selected from them.
-    await guarded("connector rows", () => db.batch(CONNECTOR_TABLES.map((t) => sql(`DELETE FROM ${t} WHERE workspace_id IN (${EXPIRED_IDS})`, now, PURGE_CHUNK))));
+    await guarded("connector rows", () => db.batch(GUARDED_WORKSPACE_TABLES.map((t) => sql(`DELETE FROM ${t} WHERE workspace_id IN (${EXPIRED_IDS})`, now, PURGE_CHUNK))));
     await db.batch([
       ...WORKSPACE_TABLES.map((t) => sql(`DELETE FROM ${t} WHERE workspace_id IN (${EXPIRED_IDS})`, now, PURGE_CHUNK)),
       sql(`DELETE FROM workspaces WHERE id IN (${EXPIRED_IDS})`, now, PURGE_CHUNK),
@@ -71,6 +73,9 @@ export async function purgeExpiredRows(getDb: () => Promise<D1Like>, now: number
     db.batch([
       sql("DELETE FROM comms_claims WHERE at < ?", now - COMMS_CLAIM_KEEP_MS),
       sql("DELETE FROM connector_oauth_state WHERE expires_at <= ?", now),
+      // Accounts (migration 0005): dead sessions and old sign-in counters.
+      sql("DELETE FROM sessions WHERE expires_at <= ?", now),
+      sql("DELETE FROM auth_counters WHERE at < ?", now - 2 * 24 * 3600 * 1000),
     ]),
   );
   return removed;

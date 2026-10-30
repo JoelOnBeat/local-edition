@@ -8,3 +8,4 @@ export * from "./connectors";
 export * from "./connectors-square";
 export * from "./connectors-comms";
 export * from "./routes-connectors";
+export * from "./auth";

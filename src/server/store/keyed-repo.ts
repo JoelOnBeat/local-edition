@@ -97,6 +97,16 @@ export class KeyedRepo implements Repo {
     return workspace;
   }
   getWorkspace(id: string) { return this.read<Workspace>(`ws:${id}`); }
+  async deleteWorkspace(id: string): Promise<boolean> {
+    const workspace = await this.getWorkspace(id);
+    if (!workspace) return false;
+    for (const store of await this.listStores(workspace.chainId)) await this.deleteStore(store.id);
+    await this.kv.delete(`stores:${workspace.chainId}`);
+    await this.kv.delete(`menu:${workspace.chainId}`);
+    await this.kv.delete(`chain:${workspace.chainId}`);
+    await this.kv.delete(`ws:${id}`);
+    return true;
+  }
   async listWorkspaces(): Promise<Workspace[]> {
     const keys = await this.kv.list("ws:");
     const rows = await Promise.all(keys.map((k) => this.getWorkspace(k.slice(3))));

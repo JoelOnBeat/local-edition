@@ -24,7 +24,17 @@ export function workspaceSuffix(workspaceId: string): string {
 /** Visitor rows expire with their cookie (30 days) plus a day of margin; the demo workspace never expires. */
 export const VISITOR_TTL_SECONDS = 31 * 24 * 3600;
 
-/** True for ids minted for a visitor workspace (`ws_…`) or remapped into one (`…~suffix`). */
+/** An account's workspace id (`acct_…`), or a row id remapped into one (`…~acct_…`). Account rows never expire. */
+export const ACCOUNT_ID_PREFIX = "acct_";
+export function isAccountId(id: string): boolean {
+  return id.startsWith(ACCOUNT_ID_PREFIX) || id.includes(`${WORKSPACE_ID_SEPARATOR}${ACCOUNT_ID_PREFIX}`);
+}
+
+/** True for ids minted for a visitor workspace (`ws_…`) or remapped into one (`…~suffix`). An account's ids are not visitor ids. */
 export function isVisitorId(id: string): boolean {
+  if (isAccountId(id)) return false;
   return id.startsWith("ws_") || id.includes(WORKSPACE_ID_SEPARATOR);
 }
+
+/** The canonical demo workspace: the sample chain with canonical ids, built by the weekly job. A cookie can never name it. */
+export const DEMO_WORKSPACE_ID = "demo";

@@ -25,6 +25,11 @@ const toStored = (r: ConnRow): StoredConnection => ({
 export class D1Ledger implements ConnectorLedger {
   constructor(private readonly db: D1Like) {}
 
+  async deleteWorkspaceData(ws: string) {
+    const tables = ["connector_connections", "connector_events", "connector_deliveries", "square_locations", "connector_oauth_state", "calendar_tokens", "comms_docs"];
+    await this.db.batch(tables.map((t) => this.db.prepare(`DELETE FROM ${t} WHERE workspace_id = ?`).bind(ws)));
+  }
+
   async getConnection(ws: string, provider: ConnectorProvider) {
     const r = await this.db.prepare("SELECT * FROM connector_connections WHERE workspace_id = ? AND provider = ?").bind(ws, provider).first<ConnRow>();
     return r ? toStored(r) : null;

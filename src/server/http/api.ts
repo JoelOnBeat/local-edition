@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { MENU_IMAGE_MAX_BYTES, type ApiError, type RouteSpec } from "@/contract";
 import { createLogger } from "../log";
-import { HttpError, UpstreamError, upstreamHttpStatus } from "./errors";
+import { HttpError, RetryAfterError, UpstreamError, upstreamHttpStatus } from "./errors";
 
 const log = createLogger("api");
 
@@ -86,6 +86,11 @@ function issueSummary(err: z.ZodError): string {
 
 /** Maps any thrown value to a safe response. Exported for SSE routes that build their own streams. */
 export function errorResponse(e: unknown): Response {
+  if (e instanceof RetryAfterError) {
+    const res = apiError(e.status, e.code, e.message);
+    res.headers.set("retry-after", String(e.retryAfterSeconds));
+    return res;
+  }
   if (e instanceof HttpError) return apiError(e.status, e.code, e.message);
   if (e instanceof UpstreamError) return apiError(upstreamHttpStatus(e), e.code, e.message);
   if (e instanceof z.ZodError) return apiError(400, "invalid_input", issueSummary(e));

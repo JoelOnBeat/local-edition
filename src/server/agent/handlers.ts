@@ -32,6 +32,8 @@ async function* digestWhenDone(events: AsyncGenerator<AgentEvent>, workspaceId: 
 export const buildRoute = wsRoute(buildSpec, async ({ body }, ctx) => {
   const stores = await ctx.repo.listStores(ctx.workspace.chainId);
   if (!stores.length) throw new HttpError(409, "no_stores", "Add a store before building an edition.");
+  // A new account starts with no taste anchors; Qloo has nothing to compare a block against until it has some.
+  if (!(await ctx.repo.getChain(ctx.workspace.chainId))?.anchors.length) throw new HttpError(409, "no_anchors", "Pick at least one taste anchor before building an edition.");
   const unknown = body.storeIds?.filter((id) => !stores.some((s) => s.id === id)) ?? [];
   if (unknown.length) throw new HttpError(404, "unknown_store", "One of those stores does not exist.");
   await limitSpend(ctx, "build");

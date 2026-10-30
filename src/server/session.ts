@@ -1,10 +1,12 @@
 import type { Edition, StaffCard, Workspace } from "@/contract";
 import { newId, newToken } from "@/lib/ids";
+import { buildCookie, isSecureRequest, readCookie } from "./http/cookies";
 import { HttpError } from "./http/errors";
 import { clientIp, ipHash } from "./limits";
 import { serial } from "./serial";
 import { sampleSeed } from "./sample/chain";
-import { getRepo, remapId, workspaceSuffix, WorkspaceExistsError, type Repo, type SeedWithId } from "./store";
+import { getPrincipal } from "./auth/sessions";
+import { DEMO_WORKSPACE_ID, getRepo, isAccountId, remapId, workspaceSuffix, WorkspaceExistsError, type Repo, type SeedWithId } from "./store";
 
 /**
  * Visitor identity. The httpOnly cookie `le_ws` holds an unguessable workspace id; whoever holds it
@@ -14,7 +16,7 @@ import { getRepo, remapId, workspaceSuffix, WorkspaceExistsError, type Repo, typ
  */
 
 export const WORKSPACE_COOKIE = "le_ws";
-export const DEMO_WORKSPACE_ID = "demo";
+export { DEMO_WORKSPACE_ID };
 const COOKIE_MAX_AGE_SECONDS = 30 * 24 * 3600;
 
 export interface ResolvedWorkspace {
@@ -36,33 +38,11 @@ export const DEFAULT_LIMIT: NewWorkspaceLimit = { capacity: 10, refillSeconds: 3
  */
 export const GLOBAL_WORKSPACES_PER_HOUR = 60;
 
-export function readCookie(request: Request, name: string): string | null {
-  const header = request.headers.get("cookie");
-  if (!header) return null;
-  for (const part of header.split(";")) {
-    const at = part.indexOf("=");
-    if (at !== -1 && part.slice(0, at).trim() === name) {
-      try {
-        return decodeURIComponent(part.slice(at + 1).trim());
-      } catch {
-        return null; // a malformed %-sequence is a cookie we did not issue: treat it as absent
-      }
-    }
-  }
-  return null;
-}
-
 export function buildSetCookie(workspaceId: string, secure: boolean): string {
-  const attrs = [`${WORKSPACE_COOKIE}=${encodeURIComponent(workspaceId)}`, "Path=/", "HttpOnly", "SameSite=Lax", `Max-Age=${COOKIE_MAX_AGE_SECONDS}`];
-  if (secure) attrs.push("Secure");
-  return attrs.join("; ");
+  return buildCookie(WORKSPACE_COOKIE, workspaceId, COOKIE_MAX_AGE_SECONDS, secure);
 }
 
-/** Always Secure in production; elsewhere only when the request itself came over https. */
-function isSecure(request: Request): boolean {
-  if (process.env.NODE_ENV === "production") return true;
-  return new URL(request.url).protocol === "https:" || request.headers.get("x-forwarded-proto") === "https";
-}
+export { readCookie };
 
 interface Bucket { tokens: number; at: number }
 
@@ -146,8 +126,14 @@ export async function createVisitorWorkspace(repo: Repo): Promise<Workspace> {
  */
 export async function peekWorkspace(request: Request, repo?: Repo): Promise<Workspace | null> {
   const store = repo ?? (await getRepo());
+  const principal = await getPrincipal(request);
+  if (principal) {
+    const own = await store.getWorkspace(principal.workspaceId);
+    if (own) return own;
+  }
   const cookie = readCookie(request, WORKSPACE_COOKIE);
-  if (cookie && cookie !== DEMO_WORKSPACE_ID) {
+  // An account's workspace is reachable only through its session, never through this cookie alone.
+  if (cookie && cookie !== DEMO_WORKSPACE_ID && !isAccountId(cookie)) {
     const own = await store.getWorkspace(cookie);
     if (own) return own;
   }
@@ -164,8 +150,16 @@ export async function resolveWorkspace(
   limit: NewWorkspaceLimit = DEFAULT_LIMIT,
 ): Promise<ResolvedWorkspace> {
   const store = repo ?? (await getRepo());
+  // A signed-in user always gets their own workspace, whatever `le_ws` says: the cookie cannot point them at someone else's.
+  const principal = await getPrincipal(request);
+  if (principal) {
+    if (!(await store.getWorkspace(principal.workspaceId))) await (await import("./auth/workspace")).ensureAccountWorkspace(store, principal.user);
+    const cookie = readCookie(request, WORKSPACE_COOKIE);
+    return cookie === principal.workspaceId ? { workspaceId: principal.workspaceId } : { workspaceId: principal.workspaceId, setCookie: buildSetCookie(principal.workspaceId, isSecureRequest(request)) };
+  }
   const cookie = readCookie(request, WORKSPACE_COOKIE);
-  if (cookie && cookie !== DEMO_WORKSPACE_ID && (await store.getWorkspace(cookie))) return { workspaceId: cookie };
+  // An `acct_` id is an account's workspace: without that account's session it is treated like any unknown cookie.
+  if (cookie && cookie !== DEMO_WORKSPACE_ID && !isAccountId(cookie) && (await store.getWorkspace(cookie))) return { workspaceId: cookie };
 
   // A request with no client address shares the "unknown" bucket. In production that means Cloudflare's
   // `cf-connecting-ip` did not survive the Pages hop (see `clientIp`), so the whole site would share ten workspaces.
@@ -176,5 +170,5 @@ export async function resolveWorkspace(
     throw new HttpError(429, "workspace_cap", "A lot of new visitors have arrived in the last hour. Try again in a few minutes.");
   }
   const workspace = await createVisitorWorkspace(store);
-  return { workspaceId: workspace.id, setCookie: buildSetCookie(workspace.id, isSecure(request)) };
+  return { workspaceId: workspace.id, setCookie: buildSetCookie(workspace.id, isSecureRequest(request)) };
 }

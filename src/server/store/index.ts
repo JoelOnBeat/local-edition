@@ -4,7 +4,7 @@ import type { Repo } from "./repo";
 export * from "./repo";
 export { KeyedRepo, WorkspaceExistsError } from "./keyed-repo";
 export type { KvLike, SeedWithId } from "./keyed-repo";
-export { canonicalId, remapId, workspaceSuffix } from "./ids";
+export { ACCOUNT_ID_PREFIX, DEMO_WORKSPACE_ID, canonicalId, isAccountId, remapId, workspaceSuffix } from "./ids";
 
 const slot = globalThis as typeof globalThis & { __leRepo?: Repo };
 

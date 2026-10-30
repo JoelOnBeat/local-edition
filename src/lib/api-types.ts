@@ -1,10 +1,12 @@
 import type {
-  AgentEvent, CommsState, ConnectionsResponse, Delivery, ItemAction, RegenerateSuggestion, RouteId, RouteInput, RouteOutput,
+  AgentEvent, AuthResult, CommsState, MeResponse, OnboardingState, OnboardingUpdate, SigninInput, SignupInput, ConnectionsResponse, Delivery, ItemAction, RegenerateSuggestion, RouteId, RouteInput, RouteOutput,
 } from "@/contract";
+import type { z } from "zod";
 import type { SeqEvent } from "./sse-client";
 
 export class ApiClientError extends Error {
-  constructor(readonly status: number, readonly code: string, message: string) {
+  /** Seconds to wait, from `Retry-After` on a 429 (`rate_limited`, `too_many_attempts`). */
+  constructor(readonly status: number, readonly code: string, message: string, readonly retryAfterSeconds?: number) {
     super(message);
     this.name = "ApiClientError";
   }
@@ -67,6 +69,17 @@ export interface ApiClient {
    * so the caller can resume from the last one it saw. Mock mode has no stored run and yields nothing.
    */
   resumeBuild(afterSeq: number, opts?: StreamOptions): AsyncIterable<SeqEvent>;
+  // Accounts and onboarding (src/contract/auth.ts). Cookie routes: the browser holds the session.
+  /** Creates the account, its workspace and a session. `keepWorkspace` brings the visitor's sample workspace along. */
+  signUp(input: z.input<typeof SignupInput>): Promise<AuthResult>;
+  signIn(input: z.input<typeof SigninInput>): Promise<AuthResult>;
+  signOut(): Promise<void>;
+  /** Who is signed in, and whether a signed-out visitor could keep their sample workspace. Never creates a workspace. */
+  getMe(): Promise<MeResponse>;
+  /** Deletes the signed-in account and everything it owns. Asks for the password again. */
+  deleteAccount(password: string): Promise<void>;
+  getOnboarding(): Promise<OnboardingState>;
+  updateOnboarding(update: OnboardingUpdate): Promise<OnboardingState>;
   /** Job-only routes, signed with an HMAC. Exposed for tests; the browser never holds the secret. */
   getPendingJobs(signature: string): Out<"getPendingJobs">;
   postJobResults(signature: string, body: Body<"postJobResults">): Out<"postJobResults">;

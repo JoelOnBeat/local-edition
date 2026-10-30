@@ -31,6 +31,8 @@ export interface CalendarTokenRow {
 }
 
 export interface ConnectorLedger {
+  /** Account deletion: every connection (with its sealed tokens), sync event, delivery, location link, OAuth state and calendar token of the workspace. */
+  deleteWorkspaceData(workspaceId: string): Promise<void>;
   getConnection(workspaceId: string, provider: ConnectorProvider): Promise<StoredConnection | null>;
   putConnection(workspaceId: string, provider: ConnectorProvider, stored: StoredConnection): Promise<void>;
   deleteConnection(workspaceId: string, provider: ConnectorProvider): Promise<void>;

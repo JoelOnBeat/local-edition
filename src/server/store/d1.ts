@@ -95,6 +95,16 @@ export class D1Repo implements Repo {
       "SELECT id, chain_id, created_at FROM workspaces WHERE id = ? AND (expires_at IS NULL OR expires_at > ?)", id, this.now());
     return row ? { id: row.id, chainId: row.chain_id, createdAt: row.created_at } : null;
   }
+  async deleteWorkspace(id: string): Promise<boolean> {
+    const workspace = await this.one<{ id: string }>("SELECT id FROM workspaces WHERE id = ?", id);
+    // Store by store first: deleteStore also drops the cached profiles and evidence a store left behind.
+    for (const row of await this.rows<{ id: string }>("SELECT id FROM stores WHERE workspace_id = ?", id)) await this.deleteStore(row.id);
+    await this.batch(await Promise.all([
+      ...["staff_cards", "editions", "stores", "menus", "chains", "build_events", "build_runs"].map((t) => this.sql(`DELETE FROM ${t} WHERE workspace_id = ?`, id)),
+      this.sql("DELETE FROM workspaces WHERE id = ?", id),
+    ]));
+    return workspace !== null;
+  }
   async listWorkspaces(): Promise<Workspace[]> {
     const rows = await this.rows<{ id: string; chain_id: string; created_at: string }>(
       "SELECT id, chain_id, created_at FROM workspaces WHERE expires_at IS NULL OR expires_at > ? ORDER BY rowid", this.now());

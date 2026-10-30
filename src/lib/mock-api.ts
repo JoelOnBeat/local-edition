@@ -8,6 +8,7 @@ import {
 import { reviewsOf, seenModels } from "@/server/handlers/proof-steps";
 import { SUGGESTED_ANCHORS } from "./anchor-suggestions";
 import { mockAfterBuild, mockComms, mockDeliveriesFor, mockMergedConnections, mockOnApproval, mockPatchSuggestion, resetMockConnectors } from "./mock-connectors";
+import { createMockAuth } from "./mock-auth";
 import { newId } from "./ids";
 import { ApiClientError, type ApiClient, type ApiClientOptions } from "./api-types";
 
@@ -196,6 +197,7 @@ export function createMockApi(opts: Pick<ApiClientOptions, "mockDelayMs" | "mock
     pollMail: () => run(() => ({ checked: mockComms().connections.filter((c) => c.status === "connected" && c.provider !== "slack").length, newReplies: 0 })),
     // The mock backend keeps no run log: nothing to replay.
     resumeBuild: () => (async function* () { /* no stored run */ })(),
+    ...createMockAuth(db, run),
     getPendingJobs: (signature) => run(() => {
       requireSignature(signature);
       const items = db.latestEditions.flatMap((e) =>

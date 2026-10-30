@@ -15,6 +15,16 @@ export class MemoryLedger implements ConnectorLedger {
 
   constructor(private readonly now: () => number = Date.now) {}
 
+  async deleteWorkspaceData(ws: string) {
+    const mine = (key: string) => key.startsWith(`${ws}|`);
+    for (const key of [...this.connections.keys()].filter(mine)) this.connections.delete(key);
+    for (const key of [...this.deliveries.keys()].filter(mine)) this.deliveries.delete(key);
+    for (const [state, row] of [...this.oauth]) if (row.workspaceId === ws) this.oauth.delete(state);
+    for (const [token, row] of [...this.tokens]) if (row.workspaceId === ws) this.tokens.delete(token);
+    this.events.delete(ws);
+    this.links.delete(ws);
+  }
+
   async getConnection(ws: string, provider: ConnectorProvider) {
     const row = this.connections.get(`${ws}|${provider}`);
     return row ? clone({ connection: row.connection, merchantId: row.merchantId, tokenEnc: row.tokenEnc, refreshEnc: row.refreshEnc, tokenExpiresAt: row.tokenExpiresAt, meta: row.meta }) : null;

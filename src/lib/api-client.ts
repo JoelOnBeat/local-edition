@@ -1,6 +1,6 @@
 import { z } from "zod";
 import {
-  CommsState, ConnectionsResponse, DeliveriesResponse, RegenerateSuggestion, formatIfMatch, routes,
+  authRoutes, CommsState, ConnectionsResponse, DeliveriesResponse, RegenerateSuggestion, formatIfMatch, routes,
   type AgentEvent, type RouteId, type RouteOutput,
 } from "@/contract";
 import { clientDataMode } from "./env";
@@ -31,7 +31,8 @@ function buildUrl(base: string, path: string, input: CallInput): string {
 async function toError(res: Response): Promise<ApiClientError> {
   try {
     const j = (await res.json()) as { error?: string; code?: string };
-    return new ApiClientError(res.status, j.code ?? "http_error", j.error ?? `Request failed (${res.status}).`);
+    const wait = Number(res.headers.get("retry-after"));
+    return new ApiClientError(res.status, j.code ?? "http_error", j.error ?? `Request failed (${res.status}).`, Number.isFinite(wait) && wait > 0 ? wait : undefined);
   } catch {
     return new ApiClientError(res.status, "http_error", `Request failed (${res.status}).`);
   }
@@ -138,6 +139,13 @@ function createHttpApi(baseUrl = "", fetchImpl: typeof fetch = (...a) => fetch(.
     patchSuggestion: (id, status) => call("PATCH", `/api/connectors/comms/suggestions/${encodeURIComponent(id)}`, RegenerateSuggestion, { status }),
     pollMail: () => call("POST", "/api/connectors/mail/poll", PollResponse),
     resumeBuild: (afterSeq, o) => resume(afterSeq, o?.signal),
+    signUp: (input) => call("POST", authRoutes.signup.path, authRoutes.signup.response, input),
+    signIn: (input) => call("POST", authRoutes.signin.path, authRoutes.signin.response, input),
+    signOut: async () => { await call("POST", authRoutes.signout.path, authRoutes.signout.response); },
+    getMe: () => call("GET", authRoutes.me.path, authRoutes.me.response),
+    deleteAccount: async (password) => { await call("DELETE", authRoutes.deleteAccount.path, authRoutes.deleteAccount.response, { password }); },
+    getOnboarding: () => call("GET", authRoutes.getOnboarding.path, authRoutes.getOnboarding.response),
+    updateOnboarding: (update) => call("PUT", authRoutes.putOnboarding.path, authRoutes.putOnboarding.response, update),
     getPendingJobs: (signature) => json("getPendingJobs", { headers: { "x-le-signature": signature } }),
     postJobResults: (signature, body) => json("postJobResults", { headers: { "x-le-signature": signature }, body }),
     postJobEval: (signature, body) => json("postJobEval", { headers: { "x-le-signature": signature }, body }),
