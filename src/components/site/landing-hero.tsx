@@ -77,7 +77,7 @@ export function LandingHero() {
             <span className="pointer-events-none absolute left-3.5 top-1/2 flex -translate-y-1/2 -space-x-1.5" aria-hidden>
               {stack.map((s) => <StoreTile key={s.id} colorIndex={s.colorIndex} name={s.name} className="ring-2 ring-white" />)}
             </span>
-            <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[13px] text-muted" aria-hidden>8 NYC stores</span>
+            <span className="pointer-events-none absolute right-4 top-1/2 hidden -translate-y-1/2 text-[13px] text-muted sm:block" aria-hidden>8 NYC stores</span>
           </div>
           <p className="mt-5 text-[13px] leading-5 text-muted">Free to use. The sample chain opens without an account.</p>
         </Container>

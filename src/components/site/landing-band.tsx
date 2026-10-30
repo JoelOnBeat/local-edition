@@ -127,8 +127,8 @@ export function LandingBand() {
         <Container className="px-4 py-20 sm:px-6 md:py-28 xl:px-7">
           <SectionHeader
             dark pill="Integrations" pillIcon={Icon.plug}
-            title="Built on the sponsors' stack, plugged into the tools a chain runs."
-            lede="Each one does a job you can see in the product."
+            title="Every integration does a job you can see."
+            lede="The sponsors' stack does the thinking; the chain's own tools carry the result to each store."
           />
           <LogoWall className="mt-14" />
         </Container>

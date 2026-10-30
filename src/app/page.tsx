@@ -5,6 +5,7 @@ import { LandingEvidence } from "@/components/site/landing-evidence";
 import { LandingFaq } from "@/components/site/landing-faq";
 import { BuiltOnStrip, LandingHero } from "@/components/site/landing-hero";
 import { LandingPortfolio } from "@/components/site/landing-portfolio";
+import { LandingTiles } from "@/components/site/landing-tiles";
 import { SiteShell } from "@/components/site/site-chrome";
 
 export const metadata: Metadata = {
@@ -22,7 +23,7 @@ export default function Home() {
       <LandingEvidence />
       <div className="h-12" aria-hidden />
       <LandingBand />
-      <div className="h-12" aria-hidden />
+      <LandingTiles />
       <LandingEdition />
       <LandingFaq />
     </SiteShell>
