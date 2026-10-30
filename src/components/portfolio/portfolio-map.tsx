@@ -3,22 +3,21 @@
 import { useEffect, useRef, useState } from "react";
 import type { Map as MlMap, Marker } from "maplibre-gl";
 import type { Store } from "@/contract";
-import { storeColor } from "../ui";
+import { storeColor, storeMonogram } from "../ui";
 import { STATUS_META, type StoreWeekStatus } from "./status-meta";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 const STYLE_LIGHT = "https://tiles.openfreemap.org/styles/positron";
-const STYLE_DARK = "https://tiles.openfreemap.org/styles/dark";
 /** MapLibre's worker, served from our own origin (scripts/vendor-maplibre-worker.mjs copies it from node_modules). */
 const WORKER_PATH = "/vendor/maplibre-gl-worker.mjs";
 
-function isDark(): boolean {
-  const t = document.documentElement.dataset.theme;
-  if (t === "dark") return true;
-  if (t === "light") return false;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches;
-}
+const STATUS_DOT: Record<StoreWeekStatus, string> = {
+  approved: "var(--ok)", flagged: "var(--flag)", draft: "var(--warn)", drafting: "var(--info)", none: "var(--stone-300)",
+};
 
+const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+
+/** A pin is the store's own 24px monogram tile (white ring, faint shadow) with its status dot at the top-right. */
 function pin(store: Store, status: StoreWeekStatus, onOpen: (id: string) => void): HTMLElement {
   const meta = STATUS_META[status];
   const el = document.createElement("button");
@@ -29,13 +28,32 @@ function pin(store: Store, status: StoreWeekStatus, onOpen: (id: string) => void
   el.setAttribute("data-testid", `map-pin-${store.id}`);
   el.dataset.status = status;
   el.innerHTML = `
-    <span class="relative block h-[15px] w-[15px] rounded-full transition-transform group-hover:scale-110 group-data-[hot=true]:scale-125"
-      style="background:${storeColor(store.colorIndex)};box-shadow:0 0 0 2px var(--paper),0 0 0 ${meta.dashed ? "3px" : "4px"} ${meta.ring}">
-      ${status === "flagged" ? `<span class="absolute -right-2.5 -top-2.5 flex h-[13px] w-[13px] items-center justify-center rounded-full text-[10px] font-bold" style="background:var(--flag);color:var(--paper)">!</span>` : ""}
+    <span class="relative flex size-6 items-center justify-center rounded-md text-[10px] font-semibold leading-none tracking-[-0.02em] text-white"
+      style="background:${storeColor(store.colorIndex)};box-shadow:0 0 0 2px #fff,0 1px 3px rgb(0 0 0/.18),0 0 0 3px rgb(0 0 0/.06)">
+      <span${storeMonogram(store.name).length > 2 ? ' style="transform:scale(.86)"' : ""}>${esc(storeMonogram(store.name))}</span>
+      <span class="absolute -right-1 -top-1 size-2.5 rounded-full" style="background:${STATUS_DOT[status]};box-shadow:0 0 0 2px #fff"></span>
     </span>
-    <span class="rounded-[4px] px-1.5 py-0.5 text-[12px] font-semibold leading-none shadow-sm max-sm:hidden" style="background:var(--paper);color:var(--ink);border:1px solid var(--rule)">${store.name.replace(/</g, "&lt;")}</span>`;
+    <span class="whitespace-nowrap rounded-md bg-white px-1.5 py-1 text-[12px] font-medium leading-none text-ink-strong max-sm:hidden" style="box-shadow:var(--shadow-ring-xs)">${esc(store.name)}</span>`;
   el.addEventListener("click", () => onOpen(store.id));
   return el;
+}
+
+/**
+ * Hide a pin's name label when it would overlap a label already placed (top to bottom); the tile stays, and hovering the
+ * row or the pin shows the name again. Keeps the map readable where stores sit a few blocks apart.
+ */
+function declutter(m: MlMap, list: Marker[]) {
+  const placed: { x0: number; x1: number; y0: number; y1: number }[] = [];
+  const items = list.map((mk) => ({ mk, p: m.project(mk.getLngLat()) })).sort((a, b) => a.p.y - b.p.y);
+  for (const { mk, p } of items) {
+    const label = mk.getElement().lastElementChild as HTMLElement | null;
+    if (!label) continue;
+    const w = label.offsetWidth || 90;
+    const box = { x0: p.x + 14, x1: p.x + 20 + w, y0: p.y - 11, y1: p.y + 11 };
+    const clash = placed.some((o) => box.x0 < o.x1 && box.x1 > o.x0 && box.y0 < o.y1 && box.y1 > o.y0);
+    label.dataset.hidden = String(clash);
+    if (!clash) placed.push(box);
+  }
 }
 
 /** The portfolio map: every store at its corner, filled with its colour, ringed by its status this week. */
@@ -64,7 +82,7 @@ export function PortfolioMap({ stores, statusOf, hot, onHot, onOpen }: {
       try {
         m = new ml.Map({
         container: box.current,
-        style: isDark() ? STYLE_DARK : STYLE_LIGHT,
+        style: STYLE_LIGHT,
         center: [-73.965, 40.74],
         zoom: 11,
         attributionControl: { compact: true },
@@ -99,13 +117,15 @@ export function PortfolioMap({ stores, statusOf, hot, onHot, onOpen }: {
         const el = pin(s, statusOf(s.id), onOpen);
         el.addEventListener("mouseenter", () => onHot(s.id));
         el.addEventListener("mouseleave", () => onHot(null));
-        return new ml.Marker({ element: el, anchor: "left", offset: [-7, 0] }).setLngLat([s.lon, s.lat]).addTo(m);
+        return new ml.Marker({ element: el, anchor: "left", offset: [-12, 0] }).setLngLat([s.lon, s.lat]).addTo(m);
       });
       if (stores.length) {
         const b = new ml.LngLatBounds();
         stores.forEach((s) => b.extend([s.lon, s.lat]));
-        m.fitBounds(b, { padding: { top: 40, bottom: 40, left: 40, right: 120 }, maxZoom: 14, duration: 0 });
+        m.fitBounds(b, { padding: { top: 48, bottom: 40, left: 40, right: 130 }, maxZoom: 13.5, duration: 0 });
       }
+      declutter(m, markers.current);
+      m.on("moveend", () => declutter(m, markers.current));
     })();
     return () => {
       cancelled = true;
@@ -123,28 +143,28 @@ export function PortfolioMap({ stores, statusOf, hot, onHot, onOpen }: {
   }, [hot]);
 
   return (
-    <div className="relative h-[340px] w-full overflow-hidden rounded-[var(--radius)] border border-rule bg-paper-2 sm:h-[440px] lg:h-[560px]">
+    <div className="le-map relative h-[320px] w-full overflow-hidden rounded-lg bg-[#F2F2F0] sm:h-[400px] xl:h-full xl:min-h-[456px]">
       <div ref={box} className="h-full w-full" />
       {failed ? (
-        <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-sm text-muted">
-          The map tiles did not load. The status table has every store.
+        <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-[14px] text-muted">
+          The map tiles did not load. The table lists every store.
         </div>
       ) : null}
-      <Legend />
     </div>
   );
 }
 
-function Legend() {
-  const items: StoreWeekStatus[] = ["approved", "flagged", "draft"];
+/** The status key shown in the map card's header. */
+export function MapLegend() {
+  const items: StoreWeekStatus[] = ["approved", "draft", "flagged"];
   return (
-    <div className="pointer-events-none absolute left-2 top-2 flex gap-3 rounded-[4px] border border-rule bg-paper/90 px-2.5 py-1.5 text-[11px] text-ink-2">
+    <span className="hidden items-center gap-2.5 text-[12px] text-ink-2 sm:flex">
       {items.map((s) => (
         <span key={s} className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full" style={{ boxShadow: `0 0 0 2px ${STATUS_META[s].ring}`, background: "var(--paper)" }} />
+          <span className="size-2 rounded-full" style={{ background: STATUS_DOT[s] }} />
           {STATUS_META[s].label}
         </span>
       ))}
-    </div>
+    </span>
   );
 }

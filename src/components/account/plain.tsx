@@ -6,7 +6,7 @@ import type { ShownError } from "../lib/use-async";
 export function ErrorLine({ error, testId = "error" }: { error: (ShownError & { retryAfterSeconds?: number }) | undefined; testId?: string }) {
   if (!error) return null;
   return (
-    <p role="alert" data-testid={testId} data-code={error.code ?? ""} data-retry-after={error.retryAfterSeconds ?? ""}>
+    <p role="alert" data-testid={testId} data-code={error.code ?? ""} data-retry-after={error.retryAfterSeconds ?? ""} className="text-[13px] leading-5 text-flag [overflow-wrap:anywhere]">
       {error.message}
     </p>
   );

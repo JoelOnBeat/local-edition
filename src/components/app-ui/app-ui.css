@@ -1,0 +1,35 @@
+/* App-only motion and helpers (the shared tokens and motion live in globals.css and ui/ui.css). */
+
+/* Dropdown and select popups: scale .95 -> 1 with opacity, 150ms quint. */
+@keyframes le-pop {
+  from { opacity: 0; transform: scale(.95); }
+  to { opacity: 1; transform: none; }
+}
+.le-pop:not([hidden]) { animation: le-pop 150ms var(--ease-out-quint) both; }
+
+/* Header pill fades in after the first scroll. */
+.le-header-pill { opacity: 0; transition: opacity 200ms var(--ease-out-quint); }
+[data-scrolled="true"] .le-header-pill { opacity: 1; }
+
+/* Map pins: the store tile lifts a little when its row is hovered. */
+.le-pin { transition: transform 200ms var(--ease-out-quint); }
+.le-pin[data-hot="true"] { transform: translateY(-2px) scale(1.12); }
+
+/* Progress bar in the run header tracks real progress. */
+.le-progress-fill { transition: width 500ms var(--ease-out-quint); }
+
+/* Lane body opens with height + opacity. */
+.le-fold { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 300ms var(--ease-out-quint), opacity 300ms var(--ease-out-quint); }
+.le-fold[data-open="true"] { grid-template-rows: 1fr; opacity: 1; }
+.le-fold > * { min-height: 0; overflow: hidden; }
+
+@media (prefers-reduced-motion: reduce) {
+  .le-pop:not([hidden]) { animation: none; }
+  .le-pin, .le-fold, .le-progress-fill { transition: none; }
+}
+
+/* Quiet basemap: the Positron style without colour, a touch lighter, so the store tiles carry all the colour. */
+.le-map .maplibregl-canvas { filter: saturate(0) contrast(.9) brightness(1.04); }
+.le-map .maplibregl-cooperative-gesture-screen { font-family: var(--font-body); font-size: 14px; }
+.le-pin > span:last-child[data-hidden="true"] { opacity: 0; transition: opacity 150ms var(--ease-out-quint); }
+.le-pin:hover > span:last-child[data-hidden="true"], .le-pin[data-hot="true"] > span:last-child[data-hidden="true"] { opacity: 1; }

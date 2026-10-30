@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 import { signinUrl } from "@/lib/session-paths";
+import { LogoMark, Spinner } from "@/components/ui";
 import { useSession } from "./session-context";
 
 /**
@@ -21,6 +22,17 @@ export function SessionGuard({ children }: { children: ReactNode }) {
   }, [loading, error, ok, router, pathname, isLeaving]);
 
   if (ok) return <>{children}</>;
-  if (error) return <p role="alert" data-testid="session-error">{error.message}</p>;
-  return <p data-testid="session-checking">Checking your session...</p>;
+  return (
+    <div className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-paper px-6 text-center">
+      <LogoMark size={28} />
+      {error ? (
+        <p role="alert" data-testid="session-error" className="max-w-[360px] text-[14px] leading-5 text-flag">{error.message}</p>
+      ) : (
+        <p data-testid="session-checking" className="inline-flex items-center gap-2 text-[14px] leading-5 text-muted">
+          <Spinner className="size-3.5" />
+          Checking your session…
+        </p>
+      )}
+    </div>
+  );
 }

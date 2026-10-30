@@ -1,100 +1,137 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { AccountMenu } from "../account/account-menu";
-import { Chip, cx, Skeleton } from "../ui";
-import { formatDate, previousWeeks } from "../lib/format";
+import { StoreTile, cx } from "../ui";
+import { Icon } from "../app-ui/icons";
+import { StatusDot, WeekPicker, WorkspaceSwitcher } from "./shell-controls";
 import { useWorkspace } from "./workspace-context";
 
 const NAV = [
-  { href: "/app", label: "Portfolio", match: (p: string) => p === "/app" || p.startsWith("/app/stores") || p.startsWith("/app/runs") },
-  { href: "/app/compare", label: "Compare", match: (p: string) => p.startsWith("/app/compare") },
-  { href: "/app/setup", label: "Setup", match: (p: string) => p.startsWith("/app/setup") },
-  { href: "/app/connections", label: "Connections", match: (p: string) => p.startsWith("/app/connections") },
-  { href: "/proof", label: "Proof", match: (p: string) => p.startsWith("/proof") },
+  { href: "/app", label: "Portfolio", id: "portfolio", match: (p: string) => p === "/app" || p.startsWith("/app/stores") || p.startsWith("/app/runs") },
+  { href: "/app/compare", label: "Compare", id: "compare", match: (p: string) => p.startsWith("/app/compare") },
+  { href: "/app/connections", label: "Connections", id: "connections", match: (p: string) => p.startsWith("/app/connections") },
+  { href: "/proof", label: "Proof", id: "proof", match: (p: string) => p.startsWith("/proof") },
+  { href: "/app/settings", label: "Settings", id: "settings", match: (p: string) => p.startsWith("/app/settings") || p.startsWith("/app/setup") },
 ];
 
-/** The head-office frame: chain, week, and the five places a head office works. */
+/** The head-office frame (ByDefault header): logo, workspace, the five places a head office works, week and account. */
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "/app";
-  const { bundle, loading } = useWorkspace();
-  const chainName = bundle?.chain.name ?? "";
-  const sample = bundle?.chain.isSample ?? false;
-  const shortName = chainName.replace(/\s*\(sample chain\)\s*$/i, "");
+  const [scrolled, setScrolled] = useState(false);
+  const [menu, setMenu] = useState(false);
+  const { bundle } = useWorkspace();
+
+  useEffect(() => {
+    const on = () => setScrolled(window.scrollY > 12);
+    on();
+    window.addEventListener("scroll", on, { passive: true });
+    return () => window.removeEventListener("scroll", on);
+  }, []);
+  useEffect(() => {
+    if (!menu) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setMenu(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menu]);
 
   return (
     <div className="flex min-h-dvh flex-col bg-paper">
-      <header className="sticky top-0 z-30 border-b border-rule bg-[color-mix(in_oklab,var(--paper)_92%,transparent)] backdrop-blur">
-        <div className="mx-auto flex w-full max-w-[1320px] flex-wrap items-center gap-x-4 gap-y-2 px-4 pt-3 sm:px-6">
-          <Link href="/" className="font-display text-[17px] font-bold tracking-tight text-ink">
-            Local&nbsp;Edition
-          </Link>
-          <span className="text-rule" aria-hidden>/</span>
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            {loading ? (
-              <Skeleton className="h-4 w-44" />
-            ) : (
-              <>
-                <span className="truncate text-[15px] font-medium text-ink" title={chainName}>{shortName || "Your chain"}</span>
-                {sample ? <span className="hidden sm:inline"><Chip tone="warn">Sample chain</Chip></span> : null}
-              </>
-            )}
-          </div>
-          <WeekSelect />
-          <AccountMenu />
-        </div>
-        <nav aria-label="Head office" className="mx-auto w-full max-w-[1320px] overflow-x-auto px-4 sm:px-6">
-          <ul className="flex min-w-max gap-5 pt-2">
-            {NAV.map((n) => {
-              const active = n.match(pathname);
-              return (
-                <li key={n.href}>
+      <header data-scrolled={scrolled || menu} className="sticky top-0 z-40">
+        <div className="mx-auto w-full max-w-[1192px] border-rule px-2 pt-1.5 sm:px-3 xl:border-x">
+          <div className="relative">
+            <div className={cx("le-header-pill pointer-events-none absolute inset-0 rounded-2xl bg-white shadow-ring-md", menu && "!opacity-100")} aria-hidden />
+            <div className="relative flex h-[52px] items-center gap-1.5 pl-3 pr-1.5 sm:pl-3.5 sm:pr-2">
+              <Link href="/app" className="flex shrink-0 items-center rounded-md" aria-label="Local Edition, portfolio">
+                <Image src="/brand/logo-light.svg" alt="Local Edition" width={107} height={22} priority className="hidden h-[22px] w-auto xl:block" />
+                <Image src="/brand/mark-light.svg" alt="" width={22} height={22} priority className="size-[22px] xl:hidden" />
+              </Link>
+              <span className="mx-1 hidden h-5 w-px rotate-[18deg] bg-stone-300 sm:block" aria-hidden />
+              <WorkspaceSwitcher />
+              <nav aria-label="Head office" className="ml-3 hidden items-center gap-0.5 lg:flex">
+                {NAV.map((n) => <NavLink key={n.href} item={n} active={n.match(pathname)} />)}
+              </nav>
+              <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+                <div className="hidden sm:block"><WeekPicker /></div>
+                <AccountMenu />
+                <button
+                  type="button"
+                  onClick={() => setMenu((m) => !m)}
+                  aria-expanded={menu}
+                  aria-controls="app-menu"
+                  aria-label={menu ? "Close menu" : "Open menu"}
+                  className="flex size-8 items-center justify-center rounded-md text-ink-2 transition-colors duration-150 hover:bg-hover-tint hover:text-ink lg:hidden"
+                >
+                  <Icon name={menu ? "x" : "menu"} strokeWidth={1.5} />
+                </button>
+              </div>
+            </div>
+            {menu ? (
+              <div id="app-menu" className="le-pop relative border-t border-rule-subtle p-1.5 lg:hidden">
+                <div className="px-1 pb-2 pt-1 sm:hidden"><WeekPicker block /></div>
+                {NAV.map((n) => (
                   <Link
+                    key={n.href}
                     href={n.href}
-                    data-testid={`nav-${n.label.toLowerCase()}`}
-                    aria-current={active ? "page" : undefined}
-                    className={cx(
-                      "-mb-px inline-block border-b-2 pb-2 text-[14px] transition-colors",
-                      active ? "border-ink font-semibold text-ink" : "border-transparent text-muted hover:text-ink",
-                    )}
+                    onClick={() => setMenu(false)}
+                    aria-current={n.match(pathname) ? "page" : undefined}
+                    className={cx("flex h-10 items-center rounded-[10px] px-2.5 text-[16px] text-stone-800 transition-colors hover:bg-hover-tint", n.match(pathname) && "bg-active-tint text-stone-950")}
                   >
                     {n.label}
                   </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
+                ))}
+                {bundle?.stores.length ? (
+                  <>
+                    <div className="mx-1 my-1.5 h-px bg-rule-subtle" />
+                    <p className="px-2.5 pb-1 pt-1 text-[12px] font-medium text-ink-2">Stores</p>
+                    <StoreLinks onPick={() => setMenu(false)} />
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        </div>
       </header>
-      <main className="mx-auto w-full max-w-[1320px] flex-1 px-4 pb-16 pt-6 sm:px-6">{children}</main>
+      <main className="relative flex-1 pb-16">{children}</main>
     </div>
   );
 }
 
-function WeekSelect() {
-  const { currentWeek, week, setWeek, loading } = useWorkspace();
-  if (loading) return <Skeleton className="h-8 w-36" />;
-  const weeks = previousWeeks(currentWeek, 4);
+function NavLink({ item, active }: { item: (typeof NAV)[number]; active: boolean }) {
   return (
-    <label className="relative inline-flex items-center">
-      <span className="sr-only">Week</span>
-      <select
-        data-testid="week-select"
-        value={week}
-        onChange={(e) => setWeek(e.target.value)}
-        className="h-8 appearance-none rounded-[var(--radius)] border border-rule bg-paper pl-3 pr-8 text-[13px] font-medium text-ink hover:border-ink-2"
-      >
-        {weeks.map((w, i) => (
-          <option key={w} value={w}>
-            {i === 0 ? "This week" : `w/c ${formatDate(w, { year: false })}`}
-          </option>
-        ))}
-      </select>
-      <svg className="pointer-events-none absolute right-2.5 h-3 w-3 text-muted" viewBox="0 0 12 12" aria-hidden>
-        <path d="M2.5 4.5 6 8l3.5-3.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" />
-      </svg>
-    </label>
+    <Link
+      href={item.href}
+      data-testid={`nav-${item.id}`}
+      aria-current={active ? "page" : undefined}
+      className={cx(
+        "rounded-md px-2.5 py-1.5 text-[15px] leading-5 transition-colors duration-150",
+        active ? "bg-active-tint text-stone-950" : "text-stone-800 hover:bg-hover-tint",
+      )}
+    >
+      {item.label}
+    </Link>
+  );
+}
+
+function StoreLinks({ onPick }: { onPick: () => void }) {
+  const { bundle, editionForStore } = useWorkspace();
+  const pathname = usePathname();
+  return (
+    <div className="grid gap-0.5 sm:grid-cols-2">
+      {bundle?.stores.map((s) => {
+        const status = editionForStore(s.id)?.status;
+        const href = `/app/stores/${s.id}`;
+        return (
+          <Link key={s.id} href={href} onClick={onPick} className={cx("flex h-11 items-center gap-2.5 rounded-[10px] px-2.5 text-[15px] text-stone-800 hover:bg-hover-tint", pathname === href && "bg-active-tint")}>
+            <StoreTile colorIndex={s.colorIndex} name={s.name} size="lg" />
+            <span className="min-w-0 flex-1 truncate">{s.name}</span>
+            <StatusDot status={status} />
+          </Link>
+        );
+      })}
+    </div>
   );
 }
