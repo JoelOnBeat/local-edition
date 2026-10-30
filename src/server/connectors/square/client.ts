@@ -52,8 +52,9 @@ export class SquareClient {
     return (r.locations ?? []).filter((l) => l.status === undefined || l.status === "ACTIVE");
   }
 
-  async createLocation(location: Record<string, unknown>, idempotencyKey: string): Promise<SquareLocation> {
-    const r = await this.call("POST", "/v2/locations", { idempotency_key: idempotencyKey, location }, CreateLocationResponse);
+  /** CreateLocation takes only `location` (no idempotency key): callers check by name first, as scripts/square-seed.ts does. */
+  async createLocation(location: Record<string, unknown>): Promise<SquareLocation> {
+    const r = await this.call("POST", "/v2/locations", { location }, CreateLocationResponse);
     if (!r.location) throw new UpstreamError("invalid_response", PROVIDER, "Square did not return the new location.");
     return r.location;
   }

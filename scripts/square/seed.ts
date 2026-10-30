@@ -37,7 +37,6 @@ export async function seedSandbox(client: SquareClient, opts: { dry: boolean; sa
     if (!DRY) {
       await client.createLocation(
         { name, business_name: "Kettle & Kiln (sample chain)", type: "PHYSICAL", description: `Sample chain store at ${store.addressLabel}`, address: { address_line_1: a.line, locality: a.locality, administrative_district_level_1: "NY", postal_code: a.zip, country: "US" } },
-        `le-seed-loc-${store.id}`,
       );
     }
     madeLocs++;
