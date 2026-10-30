@@ -52,10 +52,10 @@ export function sampleCatalog(): CatalogObjectT[] {
   ];
 }
 
-export function fakeSquare(initial: CatalogObjectT[] = sampleCatalog()): FakeSquare {
+export function fakeSquare(initial: CatalogObjectT[] = sampleCatalog(), withLocations = true): FakeSquare {
   const state: FakeSquare = {
     calls: [], catalog: new Map(initial.map((o) => [o.id, o])), failNext: new Map(), orders: [], tokens: { issued: 0, refreshed: 0 },
-    locations: ["Williamsburg", "Park Slope", "Astoria", "Harlem", "West Village", "Lower East Side", "Upper East Side", "Long Island City"].map((n, i) => ({
+    locations: (withLocations ? ["Williamsburg", "Park Slope", "Astoria", "Harlem", "West Village", "Lower East Side", "Upper East Side", "Long Island City"] : []).map((n, i) => ({
       id: `LOC_${i + 1}`, name: `Kettle & Kiln ${n}`, status: "ACTIVE", address: { address_line_1: `${100 + i} Test St`, locality: "New York" },
     })),
     fetch: undefined as unknown as typeof fetch,
@@ -77,6 +77,11 @@ export function fakeSquare(initial: CatalogObjectT[] = sampleCatalog()): FakeSqu
     }
     const p = url.pathname;
     if (p === "/v2/merchants/me") return json({ merchant: { id: "MLTESTMERCHANT", business_name: "Kettle & Kiln (sample chain)" } });
+    if (p === "/v2/locations" && method === "POST") {
+      const loc = { id: `LOC_N${state.locations.length + 1}`, status: "ACTIVE", ...body.location };
+      state.locations.push(loc);
+      return json({ location: loc });
+    }
     if (p === "/v2/locations") return json({ locations: state.locations });
     if (p === "/v2/catalog/search") return json({ objects: [...state.catalog.values()].filter((o) => body.object_types.includes(o.type)) });
     if (p.startsWith("/v2/catalog/object/") && method === "GET") {
