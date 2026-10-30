@@ -79,6 +79,8 @@ export const UPGRADE_ERROR_CODES = [
   "guardrail_blocked", // 409: approving a blocked or flagged item
   "has_approvals", // error event: a build skipped a store with approved or edited items
   "build_running", // 409: one build per workspace at a time
+  "model_unavailable", // Token Factory 404 / model_not_found / model not listed: error event (the store is skipped, lane amber) and the menu route's 503 body
+  "step_skipped", // error event: a step inside a store was skipped for an unavailable model; the lane keeps its status
 ] as const;
 
 /** The `If-Match` header value for an item version. */

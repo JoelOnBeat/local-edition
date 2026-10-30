@@ -10,7 +10,7 @@ export const LANE_STATUS: Record<Lane["status"], { label: string; icon?: IconNam
   working: { label: "Working", cls: "text-accent-text" },
   retrying: { label: "Retrying", icon: "refresh", cls: "text-warn-ink" },
   done: { label: "Drafted", icon: "check", cls: "text-ok-ink" },
-  skipped: { label: "Skipped", icon: "minus", cls: "text-faint" },
+  skipped: { label: "Skipped", icon: "minus", cls: "text-warn-ink" },
   error: { label: "Failed", icon: "alert", cls: "text-flag" },
 };
 

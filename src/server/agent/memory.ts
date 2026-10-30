@@ -40,6 +40,8 @@ export class ToolMemory {
   profile: BlockProfile | null = null;
   /** Tools that already ran successfully (the fallback plan skips them). */
   done = new Set<string>();
+  /** Tools skipped because a model they need is unavailable: said once, not asked again by the fixed plan. */
+  skipped = new Set<string>();
   pairs: MenuPair[] = [];
   places = new Map<string, PlaceEntry>();
   artists = new Map<string, ArtistEntry>();

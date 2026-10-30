@@ -1,4 +1,5 @@
-import type { Edition, ProofResponse, ProofReview, Store } from "@/contract";
+import type { Edition, ModelRole, ProofResponse, ProofReview, Store } from "@/contract";
+import type { ModelSkips } from "../agent/stats";
 import { MODELS } from "../tokenfactory/models";
 
 /** Which model runs which step: read from the server's model table, so the proof page can never disagree with what is deployed. */
@@ -11,6 +12,23 @@ export const PROOF_STEPS: ProofResponse["steps"] = [
   { step: "Matching and ranking", model: MODELS.embedding, does: "Matches the block's flavours to menu items and ranks partner places." },
   { step: "Certification", model: "NeMo Guardrails library", does: "Runs in a Nebius Serverless Job over every item and card, started from the CLI." },
 ];
+
+/** Which pipeline role each step belongs to, so a recorded skip lands on the right row (the agent and the menu read share one model). */
+const STEP_ROLE: Record<string, ModelRole> = {
+  "Edition agent": "agent",
+  "Menu photo read": "vision",
+  Copy: "copy",
+  "Chain review": "review",
+  "Matching and ranking": "embed",
+};
+
+/** The step list with a `skipped` note on each step whose model was unavailable the last time it was needed (and has not answered since). */
+export function stepsWithSkips(skips: ModelSkips): ProofResponse["steps"] {
+  return PROOF_STEPS.map((s) => {
+    const hit = skips[STEP_ROLE[s.step] ?? ""];
+    return hit ? { ...s, skipped: { at: hit.at, note: hit.note.slice(0, 300) } } : s;
+  });
+}
 
 /** The models the given editions name as having run (agent, copy, reviewer). */
 export function seenModels(editions: Edition[]): string[] {

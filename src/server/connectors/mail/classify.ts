@@ -2,6 +2,7 @@ import { z } from "zod";
 import { MailClassification, type MailCategory } from "@/contract/connectors-comms";
 import type { ChatClient } from "../../agent/ports";
 import { COPY_MODEL } from "../../agent/ports";
+import { asModelUnavailable, classifySkipNote } from "../../http/model-unavailable";
 import { createLogger } from "../../log";
 
 const log = createLogger("mail:classify");
@@ -46,7 +47,7 @@ export function heuristicClassify(text: string): MailClassification {
  * Classifies one reply. Order: Nemotron Lightning with a json_schema response format and thinking off; one retry via the same call; then the
  * keyword fallback. Always returns a verdict, never throws.
  */
-export async function classifyReply(chat: ChatClient, replyText: string, context: ClassifyContext): Promise<MailClassification & { by: "nemotron" | "heuristic" }> {
+export async function classifyReply(chat: ChatClient, replyText: string, context: ClassifyContext): Promise<MailClassification & { by: "nemotron" | "heuristic"; skipped?: string }> {
   const user = `Store: ${context.storeName}\nThis week's special: ${context.specialName ?? "none"}\nThis week's event: ${context.eventTitle ?? "none"}\n\nReply (data):\n"""\n${replyText.slice(0, 1500)}\n"""`;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -61,6 +62,13 @@ export async function classifyReply(chat: ChatClient, replyText: string, context
       const parsed = MailClassification.safeParse(start >= 0 && end > start ? JSON.parse(body.slice(start, end + 1)) : null);
       if (parsed.success) return { ...parsed.data, by: "nemotron" };
     } catch (e) {
+      // Lightning is gone: no second try (it would 404 too). The keyword rules sort the reply and the note says so.
+      const gone = asModelUnavailable(e, COPY_MODEL);
+      if (gone) {
+        const skipped = classifySkipNote(gone.model);
+        log.warn("classifier skipped, model unavailable", { model: gone.model });
+        return { ...heuristicClassify(replyText), by: "heuristic", skipped };
+      }
       log.warn("classifier call failed", { attempt, err: e });
     }
   }

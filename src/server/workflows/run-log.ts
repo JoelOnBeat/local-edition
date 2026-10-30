@@ -10,7 +10,8 @@ import type { D1Like } from "../platform/types";
 /** A `running` run whose last write is older than this is dead (its Workflow was killed). Matches the build lock TTL. */
 export const RUN_STALE_MS = 20 * 60 * 1000;
 
-export type RunStatus = "running" | "done" | "failed";
+/** `done_with_skips`: finished, with at least one store skipped because a model it needs was unavailable. */
+export type RunStatus = "running" | "done" | "done_with_skips" | "failed";
 
 export interface RunRow {
   id: string;

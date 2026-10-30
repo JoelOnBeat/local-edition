@@ -1,7 +1,7 @@
 import type { z } from "zod";
 import type { DataMode } from "@/contract";
 import { createLogger } from "../log";
-import { UpstreamError } from "./errors";
+import { UpstreamError, type UpstreamHint } from "./errors";
 import { canonicalUrl, getRecorder, recordKey, SECRET_HEADER, type Recorder } from "./recorder";
 import type { SpendMeter } from "./spend";
 
@@ -62,12 +62,15 @@ function validate<T>(provider: string, data: unknown, schema?: z.ZodType<T>): T 
 }
 
 const REJECTED_FORMAT = /response_format|json_schema|json[ _-]?mode|structured[ _-]?output/i;
+const MODEL_GONE = /model[ _-]?not[ _-]?found/i;
 const ERROR_BODY_CAP = 4096;
 
 /** Reads at most 4 KB of an error body (inside the request timeout) to learn WHY a 4xx happened; never surfaced. */
-async function rejectionHint(res: Response): Promise<"response_format_unsupported" | undefined> {
+async function rejectionHint(res: Response): Promise<UpstreamHint | undefined> {
   try {
     const text = (await res.text()).slice(0, ERROR_BODY_CAP);
+    // `model_not_found` first: a body that names a missing model is not a format complaint.
+    if (MODEL_GONE.test(text)) return "model_not_found";
     return REJECTED_FORMAT.test(text) ? "response_format_unsupported" : undefined;
   } catch {
     return undefined;
@@ -127,7 +130,7 @@ async function liveRequest<T>(o: FetchJsonOptions<T>): Promise<{ data: unknown; 
         throw new UpstreamError("unauthorized", o.provider, `${o.provider} rejected the credentials.`, { status: res.status });
       }
       if (res.status >= 400) {
-        const hint = res.status === 400 || res.status === 422 ? await rejectionHint(res) : undefined;
+        const hint = res.status === 400 || res.status === 404 || res.status === 422 ? await rejectionHint(res) : undefined;
         throw new UpstreamError("upstream_4xx", o.provider, `${o.provider} rejected the request (HTTP ${res.status}).`, { status: res.status, hint });
       }
       try {

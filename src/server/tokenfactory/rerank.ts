@@ -1,4 +1,6 @@
 import { UpstreamError } from "../http/errors";
+import { isModelUnavailable, ModelUnavailableError } from "../http/model-unavailable";
+import { MODELS } from "./models";
 import type { TfMode, TokenFactory } from "./client";
 import { cosine } from "./vector";
 
@@ -22,7 +24,7 @@ export async function rerankDocuments(tf: Scorer, query: string, documents: stri
     const r = await tf.rawRerank(query, documents);
     return { results: r.scores, method: "rerank", mode: r.mode };
   } catch (e) {
-    if (!(e instanceof UpstreamError) || !FALLBACK_CODES.has(e.code)) throw e;
+    if (!isModelUnavailable(e) && (!(e instanceof UpstreamError) || !FALLBACK_CODES.has(e.code))) throw e;
   }
   const emb = await tf.embeddings([query, ...documents]);
   const [q, ...docs] = emb.vectors;
@@ -39,11 +41,11 @@ export async function rerankDocuments(tf: Scorer, query: string, documents: stri
 export function rerankUnavailableMemo<F extends (query: string, documents: string[]) => Promise<unknown>>(raw: F, now: () => number = Date.now): F {
   let goneUntil = 0;
   return (async (query: string, documents: string[]) => {
-    if (now() < goneUntil) throw new UpstreamError("upstream_4xx", "tokenfactory", "The reranker is not available (HTTP 404).", { status: 404 });
+    if (now() < goneUntil) throw new ModelUnavailableError(MODELS.rerank, "http_404");
     try {
       return await raw(query, documents);
     } catch (e) {
-      if (e instanceof UpstreamError && e.status === 404) goneUntil = now() + 10 * 60_000;
+      if (isModelUnavailable(e)) goneUntil = now() + 10 * 60_000;
       throw e;
     }
   }) as F;

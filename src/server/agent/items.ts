@@ -56,6 +56,8 @@ export function assembleItem(c: Candidate, f: CopyFields, guardrail: GuardrailRe
 export interface Produced {
   item: EditionItem | null;
   copyModelUsed: boolean;
+  /** The copy model's id when it was unavailable and the template stood in (the build says so once per store). */
+  copyUnavailable?: string;
 }
 
 /** Copy (Lightning, or the template) -> guardrails (one rewrite when blocked) -> a contract-valid item. */
@@ -69,5 +71,5 @@ export async function produceItem(
   const facts = mem.evidenceFor(c.evidenceIds).map((e) => e.summary);
   const copy = await writeCopy(deps, sc, c, facts, opts.hint);
   const guarded = await guardFields(deps, sc, c.kind, copy.fields);
-  return { item: assembleItem(c, guarded.fields, guarded.result, opts.id, opts.version), copyModelUsed: !copy.templated };
+  return { item: assembleItem(c, guarded.fields, guarded.result, opts.id, opts.version), copyModelUsed: !copy.templated, ...(copy.unavailable ? { copyUnavailable: copy.unavailable } : {}) };
 }

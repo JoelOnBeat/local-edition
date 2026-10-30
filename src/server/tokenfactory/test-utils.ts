@@ -17,7 +17,7 @@ export const jsonRes = (body: unknown, status = 200, headers: Record<string, str
 type Handler = (url: string, body: Record<string, unknown>, n: number) => Response | Promise<Response>;
 
 /** A TokenFactory wired to a scripted fetch. Tests only; imports vitest. */
-export function scriptedTf(handler: Handler, o: { mode?: TfMode; capUsd?: number } = {}) {
+export function scriptedTf(handler: Handler, o: { mode?: TfMode; capUsd?: number; modelCatalog?: boolean } = {}) {
   resetJsonSupportCache();
   const calls: { url: string; body: Record<string, unknown>; headers: Record<string, string> }[] = [];
   const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
@@ -31,6 +31,7 @@ export function scriptedTf(handler: Handler, o: { mode?: TfMode; capUsd?: number
     apiKey: "test-key-not-real",
     mode: o.mode ?? "live",
     meter,
+    modelCatalog: o.modelCatalog,
     recorder: new MemoryRecorder(),
     fetchImpl: fetchImpl as unknown as typeof fetch,
     sleep: async () => {},

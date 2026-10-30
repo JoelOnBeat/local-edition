@@ -1,4 +1,5 @@
 import type { AgentEvent, ModelRole } from "@/contract";
+import { asModelUnavailable } from "../http/model-unavailable";
 import { estimateTokens } from "../http/spend";
 import { MODELS } from "../tokenfactory/models";
 import { priceUsd } from "../tokenfactory/spend";
@@ -94,7 +95,8 @@ export function withMetrics(deps: AgentDeps, sink: StepSink = new StepSink()): A
 /** Embeddings through the Token Factory port, recorded as an `embed` step. Usage falls back to the same estimate. */
 export async function meteredEmbed(deps: AgentDeps, texts: string[], tool: string) {
   const started = Date.now();
-  const res = await deps.tf.embed(texts);
+  // A bare 404 from a port that does not name the model is tagged with the embedding model, so the skip note names it.
+  const res = await deps.tf.embed(texts).catch((e: unknown) => { throw asModelUnavailable(e, MODELS.embedding) ?? e; });
   deps.sink?.push({ role: "embed", model: MODELS.embedding, tool, ms: Date.now() - started, promptTokens: res.usage?.promptTokens ?? estimateTokens(texts), cachedTokens: 0, completionTokens: 0 });
   return res;
 }
@@ -102,7 +104,7 @@ export async function meteredEmbed(deps: AgentDeps, texts: string[], tool: strin
 /** Rerank through the port (a reranker, or embedding cosine when the reranker is unavailable), recorded as an `embed` step. */
 export async function meteredRerank(deps: AgentDeps, query: string, docs: string[], tool: string) {
   const started = Date.now();
-  const res = await deps.tf.rerank(query, docs);
+  const res = await deps.tf.rerank(query, docs).catch((e: unknown) => { throw asModelUnavailable(e, MODELS.embedding) ?? e; });
   deps.sink?.push({ role: "embed", model: res.method === "rerank" ? MODELS.rerank : MODELS.embedding, tool, ms: Date.now() - started, promptTokens: estimateTokens([query, docs]), cachedTokens: 0, completionTokens: 0 });
   return res;
 }

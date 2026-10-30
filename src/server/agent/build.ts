@@ -2,12 +2,13 @@ import type { AgentEvent, Edition, EditionItem, Store } from "@/contract";
 import { newId } from "@/lib/ids";
 import { createLogger } from "../log";
 import { HttpError, UpstreamError } from "../http/errors";
+import { agentSkipNote, asModelUnavailable, copySkipNote, MODEL_UNAVAILABLE, STEP_SKIPPED } from "../http/model-unavailable";
 import { reapStaleDrafts } from "../store/reaper";
 import { acquireBuildLock, ApprovalsAppeared, hasApprovals, releaseBuildLock, type BuildLock } from "./build-lock";
 import { evidenceCheck, produceItem } from "./items";
 import { runStoreAgent } from "./loop";
 import { flush, withMetrics } from "./metrics";
-import { recordSteps } from "./stats";
+import { recordModelSkip, recordSteps } from "./stats";
 import { dropMessage, verifyStep } from "./verify";
 import { AGENT_MODEL, COPY_MODEL, FALLBACK_AGENT_LABEL, type AgentDeps, type StoreContext } from "./ports";
 import { invalidateCard } from "./card-state";
@@ -95,6 +96,16 @@ async function* runBuild(params: BuildParams, deps: AgentDeps): AsyncGenerator<A
           yield err("spend_cap", "The model spend cap has been reached, so the build stopped.", store.id);
           return;
         }
+        // The agent model is gone: this store is skipped with a plain note and builds on the next run; the others carry on.
+        const gone = asModelUnavailable(e, AGENT_MODEL);
+        if (gone) {
+          const note = agentSkipNote(gone.model);
+          log.warn("store skipped, model unavailable", { storeId: store.id, model: gone.model });
+          yield* flush(deps);
+          yield err(MODEL_UNAVAILABLE, note, store.id);
+          await recordModelSkip(repo, "agent", note, deps.now());
+          continue;
+        }
         log.error("store build failed", { storeId: store.id, err: e });
         yield* flush(deps);
         yield err("store_failed", `Could not finish the edition for ${store.name}.`, store.id);
@@ -161,6 +172,7 @@ async function* buildStore(deps: AgentDeps, sc: StoreContext, runId: string, for
 
   try {
     // Copy and guardrails for the kept items run concurrently; events still go out in item order.
+    let copyNoted = false;
     const pending = kept.map((c) => produceItem(deps, sc, mem, c).then((value) => ({ ok: true as const, value }), (error: unknown) => ({ ok: false as const, error })));
     for (const [i, settled] of pending.entries()) {
       const r = await settled;
@@ -170,6 +182,13 @@ async function* buildStore(deps: AgentDeps, sc: StoreContext, runId: string, for
         log.error("item failed", { kind: kept[i].kind, err: r.error });
         yield err("item_failed", `Could not write the ${kept[i].kind} item.`, store.id);
         continue;
+      }
+      if (r.value.copyUnavailable && !copyNoted) {
+        // Lightning is gone: the plain template wrote this store's copy. Said once per store, in the trace.
+        copyNoted = true;
+        const note = copySkipNote(r.value.copyUnavailable);
+        yield err(STEP_SKIPPED, note, store.id);
+        await recordModelSkip(repo, "copy", note, deps.now());
       }
       const item = r.value.item;
       if (!item) {

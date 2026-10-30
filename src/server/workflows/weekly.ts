@@ -61,12 +61,12 @@ export async function runWeeklyRebuild(step: StepLike, ports: WeeklyPorts, param
   const build = await runEditionBuild(step, ports, { ...params, workspaceId: DEMO_WORKSPACE_ID, storeIds: start.job.storeIds, trigger: "cron" });
 
   const job = await step.do("job-finish", LIGHT_STEP, async () => {
-    const ok = build.status === "done";
+    const ok = build.status !== "failed";
     const finished: JobRun = {
       ...start.job,
       status: ok ? "done" : "failed",
       finishedAt: ports.now().toISOString(),
-      note: `${ok ? "Built" : "Build incomplete:"} ${build.editionIds.length} of ${start.job.storeIds.length} editions${build.failedStoreIds.length ? `; ${build.failedStoreIds.length} store(s) failed` : ""}. ${CERTIFY_ON_DEMAND_NOTE}`,
+      note: `${ok ? "Built" : "Build incomplete:"} ${build.editionIds.length} of ${start.job.storeIds.length} editions${build.failedStoreIds.length ? `; ${build.failedStoreIds.length} store(s) failed` : ""}${build.skippedStoreIds.length ? `; ${build.skippedStoreIds.length} store(s) skipped: a model was unavailable on Token Factory, they build on the next run` : ""}. ${CERTIFY_ON_DEMAND_NOTE}`,
     };
     await recordJobRun(repo, finished);
     return finished;

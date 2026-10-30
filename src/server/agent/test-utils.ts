@@ -109,10 +109,14 @@ export function embedText(t: string): number[] {
   return v;
 }
 
-export function fakeTf(opts: { rerankFails?: boolean } = {}): AgentDeps["tf"] {
+export function fakeTf(opts: { rerankFails?: boolean; embedError?: Error; rerankError?: Error } = {}): AgentDeps["tf"] {
   return {
-    async embed(texts) { return { vectors: texts.map(embedText), mode: "fixture" }; },
+    async embed(texts) {
+      if (opts.embedError) throw opts.embedError;
+      return { vectors: texts.map(embedText), mode: "fixture" };
+    },
     async rerank(_q, docs) {
+      if (opts.rerankError) throw opts.rerankError;
       if (opts.rerankFails) throw new Error("rerank unavailable");
       return { ranked: docs.map((_, index) => ({ index, score: 0.9 - index * 0.1 })), method: "rerank", mode: "fixture" };
     },
@@ -163,7 +167,7 @@ export interface ScriptOptions {
   /** Agent-model replies in order; once exhausted the last one repeats. A function sees the request. */
   agent?: (ChatResponse | Error)[] | ((req: ChatRequest, n: number) => ChatResponse);
   /** Copy-model reply per kind (JSON object) or a function over the user text. */
-  copy?: (user: string, req: ChatRequest) => string;
+  copy?: (user: string, req: ChatRequest) => string | Error;
   /** Reviewer reply (JSON text) or an Error to throw, per call; `n` counts review calls from 0. */
   review?: (req: ChatRequest, n: number) => string | Error;
   /** Usage the fake provider reports for agent and copy calls (cached tokens, for example). */
@@ -197,6 +201,7 @@ export function scriptedChat(o: ScriptOptions = {}): ScriptedChat {
         const user = String([...req.messages].reverse().find((m) => m.role === "user")?.content ?? "");
         const system = String(req.messages[0].content ?? "");
         const out = o.copy ? o.copy(user, req) : defaultCopy(user, system);
+        if (out instanceof Error) throw out;
         return o.usage ? { ...text(out), usage: o.usage } : text(out);
       }
       throw new Error(`unexpected model ${req.model}`);
@@ -236,7 +241,7 @@ export interface Harness {
   storeIds: string[];
 }
 
-export async function harness(opts: ScriptOptions & { seedBadItem?: boolean; qloo?: FakeQlooOptions; guardrails?: "ok" | "down" | "block-all"; tf?: { rerankFails?: boolean }; limits?: AgentDeps["limits"]; storeCount?: number } = {}): Promise<Harness> {
+export async function harness(opts: ScriptOptions & { seedBadItem?: boolean; qloo?: FakeQlooOptions; guardrails?: "ok" | "down" | "block-all"; tf?: Parameters<typeof fakeTf>[0]; limits?: AgentDeps["limits"]; storeCount?: number } = {}): Promise<Harness> {
   const repo = createMemoryRepo();
   const seed = sampleSeed();
   seed.stores = seed.stores.slice(0, opts.storeCount ?? 2);

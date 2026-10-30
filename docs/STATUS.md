@@ -1,5 +1,7 @@
 # Local Edition backend status (Thu 29 Oct 2026)
 
+30 Oct 2026: `nvidia/Nemotron-3.5-Super-VL` vanished from Token Factory for a few hours (404 / `model_not_found`) and came back; since then any 404, `model_not_found` or model missing from the cached `/v1/models` (10 minutes) SKIPS its step with a plain note (store skipped and run `done_with_skips`, menu read 503 `model_unavailable`, review skipped and unreviewed, copy on the template, keyword reply sort, matching skipped), never fails the run, and never rewrites copy or model ids; re-check live before changing either (`docs/CONTRACT.md`, `src/server/http/model-unavailable.ts`).
+
 ## No Worker -> Nebius path (30 Oct 2026, after the 02:30 MYT team rule)
 
 From a deployed Cloudflare Worker the Nebius AI Cloud control plane (`auth.eu.nebius.com`, `auth.nebius.com`, `api.nebius.cloud`, `api.eu-north1.nebius.cloud`)

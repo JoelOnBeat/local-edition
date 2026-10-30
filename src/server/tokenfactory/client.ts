@@ -1,12 +1,15 @@
 import OpenAI from "openai";
 import type { ZodType } from "zod";
 import type { ChatCompletionMessageParam, ChatCompletionTool, ChatCompletionToolChoiceOption } from "openai/resources/chat/completions";
-import { HttpError, UpstreamError } from "../http/errors";
+import { UpstreamError } from "../http/errors";
 import { fetchJson, type ProviderRunMode } from "../http/fetch-json";
 import type { Recorder } from "../http/recorder";
 import type { SpendMeter } from "../http/spend";
 import { serverEnv } from "@/lib/env";
 import { chatFixture, embeddingsFixture, rerankFixture } from "./fixtures";
+import { asModelUnavailable, ModelUnavailableError } from "../http/model-unavailable";
+import { createModelCatalog, tokenFactoryModelList, type ModelCatalog } from "./catalog";
+import { estimateTokens, parseToolCall, unwrap } from "./client-util";
 import { MODELS, TF_BASE_URL } from "./models";
 import { defaultReasoning, reasoningBody, type Reasoning } from "./reasoning";
 import { rerankDocuments, rerankUnavailableMemo, type RerankOutcome } from "./rerank";
@@ -74,6 +77,11 @@ export interface TokenFactoryOptions {
   recorder?: Recorder;
   timeoutMs?: number;
   retries?: number;
+  /**
+   * Live mode only. `true` builds the standard catalog (a cached `GET /v1/models`, ten minutes); a catalog object is used as is.
+   * A model that the list lacks, or that just answered 404, throws `ModelUnavailableError` without a call. Off by default.
+   */
+  modelCatalog?: boolean | ModelCatalog;
   // Test seams.
   fetchImpl?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
@@ -92,36 +100,25 @@ export interface TokenFactory {
 const EMBED_BATCH = 64;
 const MODE_HEADER = "x-le-mode";
 
-/** ~4 chars per token; images (data URLs) count as a flat 1500 tokens. Used only if the provider omits usage. */
-function estimateTokens(value: unknown): number {
-  const text = typeof value === "string" ? value : JSON.stringify(value ?? "");
-  const images = (text.match(/data:image\/[a-z+.-]+;base64,/gi) ?? []).length;
-  return Math.ceil(text.replace(/data:image\/[a-z+.-]+;base64,[A-Za-z0-9+/=]+/gi, "").length / 4) + images * 1500;
-}
-
-/** Walk `.cause` so an UpstreamError thrown inside the SDK's fetch is surfaced as itself. */
-function unwrap(e: unknown): Error {
-  let cur: unknown = e;
-  for (let i = 0; i < 5 && cur; i++) {
-    if (cur instanceof UpstreamError || cur instanceof HttpError) return cur;
-    cur = (cur as { cause?: unknown }).cause;
-  }
-  return new UpstreamError("network", "tokenfactory", "Could not reach Token Factory.", { retryable: true });
-}
-
-function parseToolCall(c: { id: string; function: { name: string; arguments: string } }): ParsedToolCall {
-  try {
-    const raw = c.function.arguments.trim();
-    return { id: c.id, name: c.function.name, arguments: c.function.arguments, args: raw === "" ? {} : JSON.parse(raw) };
-  } catch {
-    return { id: c.id, name: c.function.name, arguments: c.function.arguments, args: undefined, argsError: "Tool arguments were not valid JSON." };
-  }
-}
-
 export function createTokenFactory(opts: TokenFactoryOptions = {}): TokenFactory {
   const mode: TfMode = opts.mode ?? "replay";
   const baseUrl = (opts.baseUrl ?? TF_BASE_URL).replace(/\/?$/, "/");
   const meter = opts.meter ?? tokenFactoryMeter();
+  const catalog: ModelCatalog | null =
+    mode !== "live" || !opts.modelCatalog ? null
+    : opts.modelCatalog === true ? createModelCatalog({ list: tokenFactoryModelList({ baseUrl, apiKey: opts.apiKey, fetchImpl: opts.fetchImpl }) })
+    : opts.modelCatalog;
+
+  /** Refuses a call to a model that is known to be gone (not listed, or 404 within ten minutes) before any request or spend. */
+  async function requireAvailable(model: string): Promise<void> {
+    if (catalog && !(await catalog.available(model))) throw new ModelUnavailableError(model, "not_listed");
+  }
+  /** A 404 / `model_not_found` becomes `ModelUnavailableError` (and is remembered); anything else passes through untouched. */
+  function classify(e: Error, model: string): Error {
+    const gone = asModelUnavailable(e, model);
+    if (gone) catalog?.markGone(model);
+    return gone ?? e;
+  }
 
   async function send<T>(args: {
     url: string;
@@ -201,6 +198,7 @@ export function createTokenFactory(opts: TokenFactoryOptions = {}): TokenFactory
       ...reasoningBody(o.model, o.reasoning ?? defaultReasoning(o.model, Boolean(o.tools?.length))),
       ...o.extraBody,
     } as unknown as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming;
+    await requireAvailable(o.model);
     try {
       const { data, response } = await sdk.chat.completions.create(params).withResponse();
       const parsed = ChatCompletion.parse(data);
@@ -227,11 +225,12 @@ export function createTokenFactory(opts: TokenFactoryOptions = {}): TokenFactory
         },
       };
     } catch (e) {
-      throw unwrap(e);
+      throw classify(unwrap(e), o.model);
     }
   }
 
   async function embeddings(texts: string[]): Promise<EmbeddingsResult> {
+    await requireAvailable(MODELS.embedding);
     const vectors: number[][] = [];
     let last: TfMode = mode;
     for (let i = 0; i < texts.length; i += EMBED_BATCH) {
@@ -247,7 +246,7 @@ export function createTokenFactory(opts: TokenFactoryOptions = {}): TokenFactory
         for (const row of [...parsed.data].sort((a, b) => a.index - b.index)) vectors.push(row.embedding);
         last = modeOf(response);
       } catch (e) {
-        throw unwrap(e);
+        throw classify(unwrap(e), MODELS.embedding);
       }
     }
     return { vectors, model: MODELS.embedding, mode: last };
@@ -255,10 +254,11 @@ export function createTokenFactory(opts: TokenFactoryOptions = {}): TokenFactory
 
   async function rawRerank(query: string, documents: string[]) {
     const body = { model: MODELS.rerank, query, documents };
+    await requireAvailable(MODELS.rerank);
     const r = await send({
       url: `${baseUrl}rerank`, body, schema: RerankResponse, fixture: () => rerankFixture(body),
       usage: (d) => ({ model: MODELS.rerank, inTokens: d.usage?.prompt_tokens ?? estimateTokens([query, documents]), outTokens: 0 }),
-    });
+    }).catch((e: Error) => { throw classify(e, MODELS.rerank); });
     const scores = r.data.results
       .filter((x) => x.index < documents.length)
       .map((x) => ({ index: x.index, score: x.relevance_score }))
@@ -290,7 +290,7 @@ let shared: TokenFactory | undefined;
 export function getTokenFactory(): TokenFactory {
   if (!shared) {
     const env = serverEnv();
-    shared = createTokenFactory({ apiKey: env.NEBIUS_API_KEY, mode: resolveTfMode(env).mode });
+    shared = createTokenFactory({ apiKey: env.NEBIUS_API_KEY, mode: resolveTfMode(env).mode, modelCatalog: true });
   }
   return shared;
 }

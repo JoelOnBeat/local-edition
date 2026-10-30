@@ -1,7 +1,9 @@
 import type { AgentEvent } from "@/contract";
 import { createLogger } from "../log";
 import { UpstreamError } from "../http/errors";
+import { asModelUnavailable, STEP_SKIPPED, toolSkipNote, unavailableModel } from "../http/model-unavailable";
 import { limitsOf } from "./ports";
+import { recordModelSkip } from "./stats";
 import type { ToolCtx, ToolDef } from "./tools";
 import { withTimeout } from "./util";
 
@@ -43,6 +45,17 @@ export async function* runTool(ctx: ToolCtx, def: ToolDef, rawArgs: unknown): As
     return { ok: true, invalid: false, summary: out.summary, payload: out.payload, evidenceIds: out.evidenceIds };
   } catch (e) {
     if (e instanceof UpstreamError && e.code === "spend_cap") throw e;
+    const gone = asModelUnavailable(e, "");
+    if (gone) {
+      // A model this tool needs is gone: the step is skipped with a note, the store carries on without it.
+      const note = toolSkipNote(unavailableModel(gone, ""), def.skipLabel ?? def.name);
+      ctx.mem.skipped.add(def.name);
+      log.warn("tool skipped, model unavailable", { tool: def.name, model: gone.model });
+      yield { type: "tool_result", storeId, tool: def.name, ok: false, summary: note, evidenceIds: [] };
+      yield { type: "error", storeId, code: STEP_SKIPPED, message: note };
+      await recordModelSkip(ctx.deps.repo, "embed", note, ctx.deps.now());
+      return { ok: false, invalid: false, summary: note, payload: { error: note }, evidenceIds: [] };
+    }
     const summary = e instanceof UpstreamError ? e.message : "The tool failed.";
     log.warn("tool failed", { tool: def.name, err: e });
     yield { type: "tool_result", storeId, tool: def.name, ok: false, summary, evidenceIds: [] };

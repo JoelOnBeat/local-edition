@@ -11,7 +11,7 @@ import { formatDateTime, modelName, pct } from "@/components/lib/format";
 
 /** Building blocks of the proof body: the model-per-step list, the guardrail eval and the Nebius job timeline. */
 
-export interface ProofStep { step: string; model: string; does: string }
+export interface ProofStep { step: string; model: string; does: string; /** The last time the step was skipped for an unavailable model, until it answers again. */ skipped?: { at: string; note: string } }
 
 const brandOf = (model: string) => (/^nvidia\//i.test(model) ? "nemotron" : /nemo guardrails/i.test(model) ? "guardrails" : null);
 const GRID = "grid-cols-[minmax(0,1fr)] md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]";
@@ -23,10 +23,16 @@ export function ModelSteps({ steps, seen }: { steps: ProofStep[]; seen: Set<stri
         const brand = brandOf(s.model);
         const on = seen.has(s.model);
         return (
-          <li key={s.step} data-testid="proof-model-row" data-seen={on} className={cx("grid gap-x-6 gap-y-2 px-4 py-3.5", GRID)}>
+          <li key={s.step} data-testid="proof-model-row" data-seen={on} data-skipped={s.skipped ? "true" : undefined} className={cx("grid gap-x-6 gap-y-2 px-4 py-3.5", GRID)}>
             <div className="min-w-0">
               <p className="text-[14px] font-medium leading-5 text-ink-strong">{s.step}</p>
               <p className="mt-0.5 text-[13px] leading-5 text-ink-2">{s.does}</p>
+              {s.skipped ? (
+                <p data-testid="proof-step-skipped" className="mt-1.5 flex items-start gap-1.5 text-[13px] leading-5 text-warn-ink">
+                  <Icon name="minus" size={14} className="mt-0.5 shrink-0" />
+                  <span>Skipped {new Date(s.skipped.at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}: {s.skipped.note}</span>
+                </p>
+              ) : null}
             </div>
             <div className="flex min-w-0 items-center gap-2.5 md:justify-end">
               {brand ? <LogoTile provider={brand} size="sm" /> : <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-stone-100 text-ink-2"><Icon name="cpu" size={14} /></span>}

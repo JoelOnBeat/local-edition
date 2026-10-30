@@ -23,6 +23,8 @@ export interface ToolDef<S extends z.ZodType = z.ZodType> {
   description: string;
   parameters: Record<string, unknown>;
   schema: S;
+  /** What the step is called in a skip note ("Menu match skipped: ..."); defaults to the tool name. */
+  skipLabel?: string;
   run(ctx: ToolCtx, args: z.output<S>): Promise<ToolOutcome>;
 }
 

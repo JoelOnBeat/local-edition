@@ -1,8 +1,9 @@
 import { ProofResponse, routes, type JobRun } from "@/contract";
 import { withRoute } from "../http/api";
 import { peekWorkspace } from "../session";
+import { readModelSkips } from "../agent/stats";
 import { getRepo } from "../store";
-import { PROOF_STEPS, reviewsOf, seenModels } from "./proof-steps";
+import { reviewsOf, seenModels, stepsWithSkips } from "./proof-steps";
 import { readEval, readJobRuns, readMetricsTotals } from "./proof-ledger";
 
 /**
@@ -34,7 +35,7 @@ export const getProof = withRoute(routes.getProof, async (_input, ctx): Promise<
   const workspace = await peekWorkspace(ctx.request, repo);
   const stores = workspace ? await repo.listStores(workspace.chainId) : [];
   const editions = stores.length ? await repo.listEditions({ storeIds: stores.map((s) => s.id), finishedOnly: true }) : [];
-  const [jobRuns, evalResult, totals] = await Promise.all([readJobRuns(repo), readEval(repo), readMetricsTotals(repo)]);
+  const [jobRuns, evalResult, totals, skips] = await Promise.all([readJobRuns(repo), readEval(repo), readMetricsTotals(repo), readModelSkips(repo)]);
   return {
     jobRuns,
     eval: evalResult,
@@ -42,7 +43,7 @@ export const getProof = withRoute(routes.getProof, async (_input, ctx): Promise<
     gitSha: cleanSha(process.env.GIT_SHA),
     spendPerEditionUsd: totals.editions > 0 ? totals.usd / totals.editions : null,
     cachedRatio: totals.promptTokens > 0 ? Math.min(1, totals.cachedTokens / totals.promptTokens) : null,
-    steps: PROOF_STEPS,
+    steps: stepsWithSkips(skips),
     seenModels: seenModels(editions),
     editionCount: editions.length,
     reviews: reviewsOf(editions, stores),

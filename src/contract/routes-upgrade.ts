@@ -17,6 +17,8 @@ export const ProofStep = z.object({
   step: z.string().min(1).max(80),
   model: z.string().min(1).max(120),
   does: z.string().min(1).max(300),
+  /** Set when the step was last skipped because its model was unavailable on Token Factory (a 404), and has not answered since. */
+  skipped: z.object({ at: z.iso.datetime({ offset: true }), note: z.string().min(1).max(300) }).optional(),
 });
 export type ProofStep = z.infer<typeof ProofStep>;
 

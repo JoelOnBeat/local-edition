@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Repo } from "../store/repo";
+import type { ModelRole } from "@/contract";
 import type { StepEvent } from "./metrics";
 
 /**
@@ -12,6 +13,7 @@ import type { StepEvent } from "./metrics";
 const TTL_SECONDS = 35 * 24 * 3600;
 const METRICS_KEY = "stats:metrics:v1";
 const VERIFY_KEY = "stats:verify:v1";
+const SKIPS_KEY = "stats:skips:v1";
 
 const RoleTotals = z.object({ calls: z.number(), promptTokens: z.number(), cachedTokens: z.number(), completionTokens: z.number(), usd: z.number() });
 export const MetricsTotals = z.object({
@@ -52,9 +54,39 @@ export async function recordSteps(repo: Pick<Repo, "cacheGet" | "cachePut">, ste
     t.editions += editions;
     t.updatedAt = now.toISOString();
     await repo.cachePut(METRICS_KEY, t, TTL_SECONDS);
+    // A role that answered again is no longer skipped.
+    await clearModelSkips(repo, steps.map((s) => s.role));
   } catch {
     // Tally only.
   }
+}
+
+/** The last time a model role was skipped because its model was unavailable (read by /api/proof). One entry per role. */
+export const ModelSkips = z.record(z.string(), z.object({ at: z.string(), note: z.string() }));
+export type ModelSkips = z.infer<typeof ModelSkips>;
+
+export async function readModelSkips(repo: Pick<Repo, "cacheGet">): Promise<ModelSkips> {
+  const parsed = ModelSkips.safeParse(await repo.cacheGet(SKIPS_KEY).catch(() => null));
+  return parsed.success ? parsed.data : {};
+}
+
+/** Remember that `role` was skipped. Never throws: a failed tally must not fail a build. */
+export async function recordModelSkip(repo: Pick<Repo, "cacheGet" | "cachePut">, role: ModelRole, note: string, now = new Date()): Promise<void> {
+  try {
+    const skips = await readModelSkips(repo);
+    skips[role] = { at: now.toISOString(), note };
+    await repo.cachePut(SKIPS_KEY, skips, TTL_SECONDS);
+  } catch {
+    // Tally only.
+  }
+}
+
+async function clearModelSkips(repo: Pick<Repo, "cacheGet" | "cachePut">, roles: string[]): Promise<void> {
+  const skips = await readModelSkips(repo);
+  const hit = [...new Set(roles)].filter((r) => r in skips);
+  if (!hit.length) return;
+  for (const r of hit) delete skips[r];
+  await repo.cachePut(SKIPS_KEY, skips, TTL_SECONDS);
 }
 
 export const VerifierCounts = z.object({

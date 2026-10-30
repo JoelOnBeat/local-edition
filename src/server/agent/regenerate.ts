@@ -2,6 +2,7 @@ import type { AgentEvent, EditionItem } from "@/contract";
 import { newId } from "@/lib/ids";
 import { createLogger } from "../log";
 import { HttpError, UpstreamError } from "../http/errors";
+import { asModelUnavailable, MODEL_UNAVAILABLE, modelLabel } from "../http/model-unavailable";
 import { NotFoundError, VersionConflictError } from "../store/repo";
 import { invalidateCard } from "./card-state";
 import { evidenceCheck, produceItem } from "./items";
@@ -11,7 +12,7 @@ import { defaultHintFor } from "./review-hint";
 import { recordSteps } from "./stats";
 import { dropMessage, verifyStep } from "./verify";
 import type { Exclusions } from "./plan";
-import type { AgentDeps } from "./ports";
+import { AGENT_MODEL, type AgentDeps } from "./ports";
 import { loadEditionAccess } from "./workspace";
 
 const log = createLogger("agent:regenerate");
@@ -106,7 +107,9 @@ async function* regenerate(params: RegenerateParams, deps: AgentDeps): AsyncGene
     yield { type: "store_done", storeId: store.id, editionId: edition.id };
     yield { type: "run_done", runId, editionIds: [edition.id] };
   } catch (e) {
+    const gone = asModelUnavailable(e, AGENT_MODEL);
     if (e instanceof UpstreamError && e.code === "spend_cap") yield err("spend_cap", "The model spend cap has been reached.", store.id);
+    else if (gone) yield err(MODEL_UNAVAILABLE, `${modelLabel(gone.model)} is unavailable on Token Factory right now. This item keeps its current text; try the rewrite again in a few minutes.`, store.id);
     else if (e instanceof VersionConflictError) yield err("version_conflict", "Someone changed this item while it was being rewritten. Try again.", store.id);
     else if (e instanceof NotFoundError) yield err("item_not_found", "That item no longer exists.", store.id);
     else {

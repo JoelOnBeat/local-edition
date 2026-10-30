@@ -1,5 +1,6 @@
 import type { MenuItem } from "@/contract";
-import { HttpError, UpstreamError } from "../http/errors";
+import { HttpError, RetryAfterError, UpstreamError } from "../http/errors";
+import { asModelUnavailable, MODEL_UNAVAILABLE, visionRetryNote } from "../http/model-unavailable";
 import { getTokenFactory, MODELS, type TfMode, type TokenFactory } from "./client";
 import { jsonOutput } from "./json";
 import { applyVerify, toMenuItems, VerifyOut, VlMenu } from "./menu-parse";
@@ -88,6 +89,11 @@ export async function readMenuBoardDetailed(
       { role: "system", content: SYSTEM },
       { role: "user", content: [dataUrl(bytes, mime), { type: "text", text: INSTRUCTIONS }] },
     ],
+  }).catch((e: unknown) => {
+    // The vision model is gone (404 / model_not_found / not listed): a plain, retryable answer, never a generic 502.
+    const gone = asModelUnavailable(e, MODELS.vision);
+    if (gone) throw new RetryAfterError(503, MODEL_UNAVAILABLE, visionRetryNote(gone.model), 300);
+    throw e;
   });
   steps.push({ tool: "menu_extract", model: MODELS.vision, ms: Date.now() - t0, promptTokens: r.usage.inTokens, completionTokens: r.usage.outTokens, usd: priceUsd(MODELS.vision, r.usage.inTokens, r.usage.outTokens) });
   const extracted = toMenuItems(r.data);

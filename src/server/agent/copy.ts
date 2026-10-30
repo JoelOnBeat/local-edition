@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createLogger } from "../log";
 import { UpstreamError } from "../http/errors";
+import { asModelUnavailable } from "../http/model-unavailable";
 import { askJson, askText } from "./json";
 import type { Candidate } from "./plan";
 import { COPY_MODEL, limitsOf, type AgentDeps, type StoreContext } from "./ports";
@@ -46,6 +47,8 @@ export interface CopyResult {
   fields: CopyFields;
   /** True when the copy model failed and the plain template was used. */
   templated: boolean;
+  /** The copy model's id when the template was used because the model is unavailable (404, model_not_found, not listed). */
+  unavailable?: string;
 }
 
 /** Lightning writes the item's text in the chain's voice; on any model failure the template stands in. */
@@ -58,7 +61,8 @@ export async function writeCopy(deps: AgentDeps, sc: StoreContext, c: Candidate,
   } catch (e) {
     if (e instanceof UpstreamError && e.code === "spend_cap") throw e;
     log.warn("copy model failed, using template", { kind, err: e });
-    return { fields: templateCopy(c, sc), templated: true };
+    const gone = asModelUnavailable(e, COPY_MODEL);
+    return { fields: templateCopy(c, sc), templated: true, ...(gone ? { unavailable: gone.model } : {}) };
   }
 }
 

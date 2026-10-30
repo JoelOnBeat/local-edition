@@ -1,6 +1,7 @@
 import type { AgentEvent, EditionItemKind } from "@/contract";
 import { createLogger } from "../log";
 import { UpstreamError } from "../http/errors";
+import { asModelUnavailable } from "../http/model-unavailable";
 import { runTool } from "./exec";
 import { runFallbackPlan } from "./fallback";
 import { ToolMemory } from "./memory";
@@ -132,6 +133,9 @@ export async function* runStoreAgent(input: LoopInput): AsyncGenerator<AgentEven
       response = await withTimeout(deps.chat.complete({ model: AGENT_MODEL, role: "agent", messages, tools, temperature: 0.3, maxTokens: LOOP_MAX_TOKENS, reasoning: LOOP_REASONING, timeoutMs: limits.chatTimeoutMs }), limits.chatTimeoutMs + 2000, "agent model");
     } catch (e) {
       if (e instanceof UpstreamError && e.code === "spend_cap") throw e;
+      // The agent model is gone (404 / model_not_found / not listed): no plan is guessed in its place. The caller skips this store.
+      const gone = asModelUnavailable(e, AGENT_MODEL);
+      if (gone) throw gone;
       return yield* finish(e instanceof UpstreamError ? e.code : "chat_failed");
     }
 

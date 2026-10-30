@@ -60,3 +60,17 @@ describe("T2 rerank availability memo", () => {
     expect(calls.map((c) => c.url.split("/v1/")[1])).toEqual(["rerank", "embeddings", "embeddings"]);
   });
 });
+
+describe("T2 rerank when the reranker is missing from /v1/models", () => {
+  it("keeps the embedding fallback without ever calling /v1/rerank", async () => {
+    const { tf, calls } = scriptedTf((url, body) => {
+      if (url.endsWith("/models")) return jsonRes({ data: [{ id: "Qwen/Qwen3-Embedding-8B" }] });
+      if (url.endsWith("/rerank")) return jsonRes({}, 500);
+      const input = body.input as string[];
+      return jsonRes({ data: input.map((_, index) => ({ index, embedding: [1, index] })), usage: { prompt_tokens: 5 } });
+    }, { modelCatalog: true });
+    const r = await tf.rerank("coffee", docs);
+    expect(r.method).toBe("embedding-cosine");
+    expect(calls.map((c) => c.url.split("/v1/")[1])).toEqual(["models", "embeddings"]);
+  });
+});

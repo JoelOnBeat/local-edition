@@ -1,4 +1,5 @@
 import type { AgentEvent } from "@/contract";
+import { MODEL_UNAVAILABLE } from "../http/model-unavailable";
 import { createLogger } from "../log";
 import { WORKFLOW_LOCK_TTL_SECONDS } from "../agent/build-lock";
 import type { EventAttempt, RunLog } from "./run-log";
@@ -65,7 +66,10 @@ export interface BuildOutcome {
   runId: string;
   editionIds: string[];
   failedStoreIds: string[];
-  status: "done" | "failed";
+  /** Stores left for the next run because a model they need was unavailable (Token Factory 404): not failures. */
+  skippedStoreIds: string[];
+  /** `done_with_skips`: every store was handled, and at least one was skipped for an unavailable model. */
+  status: "done" | "done_with_skips" | "failed";
   spendCap: boolean;
 }
 
@@ -73,6 +77,7 @@ interface StoreResult {
   storeId: string;
   editionId: string | null;
   spendCap: boolean;
+  skipped: boolean;
 }
 
 /** `run_started` and `run_done` belong to the whole run, which the Workflow emits itself, once. */
@@ -112,7 +117,7 @@ export async function runEditionBuild(step: StepLike, ports: BuildPorts, params:
       await ports.lock?.release(workspaceId, runId).catch(() => undefined);
       await runLog.finish(runId, "failed");
     });
-    return { runId, editionIds: [], failedStoreIds: [], status: "failed", spendCap: false };
+    return { runId, editionIds: [], failedStoreIds: [], skippedStoreIds: [], status: "failed", spendCap: false };
   }
   if (!plan.ids) {
     await step.do("finish:failed", LIGHT_STEP, async () => {
@@ -121,12 +126,13 @@ export async function runEditionBuild(step: StepLike, ports: BuildPorts, params:
       }
       await runLog.finish(runId, "failed");
     });
-    return { runId, editionIds: [], failedStoreIds: [], status: "failed", spendCap: false };
+    return { runId, editionIds: [], failedStoreIds: [], skippedStoreIds: [], status: "failed", spendCap: false };
   }
   const storeIds = plan.ids;
 
   const editionIds: string[] = [];
   const failedStoreIds: string[] = [];
+  const skippedStoreIds: string[] = [];
   let spendCap = false;
   if (ports.prefetchEvents) {
     try {
@@ -149,6 +155,7 @@ export async function runEditionBuild(step: StepLike, ports: BuildPorts, params:
       }
       if (result?.editionId) editionIds.push(result.editionId);
       if (result?.spendCap) spendCap = true;
+      if (result?.skipped) skippedStoreIds.push(storeId);
       await step.do(`progress:${index}`, LIGHT_STEP, async () => {
         await runLog.append(runId, workspaceId, { type: "progress", runId, done: index + 1, total: storeIds.length });
         await runLog.setProgress(runId, index + 1);
@@ -156,7 +163,7 @@ export async function runEditionBuild(step: StepLike, ports: BuildPorts, params:
     }
 
     // A spend cap ends the run with an error and no `run_done`, like the in-process build.
-    const status: BuildOutcome["status"] = spendCap ? "failed" : "done";
+    const status: BuildOutcome["status"] = spendCap ? "failed" : skippedStoreIds.length ? "done_with_skips" : "done";
     await step.do("finish", LIGHT_STEP, async () => {
       if (!spendCap) await runLog.append(runId, workspaceId, { type: "run_done", runId, editionIds });
       // The lock goes first: a run row that still says `running` only refuses a second start, a lock held after the run
@@ -164,14 +171,14 @@ export async function runEditionBuild(step: StepLike, ports: BuildPorts, params:
       await ports.lock?.release(workspaceId, runId);
       await runLog.finish(runId, status);
     });
-    if (status === "done" && editionIds.length && ports.afterBuild) {
+    if (status !== "failed" && editionIds.length && ports.afterBuild) {
       try {
         await step.do("digest", DIGEST_STEP, async () => { await ports.afterBuild!(params, editionIds); });
       } catch (e) {
         log.warn("head-office digest failed; the build is unaffected", { runId, err: e });
       }
     }
-    return { runId, editionIds, failedStoreIds, status, spendCap };
+    return { runId, editionIds, failedStoreIds, skippedStoreIds, status, spendCap };
   } catch (e) {
     // A step ran out of retries. Do not leave the workspace locked (or the run `running`) until the TTL passes.
     await step.do("finish:error", LIGHT_STEP, async () => {
@@ -198,7 +205,7 @@ async function runRegenerate(step: StepLike, ports: BuildPorts, params: BuildWor
     log.error("slack regenerate step failed", { runId, err: e });
     status = "failed";
   }
-  return { runId, editionIds: [], failedStoreIds: [], status, spendCap: false };
+  return { runId, editionIds: [], failedStoreIds: [], skippedStoreIds: [], status, spendCap: false };
 }
 
 /**
@@ -228,6 +235,7 @@ async function buildAttempt(ports: BuildPorts, params: BuildWorkflowParams, stor
   const { runLog } = ports;
   let editionId: string | null = null;
   let spendCap = false;
+  let skipped = false;
   let fatal: string | null = null;
   for await (const event of ports.buildStore(storeId, params)) {
     if (WRAPPER_EVENTS.has(event.type)) continue;
@@ -238,7 +246,9 @@ async function buildAttempt(ports: BuildPorts, params: BuildWorkflowParams, stor
     await runLog.append(params.runId, params.workspaceId, event, by);
     if (event.type === "store_done") editionId = event.editionId;
     if (event.type === "error" && event.code === "spend_cap") spendCap = true;
+    // The store's agent model is gone: the event (with its plain note) is already in the log. Not a failure, so no retry.
+    if (event.type === "error" && event.code === MODEL_UNAVAILABLE && !editionId) skipped = true;
   }
   if (fatal && !editionId) throw new Error(`Store ${storeId} failed: ${fatal}`);
-  return { storeId, editionId, spendCap };
+  return { storeId, editionId, spendCap, skipped };
 }

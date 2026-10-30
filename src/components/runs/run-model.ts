@@ -7,7 +7,7 @@ type Ev<T extends AgentEvent["type"]> = Extract<AgentEvent, { type: T }>;
 export type StepMetrics = Ev<"step_metrics">;
 
 export type TraceEntry =
-  | { kind: "tool"; key: string; tool: string; args: Record<string, unknown>; result?: Ev<"tool_result"> }
+  | { kind: "tool"; key: string; tool: string; args: Record<string, unknown>; result?: Ev<"tool_result">; /** The tool did not run because a model it needs was unavailable (a `step_skipped` followed it). */ skipped?: boolean }
   | { kind: "model"; key: string; step: StepMetrics }
   | { kind: "item"; key: string; item: EditionItem; guardrail?: GuardrailResult }
   | { kind: "review"; key: string; review: Ev<"review"> }
@@ -24,6 +24,8 @@ export interface Lane {
   toolCalls: number;
   items: number;
   skipReason?: string;
+  /** Why the lane was skipped: head office already worked on it, or a model it needs was unavailable on Token Factory. */
+  skipKind?: "approvals" | "model";
 }
 
 export interface ModelTotal { model: string; calls: number; promptTokens: number; cachedTokens: number; completionTokens: number; usd: number; ms: number }
@@ -43,13 +45,17 @@ export interface RunModel {
   runErrors: { code: string; message: string }[];
 }
 
+/** Error codes that are a skip with a note, not a failure: shown amber, never red. */
+export const SKIP_CODES: ReadonlySet<string> = new Set(["has_approvals", "model_unavailable", "step_skipped"]);
+
 /**
  * What an error event does to its lane. `store_retrying` says the attempt failed and the Workflow will try again, so the
  * lane shows Retrying, never Failed. Item-level problems leave the store working (the edition still lands). Anything else
  * (`store_failed` after the last attempt, `spend_cap`, `no_items`) is final.
  */
 export function laneStatusAfterError(code: string, current: LaneStatus): LaneStatus | null {
-  if (code === "has_approvals") return "skipped";
+  if (code === "has_approvals" || code === "model_unavailable") return "skipped";
+  if (code === "step_skipped") return null; // one step inside the store was skipped; the store still builds
   if (code === "store_retrying") return "retrying";
   if (code === "item_dropped" || code === "item_failed") return null;
   return current === "done" ? null : "error";
@@ -102,9 +108,17 @@ export function deriveRun(events: AgentEvent[]): RunModel {
         if (e.storeId) {
           const l = lane(e.storeId);
           l.entries.push({ kind: "error", key, code: e.code, message: e.message });
+          if (e.code === "step_skipped") {
+            // The tool whose result IS this note (the server sends the same sentence in both): a copy skip names no tool.
+            const last = l.entries.at(-2);
+            if (last && last.kind === "tool" && last.result && !last.result.ok && last.result.summary === e.message) last.skipped = true;
+          }
           const next = laneStatusAfterError(e.code, l.status);
           if (next) l.status = next;
-          if (e.code === "has_approvals") l.skipReason = e.message;
+          if (e.code === "has_approvals" || e.code === "model_unavailable") {
+            l.skipReason = e.message;
+            l.skipKind = e.code === "has_approvals" ? "approvals" : "model";
+          }
         } else m.runErrors.push({ code: e.code, message: e.message });
         break;
     }

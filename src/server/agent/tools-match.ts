@@ -29,6 +29,7 @@ export const menuMatch: ToolDef<typeof menuMatchArgs> = {
   description: "Match menu items to the block's cuisine and flavour tags by embedding similarity. Returns the best item and tag pairs with scores. Call block_profile first unless you pass tagNames.",
   parameters: { type: "object", properties: { tagNames: { type: "array", items: { type: "string" }, maxItems: 8 } }, additionalProperties: false },
   schema: menuMatchArgs,
+  skipLabel: "Menu match",
   async run({ sc, deps, mem }, args) {
     const profileTags = (mem.profile?.tags ?? []).filter((t) => t.kind === "cuisine" || t.kind === "flavour");
     const tags = args.tagNames?.length
@@ -87,6 +88,7 @@ export const partnersRank: ToolDef<typeof partnersArgs> = {
   description: "Rerank candidate partner places by fit to this store's brief. Call places_near first.",
   parameters: { type: "object", properties: { placeRefs: { type: "array", items: { type: "string" }, maxItems: 20 } }, additionalProperties: false },
   schema: partnersArgs,
+  skipLabel: "Partner ranking",
   async run({ sc, deps, mem }, args) {
     const entries = (args.placeRefs?.length ? args.placeRefs.flatMap((r) => (mem.places.has(r) ? [mem.places.get(r)!] : [])) : [...mem.places.values()]).slice(0, 20);
     if (!entries.length) return { summary: "no places to rank: call places_near first", payload: { error: "No places in memory. Call places_near first." }, evidenceIds: [] };

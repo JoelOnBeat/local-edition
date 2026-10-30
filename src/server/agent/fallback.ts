@@ -17,7 +17,7 @@ const NEEDED: Record<EditionItemKind, readonly string[]> = {
 export async function* runFallbackPlan(ctx: ToolCtx, focus?: EditionItemKind): AsyncGenerator<AgentEvent, void> {
   const wanted = focus ? NEEDED[focus] : FALLBACK_SEQUENCE;
   for (const name of FALLBACK_SEQUENCE) {
-    if (!wanted.includes(name) || ctx.mem.done.has(name)) continue;
+    if (!wanted.includes(name) || ctx.mem.done.has(name) || ctx.mem.skipped.has(name)) continue;
     if (name === "partners_rank" && ctx.mem.places.size === 0) continue;
     if (name === "menu_match" && !ctx.mem.profile) continue;
     yield* runTool(ctx, TOOL_BY_NAME.get(name)!, {});

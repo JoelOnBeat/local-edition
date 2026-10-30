@@ -7,7 +7,7 @@ import { Icon } from "../app-ui/icons";
 import { formatInt, formatUsd, pct } from "../lib/format";
 import { useWorkspace } from "../app/workspace-context";
 import { BuildButton } from "../portfolio/build-button";
-import { deriveRun, menuSourceOf } from "./run-model";
+import { SKIP_CODES, deriveRun, menuSourceOf } from "./run-model";
 import { useRun } from "./run-store";
 import { ModelsAtWork, RunStat } from "./run-rail";
 import { StoreSwitcher } from "./store-lane";
@@ -51,7 +51,10 @@ export function RunView({ runId }: { runId: string }) {
     );
   }
 
-  const skipped = model.lanes.filter((l) => l.status === "skipped").map((l) => l.storeId);
+  const skippedLanes = model.lanes.filter((l) => l.status === "skipped");
+  const skipped = skippedLanes.filter((l) => l.skipKind !== "model").map((l) => l.storeId);
+  const modelSkipped = skippedLanes.filter((l) => l.skipKind === "model");
+  const anySkipped = skippedLanes.length > 0;
   const ratio = model.total ? model.done / model.total : 0;
   const live = run.status === "streaming" || run.status === "reconnecting";
   const cacheShare = model.promptTokens ? model.cachedTokens / model.promptTokens : 0;
@@ -62,7 +65,7 @@ export function RunView({ runId }: { runId: string }) {
   const shown = model.lanes.find((l) => l.storeId === shownId);
   const drafted = model.lanes.filter((l) => l.status === "done").length;
   const when = run.startedAt ? ` · ${runWhen(run.startedAt)}` : "";
-  const statusLabel = (run.status === "reconnecting" ? "Reconnecting, replaying the run log" : live ? "Live agent trace" : model.finished ? "Run finished" : "Stream ended") + when;
+  const statusLabel = (run.status === "reconnecting" ? "Reconnecting, replaying the run log" : live ? "Live agent trace" : model.finished ? (anySkipped ? `Run finished, ${skippedLanes.length} skipped` : "Run finished") : "Stream ended") + when;
 
   return (
     <Page>
@@ -79,6 +82,7 @@ export function RunView({ runId }: { runId: string }) {
             <span><b className="font-medium text-ink">{model.done} of {model.total}</b> stores</span><span className="text-faint">·</span>
             <span><b className="font-medium text-ink">{formatUsd(model.usd)}</b> spent</span><span className="text-faint">·</span>
             <span><b className="font-medium text-ink">{formatInt(model.toolCalls)}</b> tool calls</span>
+            {anySkipped ? <><span className="text-faint">·</span><span data-testid="run-skipped-count" className="text-warn-ink"><b className="font-medium">{skippedLanes.length}</b> skipped</span></> : null}
           </p>
         }
         actions={model.finished ? <ButtonLink data-testid="run-back" href="/app" variant="primary" size="lg" chevron>Review on the portfolio</ButtonLink> : null}
@@ -104,7 +108,10 @@ export function RunView({ runId }: { runId: string }) {
             {run.status === "detached" ? (
               <Notice tone="warn">The stream closed before the run finished. This is everything that arrived; the server keeps building, and the portfolio shows the editions once they land.</Notice>
             ) : null}
-            {model.runErrors.map((e, i) => <Notice key={i} tone="flag"><span className="font-mono text-[12px] text-flag">{e.code}</span> {e.message}</Notice>)}
+            {model.runErrors.map((e, i) => {
+              const skip = SKIP_CODES.has(e.code);
+              return <Notice key={i} tone={skip ? "warn" : "flag"} data-testid="run-error"><span className={skip ? "font-mono text-[12px] text-warn-ink" : "font-mono text-[12px] text-flag"}>{e.code}</span> {e.message}</Notice>;
+            })}
           </div>
         ) : null}
 
@@ -113,14 +120,25 @@ export function RunView({ runId }: { runId: string }) {
             <StoreSwitcher lanes={model.lanes} storeById={w.storeById} picked={shownId} onPick={setPicked} />
           ) : null}
           <TracePanel lane={shown} store={shown ? w.storeById(shown.storeId) : undefined} live={live} menuSource={menuSource} />
-          <div className={cx("grid gap-3", skipped.length > 0 && "lg:grid-cols-[minmax(0,1fr)_360px]")}>
+          <div className={cx("grid gap-3", anySkipped && "lg:grid-cols-[minmax(0,1fr)_360px]")}>
             <ModelsAtWork models={model.models} total={model.usd} />
-            {skipped.length ? (
-              <CardBand title="Skipped" icon={<Icon name="minus" />} className="self-start">
-                <p className="text-[14px] leading-5 text-ink-2">
-                  {skipped.map((id) => w.storeById(id)?.name ?? id).join(", ")} already {skipped.length === 1 ? "has" : "have"} approved items this week, so the build left {skipped.length === 1 ? "it" : "them"} alone.
-                </p>
-                {model.finished ? <div className="mt-3"><BuildButton storeIds={skipped} force size="sm" label="Rebuild and replace approvals" /></div> : null}
+            {anySkipped ? (
+              <CardBand title="Skipped" icon={<Icon name="minus" />} className="self-start" data-testid="run-skipped">
+                {skipped.length ? (
+                  <p className="text-[14px] leading-5 text-ink-2">
+                    {skipped.map((id) => w.storeById(id)?.name ?? id).join(", ")} already {skipped.length === 1 ? "has" : "have"} approved items this week, so the build left {skipped.length === 1 ? "it" : "them"} alone.
+                  </p>
+                ) : null}
+                {skipped.length && model.finished ? <div className="mt-3"><BuildButton storeIds={skipped} force size="sm" label="Rebuild and replace approvals" /></div> : null}
+                {modelSkipped.length ? (
+                  <div data-testid="run-skipped-model" className={skipped.length ? "mt-4" : undefined}>
+                    <p className="text-[14px] leading-5 text-ink-2">{modelSkipped[0].skipReason}</p>
+                    <p className="mt-1 text-[13px] leading-5 text-muted">
+                      Skipped: {modelSkipped.map((l) => w.storeById(l.storeId)?.name ?? l.storeId).join(", ")}. Nothing was changed or failed.
+                    </p>
+                    {model.finished ? <div className="mt-3"><BuildButton storeIds={modelSkipped.map((l) => l.storeId)} size="sm" label="Build these stores again" /></div> : null}
+                  </div>
+                ) : null}
               </CardBand>
             ) : null}
           </div>

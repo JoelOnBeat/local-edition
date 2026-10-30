@@ -94,6 +94,12 @@ never a raw stack or upstream body.
 - POST /api/editions/build accepts `{ storeIds?: string[] (max 50), force?: boolean }`. A store
   whose current-week edition has approved or edited items is skipped with an `error` event
   code `has_approvals` unless `force` is true. One build per workspace at a time (409 `build_running`).
+- A Token Factory model that answers 404 / `model_not_found`, or is missing from the cached `/v1/models` (read at most every
+  10 minutes), skips its step instead of failing the run. The agent model skips that store (`error` event code
+  `model_unavailable`, lane amber; the other stores build; the Workflow run ends `done_with_skips`, the JobRun stays `done`
+  with the skip in its note). A step inside a store that still builds (copy template, matching, review) is an `error` event
+  code `step_skipped`. POST /api/menu/read answers 503 `{ error, code: "model_unavailable" }` with `Retry-After`.
+  `GET /api/proof` steps may carry `skipped: { at, note }` until the role answers again. Copy and model ids are never rewritten on a 404.
 - The public card (GET /api/card/:token) is served only when the edition is `approved` and the
   card guardrail status is `passed` or `rewritten`; otherwise 404.
 - Spending routes (menu read, anchors search, build, regenerate, card, item edit) require the

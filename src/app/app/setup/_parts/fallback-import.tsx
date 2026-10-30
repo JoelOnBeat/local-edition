@@ -15,7 +15,7 @@ export function FallbackImport({ onMenu, onStores }: { onMenu: (items: MenuItem[
   const api = getApi();
   const [reading, setReading] = useState(false);
   const [photo, setPhoto] = useState<DropFile | null>(null);
-  const [photoMsg, setPhotoMsg] = useState<{ tone: "ok" | "flag"; text: string } | null>(null);
+  const [photoMsg, setPhotoMsg] = useState<{ tone: "ok" | "warn" | "flag"; text: string } | null>(null);
   const [csv, setCsv] = useState("");
   const [csvFile, setCsvFile] = useState<DropFile | null>(null);
   const [importing, setImporting] = useState(false);
@@ -35,7 +35,9 @@ export function FallbackImport({ onMenu, onStores }: { onMenu: (items: MenuItem[
       setPhotoMsg({ tone: "ok", text: `Read ${items.length} items from the photo.${check ? ` ${check} marked amber: check those prices.` : ""} Review them below, then save.` });
     } catch (e) {
       setPhoto({ name: file.name, size: file.size, detail: "Could not read it", tone: "flag" });
-      setPhotoMsg({ tone: "flag", text: (e as Error).message || "The photo could not be read. Try a sharper, straighter shot." });
+      // The vision model being unavailable is not the photo's fault: the plain note, in amber, with the retry hint.
+      const unavailable = (e as { code?: string }).code === "model_unavailable";
+      setPhotoMsg({ tone: unavailable ? "warn" : "flag", text: (e as Error).message || "The photo could not be read. Try a sharper, straighter shot." });
     } finally {
       setReading(false);
     }

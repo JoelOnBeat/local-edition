@@ -6,7 +6,7 @@ import { Icon, type IconName } from "../app-ui/icons";
 import { BrandMark, LogoTile } from "../app-ui/tiles";
 import { formatInt, formatMs, formatUsd, modelName } from "../lib/format";
 import { KICKER, itemHeadline } from "../edition/item-content";
-import { toolInfo, type TraceEntry } from "./run-model";
+import { SKIP_CODES, toolInfo, type TraceEntry } from "./run-model";
 
 /** One line of a store's trace on the dark panel: a tool-call card, a model-call row, a drafted item, the review, an error. */
 
@@ -64,9 +64,9 @@ export function TraceLine({ e, menuSource }: { e: TraceEntry; menuSource?: MenuI
           </span>
           <span className="flex-1" />
           {e.result ? (
-            <span className={cx("inline-flex shrink-0 items-center gap-1 text-[12px] font-medium", e.result.ok ? "text-band-own" : "text-[#FF6467]")}>
-              <Icon name={e.result.ok ? "check" : "x"} size={13} strokeWidth={2.4} />
-              {e.result.ok ? "ok" : "failed"}
+            <span data-testid="trace-tool-result" data-state={e.result.ok ? "ok" : e.skipped ? "skipped" : "failed"} className={cx("inline-flex shrink-0 items-center gap-1 text-[12px] font-medium", e.result.ok ? "text-band-own" : e.skipped ? "text-[#FCBB00]" : "text-[#FF6467]")}>
+              <Icon name={e.result.ok ? "check" : e.skipped ? "minus" : "x"} size={13} strokeWidth={2.4} />
+              {e.result.ok ? "ok" : e.skipped ? "skipped" : "failed"}
             </span>
           ) : (
             <Spinner className="size-3.5 shrink-0 text-band-ink-3" />
@@ -125,11 +125,13 @@ export function TraceLine({ e, menuSource }: { e: TraceEntry; menuSource?: MenuI
       </li>
     );
   }
+  // A skip with a note (an unavailable model, a store left alone) is amber; everything else here is a real failure and stays red.
+  const skip = SKIP_CODES.has(e.code);
   return (
-    <li className="le-enter flex gap-3 rounded-xl bg-[#FB2C36]/[.08] px-3 py-2.5 shadow-[inset_0_0_0_1px_rgb(251_44_54/.25)]">
-      <Icon name="alert" size={14} className="mt-0.5 shrink-0 text-[#FF6467]" />
+    <li data-testid="trace-error" data-code={e.code} data-tone={skip ? "warn" : "flag"} className={cx("le-enter flex gap-3 rounded-xl px-3 py-2.5", skip ? "bg-[#FCBB00]/[.08] shadow-[inset_0_0_0_1px_rgb(252_187_0/.25)]" : "bg-[#FB2C36]/[.08] shadow-[inset_0_0_0_1px_rgb(251_44_54/.25)]")}>
+      <Icon name={skip ? "minus" : "alert"} size={14} className={cx("mt-0.5 shrink-0", skip ? "text-[#FCBB00]" : "text-[#FF6467]")} />
       <p className="min-w-0 text-[13px] leading-5 text-band-ink-2 [overflow-wrap:anywhere]">
-        <span className="font-mono text-[12px] text-[#FF6467]">{e.code}</span> {e.message}
+        <span className={cx("font-mono text-[12px]", skip ? "text-[#FCBB00]" : "text-[#FF6467]")}>{e.code}</span> {e.message}
       </p>
     </li>
   );

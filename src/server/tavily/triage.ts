@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Chain, Store, TieInTriage } from "@/contract";
 import { UpstreamError } from "../http/errors";
+import { isModelUnavailable, modelLabel } from "../http/model-unavailable";
 import { MODELS, type TokenFactory } from "../tokenfactory/client";
 import { jsonOutput } from "../tokenfactory/json";
 import { priceUsd } from "../tokenfactory/spend";
@@ -185,7 +186,7 @@ export async function triageCandidate(
 /** A failed model call drops the listing with a plain reason; spend-cap and key errors are shown as such. */
 export function failedTriage(c: Candidate, e: unknown): Triaged {
   const code = e instanceof UpstreamError ? e.code : "error";
-  const why = code === "spend_cap" ? "the spend cap was reached" : "the model was unavailable";
+  const why = code === "spend_cap" ? "the spend cap was reached" : isModelUnavailable(e) ? `${modelLabel(MODELS.copy)} is unavailable on Token Factory right now` : "the model was unavailable";
   return { kept: false, reason: `Not checked: ${why}.`, title: cleanLine(c.title, 120), venue: null, date: null };
 }
 

@@ -96,11 +96,13 @@ export async function executeJob(run: JobRun, ctx: { repo: Repo; ports: JobPorts
   }
   // A store kept because head office already approved or edited it is a normal outcome, not a failure.
   const kept = errors.filter((c) => c === "has_approvals").length;
-  const problems = errors.filter((c) => c !== "has_approvals");
+  // A store skipped because its model was unavailable is not a failure either: it builds on the next run.
+  const skipped = errors.filter((c) => c === "model_unavailable").length;
+  const problems = errors.filter((c) => c !== "has_approvals" && c !== "model_unavailable" && c !== "step_skipped");
   const codes = [...new Set(problems)].join(", ");
-  const ok = finished && (editionIds.length > 0 || kept > 0);
+  const ok = finished && (editionIds.length > 0 || kept > 0 || skipped > 0);
   const note = ok
-    ? `Built ${editionIds.length} of ${run.storeIds.length} editions${kept ? `, kept ${kept} with approvals` : ""}${problems.length ? `; ${problems.length} error(s): ${codes}` : ""}. Drafts await approval.`
+    ? `Built ${editionIds.length} of ${run.storeIds.length} editions${kept ? `, kept ${kept} with approvals` : ""}${skipped ? `, skipped ${skipped} (a model was unavailable; they build on the next run)` : ""}${problems.length ? `; ${problems.length} error(s): ${codes}` : ""}. Drafts await approval.`
     : `Build failed${problems.length ? ` (${codes})` : ""}.`;
   const done: JobRun = { ...run, status: ok ? "done" : "failed", finishedAt: ctx.now().toISOString(), note };
   await recordJobRun(repo, done);

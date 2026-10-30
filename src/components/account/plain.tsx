@@ -5,8 +5,10 @@ import type { ShownError } from "../lib/use-async";
 
 export function ErrorLine({ error, testId = "error" }: { error: (ShownError & { retryAfterSeconds?: number }) | undefined; testId?: string }) {
   if (!error) return null;
+  // A model that is down for a while is not the user's mistake: amber and polite, not red.
+  const unavailable = error.code === "model_unavailable";
   return (
-    <p role="alert" data-testid={testId} data-code={error.code ?? ""} data-retry-after={error.retryAfterSeconds ?? ""} className="text-[13px] leading-5 text-flag [overflow-wrap:anywhere]">
+    <p role={unavailable ? "status" : "alert"} data-testid={testId} data-code={error.code ?? ""} data-tone={unavailable ? "warn" : "flag"} data-retry-after={error.retryAfterSeconds ?? ""} className={`text-[13px] leading-5 ${unavailable ? "text-warn-ink" : "text-flag"} [overflow-wrap:anywhere]`}>
       {error.message}
     </p>
   );

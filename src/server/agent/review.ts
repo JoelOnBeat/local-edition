@@ -3,13 +3,14 @@ import { ReviewFields, ReviewVerdict, type AgentEvent, type Edition } from "@/co
 import { newId } from "@/lib/ids";
 import { createLogger } from "../log";
 import { HttpError, UpstreamError } from "../http/errors";
+import { asModelUnavailable, reviewSkipNote, STEP_SKIPPED } from "../http/model-unavailable";
 import { findClashes, type StoreEdition } from "./clash";
 import { FIXTURE_REVIEWER, fixtureVerdicts } from "./review-fixture";
 import { extractJson } from "./json";
 import { flush, withMetrics } from "./metrics";
 import { REVIEW_FALLBACK_MODEL, REVIEW_MODEL, type AgentDeps, type ChatMessage, type Reasoning } from "./ports";
 import { REVIEW_JSON_SCHEMA, REVIEW_SCHEMA_NAME, reviewSystem, reviewUser } from "./review-prompt";
-import { recordSteps } from "./stats";
+import { recordModelSkip, recordSteps } from "./stats";
 import { clip, withTimeout } from "./util";
 
 const log = createLogger("agent:review");
@@ -112,6 +113,17 @@ async function* review(params: ReviewParams, deps: AgentDeps): AsyncGenerator<Ag
     verdicts = await callReviewer(deps, REVIEW_MODEL, messages, REVIEW_REASONING);
   } catch (e) {
     if (e instanceof UpstreamError && e.code === "spend_cap") { yield* flush(deps); yield err("spend_cap", "The model spend cap has been reached, so the review stopped."); return; }
+    // Ultra is gone (404 / model_not_found / not listed): the review is skipped, not handed to another model. Editions stay as they are, unreviewed.
+    const gone = asModelUnavailable(e, REVIEW_MODEL);
+    if (gone) {
+      const note = reviewSkipNote(gone.model);
+      log.warn("review skipped, model unavailable", { model: gone.model });
+      yield* flush(deps);
+      yield err(STEP_SKIPPED, note);
+      await recordModelSkip(deps.repo, "review", note, deps.now());
+      yield { type: "run_done", runId, editionIds: entries.map((x) => x.edition.id) };
+      return;
+    }
     log.warn("Ultra review failed; falling back", { err: e instanceof UpstreamError ? e.code : (e as Error)?.name });
     yield* flush(deps);
     yield err("reviewer_fallback", "Nemotron 3 Ultra did not answer, so Nemotron 3.5 Super VL reviewed this week instead.");

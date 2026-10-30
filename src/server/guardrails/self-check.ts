@@ -1,4 +1,5 @@
 import { UpstreamError } from "../http/errors";
+import { isModelUnavailable, modelLabel } from "../http/model-unavailable";
 import { MODELS, type TokenFactory } from "../tokenfactory";
 
 /**
@@ -73,6 +74,7 @@ export async function selfCheckOutput(tf: TokenFactory, text: string, kind: stri
   } catch (e) {
     // The shared spend cap (or a sub-budget) refusing the call is not a model outage: it must not trip the outage breaker.
     if (e instanceof UpstreamError && e.code === "spend_cap") return { outcome: "skipped", why: "the model spend cap is reached", capped: true };
+    if (isModelUnavailable(e)) return { outcome: "skipped", why: `${modelLabel(SELF_CHECK_MODEL)} is unavailable on Token Factory right now` };
     return { outcome: "skipped", why: "the model call failed" };
   }
   if (res.mode === "fixture") return { outcome: "skipped", why: "the model is not live in this mode" };

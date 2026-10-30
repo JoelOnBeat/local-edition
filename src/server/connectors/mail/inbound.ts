@@ -71,6 +71,13 @@ export async function processInboundMail(deps: CommsDeps, mail: InboundMail): Pr
     summary: `${sender.name ?? store.name} replied (${verdict.category.replace("_", " ")}): ${verdict.summary}`,
   });
 
+  if (verdict.skipped) {
+    // Said in the connection's sync log too: the model step was skipped, the reply was still sorted.
+    await recordEvent(deps.store, workspaceId, {
+      provider: mail.provider, direction: "in", kind: "mail.classify_skipped", storeId: store.id, editionId: edition.id, ok: true, summary: verdict.skipped,
+    });
+  }
+
   if (verdict.category === "change_request") {
     // Proactive, never automatic: head office sees a suggested regenerate and decides.
     const special = specialOf(edition);

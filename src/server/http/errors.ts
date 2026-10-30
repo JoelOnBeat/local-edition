@@ -12,7 +12,11 @@ export type UpstreamErrorCode =
   | "replay_miss"
   | "no_fixture"
   | "missing_key"
-  | "spend_cap";
+  | "spend_cap"
+  /** Token Factory answered 404, `model_not_found`, or does not list the model (see `model-unavailable.ts`). */
+  | "model_unavailable";
+
+export type UpstreamHint = "response_format_unsupported" | "model_not_found";
 
 export class UpstreamError extends Error {
   readonly code: UpstreamErrorCode;
@@ -20,13 +24,13 @@ export class UpstreamError extends Error {
   readonly status?: number;
   readonly retryable: boolean;
   /** Machine hint derived from the upstream error body (never the body itself): the provider rejected `response_format`. */
-  readonly hint?: "response_format_unsupported";
+  readonly hint?: UpstreamHint;
 
   constructor(
     code: UpstreamErrorCode,
     provider: string,
     message: string,
-    opts: { status?: number; retryable?: boolean; hint?: "response_format_unsupported" } = {},
+    opts: { status?: number; retryable?: boolean; hint?: UpstreamHint } = {},
   ) {
     super(message);
     this.name = "UpstreamError";
@@ -68,6 +72,7 @@ export function upstreamHttpStatus(err: UpstreamError): number {
     case "rate_limited": return 429;
     case "timeout": return 504;
     case "missing_key": return 503;
+    case "model_unavailable": return 503;
     default: return 502;
   }
 }
