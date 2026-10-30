@@ -3,6 +3,7 @@
  *
  *   npx tsx scripts/comms-consent.ts link gmail|outlook      prints the consent URL and the connected-account id
  *   npx tsx scripts/comms-consent.ts status <connected_account_id>
+ *   npx tsx scripts/comms-consent.ts trigger gmail|outlook <connected_account_id>   real-time new-mail trigger, delivered to our webhook only (egress_url)
  *
  * Environment (never printed): COMPOSIO_API_KEY, COMPOSIO_AUTH_CONFIG_GMAIL / COMPOSIO_AUTH_CONFIG_OUTLOOK, optional COMPOSIO_SAMPLE_USER_ID (default le-sample),
  * APP_URL. The connected-account id is not a secret; it becomes the COMPOSIO_SAMPLE_GMAIL_ACCOUNT variable.
@@ -31,8 +32,19 @@ async function main(): Promise<void> {
   } else if (cmd === "status" && arg) {
     const out = (await call(`/connected_accounts/${encodeURIComponent(arg)}`)) as { id?: string; status?: string; toolkit?: { slug?: string } };
     process.stdout.write(`id=${out.id}\ntoolkit=${out.toolkit?.slug}\nstatus=${out.status}\n`); // the rest of the response holds OAuth state: never printed
+  } else if (cmd === "trigger" && (arg === "gmail" || arg === "outlook") && process.argv[4]) {
+    const appUrl = (process.env.APP_URL ?? "https://localedition.pages.dev").replace(/\/+$/, "");
+    const slug = arg === "gmail" ? "GMAIL_NEW_GMAIL_MESSAGE" : "OUTLOOK_MESSAGE_TRIGGER";
+    const out = await call(`/trigger_instances/${slug}/upsert`, {
+      method: "POST",
+      body: JSON.stringify({
+        user_id: process.env.COMPOSIO_SAMPLE_USER_ID ?? "le-sample", connected_account_id: process.argv[4], egress_url: `${appUrl}/api/connectors/mail/webhook`,
+        trigger_config: arg === "gmail" ? { interval: 1, labelIds: "INBOX", userId: "me" } : { folder_id: "inbox" },
+      }),
+    });
+    process.stdout.write(`trigger_id=${String(out.trigger_id)}\n`);
   } else {
-    process.stderr.write("usage: comms-consent.ts link gmail|outlook | status <connected_account_id>\n");
+    process.stderr.write("usage: comms-consent.ts link gmail|outlook | status <connected_account_id> | trigger gmail|outlook <connected_account_id>\n");
     process.exit(2);
   }
 }

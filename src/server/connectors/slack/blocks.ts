@@ -32,14 +32,17 @@ export interface DigestEntry {
 /** `<!date^unix^{time}|fallback>` renders in each viewer's own time zone. */
 const clock = (atUnix: number): string => `<!date^${atUnix}^{time}|${new Date(atUnix * 1000).toISOString().slice(11, 16)} UTC>`;
 
+/** Slack user ids are alphanumeric; anything else would break out of the `<@...>` mention. */
+const mention = (id: string): string => `<@${id.replace(/[^A-Za-z0-9]/g, "")}>`;
+
 function resolutionText(r: Resolution): string {
   switch (r.kind) {
-    case "approved": return `:white_check_mark: Approved by <@${r.userId}> at ${clock(r.atUnix)}`;
-    case "partial": return `:warning: <@${r.userId}> approved ${r.approved} of ${r.total} items at ${clock(r.atUnix)}. The rest need a look in Local Edition.`;
-    case "regenerating": return `:hourglass_flowing_sand: <@${r.userId}> asked for a new special at ${clock(r.atUnix)}. It can take a minute; if it is not in Local Edition by then, press Regenerate again.`;
-    case "regenerated": return `:arrows_counterclockwise: New special requested by <@${r.userId}> at ${clock(r.atUnix)}. Review it in Local Edition.`;
+    case "approved": return `:white_check_mark: Approved by ${mention(r.userId)} at ${clock(r.atUnix)}`;
+    case "partial": return `:warning: ${mention(r.userId)} approved ${r.approved} of ${r.total} items at ${clock(r.atUnix)}. The rest need a look in Local Edition.`;
+    case "regenerating": return `:hourglass_flowing_sand: ${mention(r.userId)} asked for a new special at ${clock(r.atUnix)}. It can take a minute; if it is not in Local Edition by then, press Regenerate again.`;
+    case "regenerated": return `:arrows_counterclockwise: A new special is ready for review (asked for by ${mention(r.userId)} at ${clock(r.atUnix)}). Open it in Local Edition to approve.`;
     case "app": return `:white_check_mark: Approved in Local Edition at ${clock(r.atUnix)}`;
-    case "failed": return `:x: <@${r.userId}> tried at ${clock(r.atUnix)}, but it did not go through: ${esc(r.reason)}`;
+    case "failed": return `:x: ${mention(r.userId)} tried at ${clock(r.atUnix)}, but it did not go through: ${esc(r.reason)}`;
   }
 }
 

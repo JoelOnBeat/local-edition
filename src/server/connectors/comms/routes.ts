@@ -32,7 +32,14 @@ export const putTargets = route(commsRoutes.putTargets, "json", async ({ body },
   return { targets: await deps.store.listTargets(workspaceId) };
 });
 
-export const slackInstall = route(commsRoutes.slackInstall, "none", async (_in, { workspaceId }, deps) => redirect(await installUrl(deps, workspaceId)));
+/** A browser navigation, not an API call: a failure goes back to the connections page with a code, not a JSON body. */
+export const slackInstall = route(commsRoutes.slackInstall, "none", async (_in, { workspaceId }, deps) => {
+  try {
+    return redirect(await installUrl(deps, workspaceId));
+  } catch (e) {
+    return redirect(`${deps.env.appUrl}/app/connections?error=${e instanceof HttpError ? e.code : "slack_failed"}`);
+  }
+});
 
 export const postSlackDigest = route(commsRoutes.postDigest, "json", ({ body }, { workspaceId }, deps) => postDigest(deps, workspaceId, body.editionIds));
 

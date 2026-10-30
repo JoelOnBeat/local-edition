@@ -237,7 +237,7 @@ describe("Approve and Regenerate buttons", () => {
     expect(params.editionId).toBe(edition.id);
     expect(edition.items.find((i) => i.id === params.itemId)?.kind).toBe("special");
     expect(allText(updates(h)[0])).toContain("asked for a new special");
-    expect(allText(updates(h)[updates(h).length - 1])).toContain("New special requested by <@U0HANNAH>");
+    expect(allText(updates(h)[updates(h).length - 1])).toContain("A new special is ready for review (asked for by <@U0HANNAH>");
     expect((await h.repo.getEdition(edition.id))!.status).toBe("draft");
   });
 
