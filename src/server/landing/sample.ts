@@ -16,7 +16,7 @@ export const LANDING_TTL_SECONDS = 600;
 const FEATURED_STORE = "store_williamsburg";
 const DONE = new Set(["approved", "edited"]);
 
-const tagOf = (t: BlockTag): LandingTag => ({ name: t.name, affinity: t.affinity, lift: t.lift });
+const tagOf = (t: BlockTag): LandingTag => ({ name: t.name.trim(), affinity: t.affinity, lift: t.lift });
 const byLift = (a: BlockTag, b: BlockTag) => b.lift - a.lift || b.affinity - a.affinity;
 
 function itemText(i: EditionItem): string {

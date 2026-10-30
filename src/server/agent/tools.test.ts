@@ -53,6 +53,22 @@ describe("artists_local genres", () => {
   });
 });
 
+describe("places_near tag filter", () => {
+  it("tops up from the unfiltered list when the tag filter leaves too few places, and does not ask twice when it found enough", async () => {
+    const h = await harness({ storeCount: 1 });
+    const sc = { chain: (await h.repo.getChain((await h.repo.getWorkspace(h.workspaceId))!.chainId))!, store: (await h.repo.getStore(h.storeIds[0]))!, menu: [], weekOf: WEEK_OF };
+    const inner = h.deps.qloo.placesNear;
+    const asked: (string[] | undefined)[] = [];
+    h.deps.qloo = { ...h.deps.qloo, placesNear: async (s, c, o) => { asked.push(o.tagIds); return o.tagIds?.length ? { items: [], evidence: [] } : inner(s, c, o); } };
+    const out = await TOOL_BY_NAME.get("places_near")!.run({ sc, deps: h.deps, mem: new ToolMemory() }, { tagIds: ["urn:tag:genre:place:art_gallery"] });
+    expect(asked).toEqual([["urn:tag:genre:place:art_gallery"], undefined]);
+    expect(out.summary).toContain("tag filter was dropped");
+    asked.length = 0;
+    await TOOL_BY_NAME.get("places_near")!.run({ sc, deps: h.deps, mem: new ToolMemory() }, {});
+    expect(asked).toHaveLength(1);
+  });
+});
+
 describe("Qloo fixture: model-chosen genres", () => {
   const ask = (slug: string, tags: string[]) => artistsLocal(store(slug), [], { tags, take: 20 }, fixtureDeps());
 

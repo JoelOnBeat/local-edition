@@ -30,6 +30,9 @@ const blockProfile: ToolDef<typeof emptyArgs> = {
   },
 };
 
+/** A partner needs a few places to rank. */
+const MIN_PLACES = 3;
+
 const placesArgs = z.object({ tagIds: z.array(z.string().min(1)).max(5).optional(), limit: limitSchema });
 const placesNear: ToolDef<typeof placesArgs> = {
   name: "places_near",
@@ -44,11 +47,22 @@ const placesNear: ToolDef<typeof placesArgs> = {
   },
   schema: placesArgs,
   async run({ sc, deps, mem }, args) {
-    const { items, evidence } = await deps.qloo.placesNear(sc.store, sc.chain, args);
+    const found = await deps.qloo.placesNear(sc.store, sc.chain, args);
+    let widened = false;
+    if (args.tagIds?.length && found.items.length < MIN_PLACES) {
+      // Qloo's tag filter is narrow (live answers often return none): top up from the unfiltered list, tag matches first. Real answers only.
+      const rest = await deps.qloo.placesNear(sc.store, sc.chain, { limit: args.limit });
+      const have = new Set(found.items.map((p) => p.entity.entityId));
+      const extra = rest.items.filter((p) => !have.has(p.entity.entityId));
+      widened = extra.length > 0;
+      found.items = [...found.items, ...extra];
+      found.evidence = [...found.evidence, ...rest.evidence];
+    }
+    const { items, evidence } = found;
     const ids = mem.addEvidence(evidence);
     const entries = mem.addPlaces(items);
     return {
-      summary: `${entries.length} places within reach`,
+      summary: `${entries.length} places within reach${widened ? " (too few matched those tags, so the tag filter was dropped)" : ""}`,
       payload: { places: entries.map((e) => ({ ref: e.ref, name: e.place.entity.name, distanceM: Math.round(e.place.distanceM), tags: e.place.tags.slice(0, 3), affinity: round(e.place.affinity) })) },
       evidenceIds: ids,
     };
