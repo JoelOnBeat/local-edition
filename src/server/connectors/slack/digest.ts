@@ -7,7 +7,8 @@ import { sha256Hex } from "../comms/crypto";
 import { takeSampleQuota, type CommsDeps } from "../comms/deps";
 import { recordDelivery, recordEvent } from "../comms/events";
 import type { DigestRow, Resolution } from "../comms/store";
-import { postMessage, updateMessage, respondUrl } from "./api";
+import { updateMessage, respondUrl } from "./api";
+import { sendMessage } from "./post";
 import { describeFailure, getBinding, touchSync } from "./binding";
 import { DIGEST_CHUNK, digestMessage, type DigestEntry } from "./blocks";
 
@@ -64,13 +65,13 @@ export async function postDigest(deps: CommsDeps, workspaceId: string, editionId
   for (const [index, chunk] of chunks.entries()) {
     const msg = digestMessage({ chainName: picked.chainName, weekOf, entries: chunk, appUrl: deps.env.appUrl, part: index + 1, parts: chunks.length });
     try {
-      const sent = await postMessage(binding.token, { channel, ...msg }, deps.fetchImpl);
+      const sent = await sendMessage(deps, binding, { channel, ...msg });
       const at = deps.now().toISOString();
       for (const entry of chunk) {
         const row: DigestRow = { workspaceId, editionId: entry.edition.id, channelId: sent.channel, ts: sent.ts, chainName: picked.chainName, weekOf, part: index + 1, parts: chunks.length, postedAt: at, resolution: null };
         await deps.store.putDigest(row);
         deliveries.push(await recordDelivery(deps.store, workspaceId, {
-          provider: "slack", editionId: entry.edition.id, itemId: null, status: "sent", externalId: `${sent.channel}:${sent.ts}`, url: null, at, note: `Digest in #${channel}`,
+          provider: "slack", editionId: entry.edition.id, itemId: null, status: "sent", externalId: sent.ts ? `${sent.channel}:${sent.ts}` : null, url: null, at, note: `Digest in #${channel}`,
         }, `digest:${entry.edition.id}`));
       }
       await recordEvent(deps.store, workspaceId, { provider: "slack", direction: "out", kind: "digest.posted", summary: `Digest for ${chunk.length} store${chunk.length === 1 ? "" : "s"} posted to #${channel}.`, storeId: null, editionId: null, ok: true });
@@ -91,8 +92,8 @@ export async function postDigest(deps: CommsDeps, workspaceId: string, editionId
 }
 
 /** Rebuilds a posted digest message from stored state and edits it in Slack. Falls back to the click's response_url. */
-export async function refreshDigestMessage(deps: CommsDeps, workspaceId: string, row: DigestRow, token: string, responseUrl?: string): Promise<void> {
-  const rows = (await deps.store.db.list(workspaceId, "digest", 200)).map((r) => JSON.parse(r.json) as DigestRow).filter((r) => r.ts === row.ts && r.channelId === row.channelId);
+export async function refreshDigestMessage(deps: CommsDeps, workspaceId: string, row: DigestRow, token: string | null, responseUrl?: string): Promise<void> {
+  const rows = (await deps.store.db.list(workspaceId, "digest", 200)).map((r) => JSON.parse(r.json) as DigestRow).filter((r) => r.ts === row.ts && r.channelId === row.channelId && (row.ts !== null || r.postedAt === row.postedAt));
   const entries: DigestEntry[] = [];
   for (const r of rows) {
     const edition = await deps.repo.getEdition(r.editionId);
@@ -102,7 +103,7 @@ export async function refreshDigestMessage(deps: CommsDeps, workspaceId: string,
   entries.sort((a, b) => a.store.name.localeCompare(b.store.name));
   const msg = digestMessage({ chainName: row.chainName, weekOf: row.weekOf, entries, appUrl: deps.env.appUrl, part: row.part, parts: row.parts });
   try {
-    if (row.channelId && row.ts) await updateMessage(token, { channel: row.channelId, ts: row.ts, ...msg }, deps.fetchImpl);
+    if (token && row.channelId && row.ts) await updateMessage(token, { channel: row.channelId, ts: row.ts, ...msg }, deps.fetchImpl);
     else if (responseUrl) await respondUrl(responseUrl, { replace_original: true, ...msg }, deps.fetchImpl);
   } catch (e) {
     log.warn("chat.update failed, trying response_url", { err: e });

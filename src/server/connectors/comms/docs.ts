@@ -18,6 +18,8 @@ export interface DocDb {
   /** Newest first by `at`. */
   list(workspaceId: string, kind: string, limit: number): Promise<DocRow[]>;
   findByRef(kind: string, ref: string): Promise<DocRow | null>;
+  /** Newest first by `at`, across workspaces (store ids are unique per workspace). */
+  listByRef(kind: string, ref: string, limit: number): Promise<DocRow[]>;
   delete(workspaceId: string, kind: string, key?: string): Promise<void>;
   /** True the first time `key` is claimed; false when it already was (or is held). */
   claim(key: string, nowMs: number): Promise<boolean>;
@@ -35,6 +37,7 @@ export function createMemoryDocDb(): DocDb {
       return [...rows.values()].filter((r) => r.workspaceId === w && r.kind === k).sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);
     },
     async findByRef(kind, ref) { return [...rows.values()].find((r) => r.kind === kind && r.ref === ref) ?? null; },
+    async listByRef(kind, ref, limit) { return [...rows.values()].filter((r) => r.kind === kind && r.ref === ref).sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit); },
     async delete(w, k, key) {
       for (const [name, r] of rows) if (r.workspaceId === w && r.kind === k && (key === undefined || r.key === key)) rows.delete(name);
     },
@@ -63,6 +66,10 @@ export function createD1DocDb(db: D1Like): DocDb {
     async findByRef(kind, ref) {
       const r = await db.prepare("SELECT * FROM comms_docs WHERE kind = ? AND ref = ? LIMIT 1").bind(kind, ref).first<Raw>();
       return r ? fromRaw(r) : null;
+    },
+    async listByRef(kind, ref, limit) {
+      const res = await db.prepare("SELECT * FROM comms_docs WHERE kind = ? AND ref = ? ORDER BY at DESC LIMIT ?").bind(kind, ref, limit).all<Raw>();
+      return (res.results ?? []).map(fromRaw);
     },
     async delete(w, k, key) {
       if (key === undefined) await db.prepare("DELETE FROM comms_docs WHERE workspace_id = ? AND kind = ?").bind(w, k).run();

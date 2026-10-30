@@ -63,7 +63,7 @@ describe("sending the card on approval", () => {
     const [call] = sent(h);
     expect(call.headers["x-api-key"]).toBe("ck_test_not_real");
     const body = JSON.parse(call.body) as { connected_account_id: string; user_id: string; endpoint: string; body: { raw: string } };
-    expect(body).toMatchObject({ connected_account_id: "ca_sample_gmail", user_id: h.workspace.id, endpoint: "https://gmail.googleapis.com/gmail/v1/users/me/messages/send" });
+    expect(body).toMatchObject({ connected_account_id: "ca_sample_gmail", user_id: "le-sample", endpoint: "https://gmail.googleapis.com/gmail/v1/users/me/messages/send" });
     const mime = Buffer.from(body.body.raw.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
     expect(mime).toContain("To: \"Williamsburg manager\" <test-inbox@example.com>");
     expect(mime).toContain("multipart/alternative");

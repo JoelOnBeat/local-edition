@@ -236,7 +236,8 @@ describe("Approve and Regenerate buttons", () => {
     const params = regenerateMock.mock.calls[0][0] as { editionId: string; itemId: string };
     expect(params.editionId).toBe(edition.id);
     expect(edition.items.find((i) => i.id === params.itemId)?.kind).toBe("special");
-    expect(allText(updates(h)[0])).toContain("New special requested by <@U0HANNAH>");
+    expect(allText(updates(h)[0])).toContain("asked for a new special");
+    expect(allText(updates(h)[updates(h).length - 1])).toContain("New special requested by <@U0HANNAH>");
     expect((await h.repo.getEdition(edition.id))!.status).toBe("draft");
   });
 
@@ -244,7 +245,7 @@ describe("Approve and Regenerate buttons", () => {
     const edition = h.editions[0];
     regenerateMock.mockImplementation(async function* (): AsyncGenerator<AgentEvent> { yield { type: "error", code: "spend_cap", message: "The spend cap was reached." }; });
     await handleInteraction(h.deps, click(h, edition.id, "regenerate"));
-    expect(allText(updates(h)[0])).toContain("The spend cap was reached.");
+    expect(allText(updates(h)[updates(h).length - 1])).toContain("The spend cap was reached.");
     regenerateMock.mockImplementation(async function* (): AsyncGenerator<AgentEvent> { /* ok */ });
     await handleInteraction(h.deps, click(h, edition.id, "regenerate"));
     expect(regenerateMock).toHaveBeenCalledTimes(2);

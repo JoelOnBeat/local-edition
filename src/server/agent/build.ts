@@ -118,7 +118,8 @@ async function* buildStore(deps: AgentDeps, sc: StoreContext, runId: string, for
   yield { type: "store_started", storeId: store.id };
 
   const issueNo = existing?.issueNo ?? (await nextIssueNo(deps, store, weekOf));
-  const { set, mem, usedFallback } = yield* runStoreAgent({ sc, deps });
+  const signals = await deps.storeSignals?.(store.id).catch(() => []);
+  const { set, mem, usedFallback } = yield* runStoreAgent({ sc, deps, signals });
   const checked = evidenceCheck(set, mem);
   for (const d of checked.dropped) yield err("item_dropped", dropMessage(d.kind, d.reason), store.id);
   // The evidence verifier recomputes lifts and re-checks every cited id against the Qloo payload; drops announce themselves.

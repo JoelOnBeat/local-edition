@@ -36,6 +36,7 @@ function resolutionText(r: Resolution): string {
   switch (r.kind) {
     case "approved": return `:white_check_mark: Approved by <@${r.userId}> at ${clock(r.atUnix)}`;
     case "partial": return `:warning: <@${r.userId}> approved ${r.approved} of ${r.total} items at ${clock(r.atUnix)}. The rest need a look in Local Edition.`;
+    case "regenerating": return `:hourglass_flowing_sand: <@${r.userId}> asked for a new special at ${clock(r.atUnix)}. It can take a minute; if it is not in Local Edition by then, press Regenerate again.`;
     case "regenerated": return `:arrows_counterclockwise: New special requested by <@${r.userId}> at ${clock(r.atUnix)}. Review it in Local Edition.`;
     case "app": return `:white_check_mark: Approved in Local Edition at ${clock(r.atUnix)}`;
     case "failed": return `:x: <@${r.userId}> tried at ${clock(r.atUnix)}, but it did not go through: ${esc(r.reason)}`;

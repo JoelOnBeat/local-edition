@@ -18,7 +18,7 @@ export async function resolveMailConn(deps: CommsDeps, workspaceId: string, isSa
     if (row?.status === "active") return row;
   }
   if (isSample && deps.env.sampleGmailAccount) {
-    return { workspaceId, provider: "gmail", connectedAccountId: deps.env.sampleGmailAccount, status: "active", accountLabel: null, triggerId: null, createdAt: deps.now().toISOString(), lastSyncAt: null, error: null };
+    return { workspaceId, provider: "gmail", connectedAccountId: deps.env.sampleGmailAccount, composioUserId: deps.env.sampleComposioUser, status: "active", accountLabel: null, triggerId: null, createdAt: deps.now().toISOString(), lastSyncAt: null, error: null };
   }
   return null;
 }

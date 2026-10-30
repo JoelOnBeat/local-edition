@@ -6,7 +6,9 @@ import { authTest, SlackApiError } from "./api";
 
 /** The Slack credentials a workspace posts with: its own OAuth install, or (sample chain only) the server's bot-token secret. */
 export interface SlackBinding {
-  token: string;
+  /** Null in incoming-webhook mode, which can post but not edit messages or pick a channel. */
+  token: string | null;
+  webhookUrl: string | null;
   install: SlackInstallRow;
 }
 
@@ -15,13 +17,14 @@ export async function getBinding(deps: CommsDeps, workspaceId: string, isSample:
   if (install?.botTokenSealed) {
     if (!deps.env.encKey) return null;
     try {
-      return { token: await decryptToken(install.botTokenSealed, deps.env.encKey, workspaceId), install };
+      return { token: await decryptToken(install.botTokenSealed, deps.env.encKey, workspaceId), webhookUrl: null, install };
     } catch {
       await markError(deps, workspaceId, install, "The stored Slack token could not be read. Reconnect Slack.");
       return null;
     }
   }
-  if (install?.source === "bot_token_secret" && deps.env.slackBotToken) return { token: deps.env.slackBotToken, install };
+  if (install?.source === "bot_token_secret" && deps.env.slackBotToken) return { token: deps.env.slackBotToken, webhookUrl: null, install };
+  if (install?.source === "incoming_webhook" && deps.env.slackWebhookUrl) return { token: null, webhookUrl: deps.env.slackWebhookUrl, install };
   if (!install && isSample && deps.env.slackBotToken) {
     // First use by a sample workspace: learn which Slack workspace the secret belongs to, so clicks can be checked against it.
     const team = await authTest(deps.env.slackBotToken, deps.fetchImpl).catch(() => null);
@@ -31,7 +34,15 @@ export async function getBinding(deps: CommsDeps, workspaceId: string, isSample:
       source: "bot_token_secret", createdAt: deps.now().toISOString(), lastSyncAt: null, error: null,
     };
     await deps.store.putSlackInstall(install);
-    return { token: deps.env.slackBotToken, install };
+    return { token: deps.env.slackBotToken, webhookUrl: null, install };
+  }
+  if (!install && isSample && deps.env.slackWebhookUrl && deps.env.slackTeamId) {
+    install = {
+      workspaceId, teamId: deps.env.slackTeamId, teamName: null, botTokenSealed: null, headOfficeChannel: deps.env.sampleHeadOfficeChannel,
+      source: "incoming_webhook", createdAt: deps.now().toISOString(), lastSyncAt: null, error: null,
+    };
+    await deps.store.putSlackInstall(install);
+    return { token: null, webhookUrl: deps.env.slackWebhookUrl, install };
   }
   return null;
 }

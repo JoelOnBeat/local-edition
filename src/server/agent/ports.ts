@@ -188,6 +188,8 @@ export interface AgentDeps {
   tf: TokenFactoryPort;
   guardrails: GuardrailsPort;
   now(): Date;
+  /** What this store's managers told head office in recent weeks (lane B3, from reply emails). Optional; untrusted text, used as data only. */
+  storeSignals?: (storeId: string) => Promise<{ category: string; summary: string }[]>;
   /** Tool and model deadlines; tests shrink them. */
   limits?: Partial<AgentLimits>;
   /** Collects `step_metrics` for every model call; set by `withMetrics` at the entry points. */

@@ -211,8 +211,8 @@ describe("next week's build input", () => {
     const { h } = await sentCardHarness({ chat: (r) => MODEL_JSON(String(r.messages[1].content).toLowerCase().includes("gone by") ? "sold_out" : "other", "Summary line.") });
     await processInboundMail(h.deps, { provider: "gmail", messageId: "a", threadId: "thr_w", from: "test-inbox@example.com", subject: "Re: x", text: "Gone by 11 again." });
     await processInboundMail(h.deps, { provider: "gmail", messageId: "b", threadId: "thr_w", from: "test-inbox@example.com", subject: "Re: x", text: "Thanks, printed it." });
-    const signals = await storeSignals(h.deps, h.workspace.id, h.editions[0].storeId);
+    const signals = await storeSignals(h.deps, h.editions[0].storeId);
     expect(signals).toEqual([{ category: "sold_out", summary: "Summary line.", at: expect.any(String) }]);
-    expect(await storeSignals(h.deps, h.workspace.id, h.editions[1].storeId)).toEqual([]);
+    expect(await storeSignals(h.deps, h.editions[1].storeId)).toEqual([]);
   });
 });

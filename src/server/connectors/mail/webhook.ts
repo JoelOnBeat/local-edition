@@ -95,7 +95,7 @@ export async function handleComposioEvent(deps: CommsDeps, rawBody: string): Pro
   const client = new ComposioClient(deps.env.composioApiKey, deps.fetchImpl);
   const mail = await toInboundMail(slug, envelope.data, async (messageId) => {
     if (!conn) return null;
-    const r = await client.execute(COMPOSIO_TOOLS.outlookGet, { userId: conn.workspaceId, connectedAccountId: conn.connectedAccountId, arguments: { message_id: messageId } });
+    const r = await client.execute(COMPOSIO_TOOLS.outlookGet, { userId: conn.composioUserId ?? conn.workspaceId, connectedAccountId: conn.connectedAccountId, arguments: { message_id: messageId } });
     const body = (r.data as { response_data?: { body?: { content?: string; contentType?: string } } } | null)?.response_data?.body;
     return body?.content ? (body.contentType === "html" ? stripTags(body.content) : body.content) : null;
   });

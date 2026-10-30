@@ -1,0 +1,20 @@
+{
+  "display_information": {
+    "name": "Local Edition",
+    "description": "Weekly store editions for head office: approve in Slack, staff cards land in each store's channel.",
+    "background_color": "#1b1915"
+  },
+  "features": {
+    "bot_user": { "display_name": "Local Edition", "always_online": false }
+  },
+  "oauth_config": {
+    "redirect_urls": ["https://localedition.pages.dev/api/connectors/slack/callback"],
+    "scopes": { "bot": ["chat:write", "chat:write.public", "channels:read"] }
+  },
+  "settings": {
+    "interactivity": { "is_enabled": true, "request_url": "https://localedition.pages.dev/api/connectors/slack/interactions" },
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false
+  }
+}

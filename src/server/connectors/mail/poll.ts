@@ -46,7 +46,7 @@ export async function pollReplies(deps: CommsDeps, workspaceId: string, client?:
   const composio = client ?? new ComposioClient(deps.env.composioApiKey, deps.fetchImpl);
   const cutoff = deps.now().getTime() - POLL_WINDOW_DAYS * 86_400_000;
   const threads = (await deps.store.listThreads(workspaceId)).filter((t) => t.provider === conn.provider && Date.parse(t.sentAt) >= cutoff && (conn.provider === "outlook" || !t.threadId.startsWith("subj:")));
-  const base = { userId: workspaceId, connectedAccountId: conn.connectedAccountId };
+  const base = { userId: conn.composioUserId ?? workspaceId, connectedAccountId: conn.connectedAccountId };
   let checked = 0;
   let newReplies = 0;
 

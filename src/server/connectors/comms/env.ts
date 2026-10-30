@@ -10,6 +10,9 @@
 export interface CommsEnv {
   slackBotToken?: string;
   slackSigningSecret?: string;
+  /** Fallback when no bot token exists: an incoming webhook (posts only, to its own channel), bound to this team id so clicks can be checked. */
+  slackWebhookUrl?: string;
+  slackTeamId?: string;
   slackClientId?: string;
   slackClientSecret?: string;
   composioApiKey?: string;
@@ -21,6 +24,8 @@ export interface CommsEnv {
   sampleManagerEmail?: string;
   /** Sample chain's connected mailbox in Composio (connected account id), used when the visitor has none of their own. */
   sampleGmailAccount?: string;
+  /** Composio user id the sample mailbox was connected under. */
+  sampleComposioUser: string;
   sampleHeadOfficeChannel: string;
 }
 
@@ -30,6 +35,8 @@ export function commsEnv(source: Record<string, string | undefined> = process.en
   return {
     slackBotToken: val(source.SLACK_BOT_TOKEN),
     slackSigningSecret: val(source.SLACK_SIGNING_SECRET),
+    slackWebhookUrl: val(source.SLACK_INCOMING_WEBHOOK_URL),
+    slackTeamId: val(source.SLACK_TEAM_ID),
     slackClientId: val(source.SLACK_CLIENT_ID),
     slackClientSecret: val(source.SLACK_CLIENT_SECRET),
     composioApiKey: val(source.COMPOSIO_API_KEY),
@@ -40,6 +47,7 @@ export function commsEnv(source: Record<string, string | undefined> = process.en
     appUrl: (val(source.APP_URL) ?? "https://localedition.pages.dev").replace(/\/+$/, ""),
     sampleManagerEmail: val(source.COMMS_SAMPLE_MANAGER_EMAIL),
     sampleGmailAccount: val(source.COMPOSIO_SAMPLE_GMAIL_ACCOUNT),
+    sampleComposioUser: val(source.COMPOSIO_SAMPLE_USER_ID) ?? "le-sample",
     sampleHeadOfficeChannel: val(source.SLACK_HEAD_OFFICE_CHANNEL) ?? "head-office",
   };
 }

@@ -30,6 +30,9 @@ export const SECRETS = {
   COMPOSIO_SAMPLE_GMAIL_ACCOUNT: "ca_sample_gmail",
 } as const;
 
+/** Optional extras a test can switch on. */
+export const EXTRA_ENV = { SLACK_INCOMING_WEBHOOK_URL: "https://hooks.slack.com/services/T0SAMPLE1/B0TEST/not-a-real-hook", SLACK_TEAM_ID: "T0SAMPLE1" } as const;
+
 export type NetCall = { url: string; method: string; headers: Record<string, string>; body: string };
 export type NetHandler = (call: NetCall) => Response | Promise<Response> | undefined;
 
@@ -96,7 +99,7 @@ const asDraft = (e: Edition): Edition => ({
   items: e.items.map((i): EditionItem => ({ ...i, status: "draft", version: 0, guardrail: passed() })),
 });
 
-export async function makeHarness(opts: { sample?: boolean; env?: Partial<Record<keyof typeof SECRETS, string | undefined>>; chat?: (req: ChatRequest) => string | Error } = {}): Promise<Harness> {
+export async function makeHarness(opts: { sample?: boolean; env?: Partial<Record<keyof typeof SECRETS | keyof typeof EXTRA_ENV, string | undefined>>; chat?: (req: ChatRequest) => string | Error } = {}): Promise<Harness> {
   const repo = createMemoryRepo();
   const seed = sampleSeed();
   seed.chain.isSample = opts.sample ?? true;

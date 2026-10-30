@@ -15,8 +15,8 @@ export class SlackApiError extends Error {
   }
   /** The bot cannot act any more (token revoked, app removed, channel gone or not joined). */
   get kind(): "revoked" | "channel" | "other" {
-    if (["invalid_auth", "token_revoked", "account_inactive", "not_authed", "token_expired", "app_uninstalled"].includes(this.slackError)) return "revoked";
-    if (["channel_not_found", "not_in_channel", "is_archived", "restricted_action"].includes(this.slackError)) return "channel";
+    if (["invalid_auth", "token_revoked", "account_inactive", "not_authed", "token_expired", "app_uninstalled", "no_service", "invalid_token"].includes(this.slackError)) return "revoked";
+    if (["channel_not_found", "not_in_channel", "is_archived", "restricted_action", "channel_is_archived", "no_active_hooks"].includes(this.slackError)) return "channel";
     return "other";
   }
 }
@@ -55,6 +55,15 @@ export async function postMessage(token: string, msg: SlackMessage, fetchImpl?: 
 
 export async function updateMessage(token: string, msg: SlackMessage & { ts: string }, fetchImpl?: SlackFetch): Promise<void> {
   await call("chat.update", token, msg, z.object({}).loose(), fetchImpl);
+}
+
+/** Incoming webhook (the fallback): posts to the channel the webhook was created for. Slack answers with the text `ok`, not JSON. */
+export async function postWebhook(url: string, msg: Omit<SlackMessage, "channel">, fetchImpl?: SlackFetch): Promise<void> {
+  if (new URL(url).hostname !== "hooks.slack.com") throw new SlackApiError("bad_webhook_url");
+  const res = await (fetchImpl ?? fetch)(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(msg), signal: AbortSignal.timeout(8000) }).catch(() => null);
+  if (!res) throw new UpstreamError("network", "slack", "Could not reach Slack.", { retryable: true });
+  const body = (await res.text().catch(() => "")).trim();
+  if (!res.ok || body !== "ok") throw new SlackApiError(body || `http_${res.status}`);
 }
 
 /** Replies through the interaction's `response_url` (no token; valid 30 minutes, five uses). Used when chat.update is not possible. */

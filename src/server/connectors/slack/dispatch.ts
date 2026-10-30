@@ -3,7 +3,7 @@ import { loadApprovedCard } from "../comms/approved";
 import { liveCommsDeps, takeSampleQuota, type CommsDeps } from "../comms/deps";
 import { CARD_ITEM, recordDelivery, recordEvent, resolveTarget } from "../comms/events";
 import type { ApprovedEdition } from "../dispatch";
-import { postMessage } from "./api";
+import { sendMessage } from "./post";
 import { describeFailure, getBinding, touchSync } from "./binding";
 import { cardMessage } from "./blocks";
 import { refreshDigestMessage } from "./digest";
@@ -46,8 +46,8 @@ export async function dispatchSlackWith(deps: CommsDeps, { workspaceId, editionI
   const at = deps.now().toISOString();
   try {
     const msg = cardMessage({ store, card, weekOf: edition.weekOf, issueNo: edition.issueNo, appUrl: deps.env.appUrl });
-    const sent = await postMessage(binding.token, { channel, ...msg }, deps.fetchImpl);
-    await recordDelivery(deps.store, workspaceId, { provider: "slack", editionId, itemId: CARD_ITEM, status: "sent", externalId: `${sent.channel}:${sent.ts}`, url: `${deps.env.appUrl}/card/${card.token}`, at, note: `Staff card in #${channel}` }, `card:${editionId}`);
+    const sent = await sendMessage(deps, binding, { channel, ...msg });
+    await recordDelivery(deps.store, workspaceId, { provider: "slack", editionId, itemId: CARD_ITEM, status: "sent", externalId: sent.ts ? `${sent.channel}:${sent.ts}` : null, url: `${deps.env.appUrl}/card/${card.token}`, at, note: `Staff card in #${channel}` }, `card:${editionId}`);
     await recordEvent(deps.store, workspaceId, { provider: "slack", direction: "out", kind: "card.posted", summary: `Staff card posted to #${channel}.`, storeId: store.id, editionId, ok: true });
     await touchSync(deps, binding);
   } catch (e) {

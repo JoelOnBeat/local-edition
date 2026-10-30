@@ -13,6 +13,7 @@ import { TavilyBudgetError, eventChain, isDemoWorkspace, prefetchEventChains, ta
 import type { EventChainBatch, EventChainResult } from "../tavily";
 import { weekPhrase } from "../tavily/request";
 import { getTokenFactory } from "../tokenfactory";
+import { liveStoreSignals } from "../connectors/mail/inbound";
 import { getRepo } from "../store";
 import type { Repo } from "../store/repo";
 import type {
@@ -190,6 +191,7 @@ export async function liveAgentDeps(): Promise<AgentDeps> {
   const repo = await getRepo();
   return {
     repo,
+    storeSignals: liveStoreSignals,
     chat: chatClient,
     qloo: qlooPort(repo),
     tavily: tavilyPort(repo),

@@ -24,6 +24,8 @@ export interface MailConnRow {
   workspaceId: string;
   provider: MailProvider;
   connectedAccountId: string;
+  /** Composio user id that owns the account when it is not the workspace (the shared sample mailbox). */
+  composioUserId?: string;
   /** `pending` from the moment the consent link is made until the callback sees the account ACTIVE. Only active rows send or receive. */
   status: "pending" | "active";
   accountLabel: string | null;
@@ -52,6 +54,7 @@ export interface ThreadRow {
 export type Resolution =
   | { kind: "approved"; userId: string; atUnix: number }
   | { kind: "partial"; userId: string; atUnix: number; approved: number; total: number }
+  | { kind: "regenerating"; userId: string; atUnix: number }
   | { kind: "regenerated"; userId: string; atUnix: number }
   | { kind: "failed"; userId: string; atUnix: number; reason: string }
   /** Approved in the app (or already approved when the button was clicked); Slack only shows that it happened. */
@@ -71,6 +74,13 @@ export interface DigestRow {
   parts: number;
   postedAt: string;
   resolution: Resolution | null;
+}
+
+/** What a store told head office, trimmed to what a build may use. */
+export interface StoreSignal {
+  category: string;
+  summary: string;
+  at: string;
 }
 
 const LIST_CAP = 200;
@@ -127,6 +137,14 @@ export class CommsStore {
   putNote = (ws: string, n: StoreNote) => this.putJson(ws, "note", n.id, n, n.at);
   listNotes = (ws: string) => this.listJson<StoreNote>(ws, "note");
   getNote = (ws: string, id: string) => this.getJson<StoreNote>(ws, "note", id);
+  /** A note's short form, indexed by store id so the next build can read it without knowing the workspace. */
+  putSignal = (ws: string, s: StoreSignal & { storeId: string; noteId: string }) => this.putJson(ws, "store_signal", s.noteId, s, s.at, s.storeId);
+  async listSignals(storeId: string, limit = 10): Promise<StoreSignal[]> {
+    return (await this.db.listByRef("store_signal", storeId, limit)).map((r) => {
+      const { category, summary, at } = JSON.parse(r.json) as StoreSignal;
+      return { category, summary, at };
+    });
+  }
   putSuggestion = (ws: string, s: RegenerateSuggestion) => this.putJson(ws, "suggestion", s.id, s, s.createdAt);
   listSuggestions = (ws: string) => this.listJson<RegenerateSuggestion>(ws, "suggestion");
   getSuggestion = (ws: string, id: string) => this.getJson<RegenerateSuggestion>(ws, "suggestion", id);

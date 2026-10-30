@@ -69,7 +69,7 @@ export async function handleInteraction(deps: CommsDeps, payload: SlackInteracti
     return;
   }
   const digest = await deps.store.getDigest(target.workspaceId, target.editionId);
-  if (!digest || (ts && digest.ts !== ts)) return; // an old or foreign message
+  if (!digest || (digest.ts && ts && digest.ts !== ts)) return; // an old or foreign message
   const who = payload.user.id;
   const kind = action.action_id === SLACK_ACTIONS.approve ? "approve" : "regenerate";
 
@@ -82,7 +82,7 @@ export async function handleInteraction(deps: CommsDeps, payload: SlackInteracti
   if (!(await deps.store.claim(key, deps.now().getTime()))) return;
 
   try {
-    const done = kind === "approve" ? await approve(deps, binding, digest, who, nowUnix) : await regenerate(deps, binding, digest, who, nowUnix, special?.id ?? null);
+    const done = kind === "approve" ? await approve(deps, binding, digest, who, nowUnix, payload.response_url) : await regenerate(deps, binding, digest, who, nowUnix, special?.id ?? null, payload.response_url);
     if (!done) await deps.store.release(key);
   } catch (e) {
     await deps.store.release(key);
@@ -95,13 +95,13 @@ export async function handleInteraction(deps: CommsDeps, payload: SlackInteracti
   }
 }
 
-async function approve(deps: CommsDeps, binding: SlackBinding, digest: DigestRow, who: string, nowUnix: number): Promise<boolean> {
+async function approve(deps: CommsDeps, binding: SlackBinding, digest: DigestRow, who: string, nowUnix: number, responseUrl?: string): Promise<boolean> {
   const { workspaceId, editionId } = digest;
   const before = await deps.repo.getEdition(editionId);
   if (!before) return false;
   if (before.status === "approved") {
     const row = await resolve(deps, digest, { kind: "app", atUnix: nowUnix });
-    await refreshDigestMessage(deps, workspaceId, row, binding.token);
+    await refreshDigestMessage(deps, workspaceId, row, binding.token, responseUrl);
     await deps.dispatch({ workspaceId, editionId });
     return true;
   }
@@ -117,15 +117,17 @@ async function approve(deps: CommsDeps, binding: SlackBinding, digest: DigestRow
     provider: "slack", direction: "in", kind: "approval.clicked", storeId: after.storeId, editionId, ok: true,
     summary: after.status === "approved" ? `Approved in Slack: ${store?.name ?? "store"}.` : `Approved ${approvedCount} of ${items.length} items in Slack: ${store?.name ?? "store"}; the rest need review.`,
   });
-  await refreshDigestMessage(deps, workspaceId, row, binding.token);
+  await refreshDigestMessage(deps, workspaceId, row, binding.token, responseUrl);
   // The same dispatcher the app uses: staff card to the store channel, email to the manager. Idempotent per card.
   if (after.status === "approved") await deps.dispatch({ workspaceId, editionId });
   return true;
 }
 
-async function regenerate(deps: CommsDeps, binding: SlackBinding, digest: DigestRow, who: string, nowUnix: number, itemId: string | null): Promise<boolean> {
+async function regenerate(deps: CommsDeps, binding: SlackBinding, digest: DigestRow, who: string, nowUnix: number, itemId: string | null, responseUrl?: string): Promise<boolean> {
   const { workspaceId, editionId } = digest;
   if (!itemId) throw new HttpError(409, "no_special", "This edition has no special to regenerate.");
+  // A Worker may cut background work short, so say what is happening before the slow part starts.
+  await refreshDigestMessage(deps, workspaceId, await resolve(deps, digest, { kind: "regenerating", userId: who, atUnix: nowUnix }), binding.token, responseUrl);
   const { regenerateItem } = await import("../../agent/regenerate");
   let failure: string | null = null;
   for await (const ev of regenerateItem({ workspaceId, editionId, itemId }, await deps.agent())) {
@@ -138,6 +140,6 @@ async function regenerate(deps: CommsDeps, binding: SlackBinding, digest: Digest
     provider: "slack", direction: "in", kind: "regenerate.clicked", storeId: edition?.storeId ?? null, editionId, ok: true,
     summary: "A new special was requested from Slack; head office reviews it before it goes out.",
   });
-  await refreshDigestMessage(deps, workspaceId, row, binding.token);
+  await refreshDigestMessage(deps, workspaceId, row, binding.token, responseUrl);
   return true;
 }

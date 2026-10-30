@@ -52,9 +52,9 @@ function classify(e: unknown, message: string): MailSendError {
  * Sends one email from head office's own mailbox. Gmail: a MIME message with a plain-text part and an HTML part, through Composio's proxy to
  * gmail.googleapis.com users.messages.send; if the proxy is refused, the GMAIL_SEND_EMAIL tool sends HTML only. Outlook: OUTLOOK_OUTLOOK_SEND_EMAIL (HTML).
  */
-export async function sendMail(deps: CommsDeps, conn: Pick<MailConnRow, "provider" | "connectedAccountId" | "workspaceId">, mail: OutboundMail, client?: ComposioClient): Promise<SentMail> {
+export async function sendMail(deps: CommsDeps, conn: Pick<MailConnRow, "provider" | "connectedAccountId" | "workspaceId" | "composioUserId">, mail: OutboundMail, client?: ComposioClient): Promise<SentMail> {
   const composio = client ?? new ComposioClient(deps.env.composioApiKey, deps.fetchImpl);
-  const base = { userId: conn.workspaceId, connectedAccountId: conn.connectedAccountId };
+  const base = { userId: conn.composioUserId ?? conn.workspaceId, connectedAccountId: conn.connectedAccountId };
   try {
     if (conn.provider === "outlook") {
       const r = await composio.execute(COMPOSIO_TOOLS.outlookSend, {

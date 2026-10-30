@@ -3,7 +3,7 @@ import { newId } from "@/lib/ids";
 import { createLogger } from "../../log";
 import type { CommsDeps } from "../comms/deps";
 import { recordEvent } from "../comms/events";
-import type { ThreadRow } from "../comms/store";
+import type { StoreSignal, ThreadRow } from "../comms/store";
 import { eventOf, specialOf } from "../slack/blocks";
 import { classifyReply } from "./classify";
 import { excerptOf, normalizeSubject, parseSender, stripQuoted } from "./quote";
@@ -65,6 +65,7 @@ export async function processInboundMail(deps: CommsDeps, mail: InboundMail): Pr
   };
   await deps.store.putNote(workspaceId, note);
   await deps.store.putThread({ ...thread, seen: [...thread.seen, mail.messageId].slice(-50) });
+  if (verdict.category !== "other") await deps.store.putSignal(workspaceId, { storeId: store.id, noteId: note.id, category: verdict.category, summary: verdict.summary, at });
   await recordEvent(deps.store, workspaceId, {
     provider: mail.provider, direction: "in", kind: "mail.reply", storeId: store.id, editionId: edition.id, ok: true,
     summary: `${sender.name ?? store.name} replied (${verdict.category.replace("_", " ")}): ${verdict.summary}`,
@@ -88,13 +89,20 @@ export async function processInboundMail(deps: CommsDeps, mail: InboundMail): Pr
 }
 
 /**
- * What stores told head office, for the next build. Short, labelled and untrusted: the build must treat these lines as data to weigh,
- * never as instructions. Newest first, at most `limit` per store, only the last 28 days.
+ * What a store told head office, for the next build. Short, labelled and untrusted: the build treats these lines as data to weigh,
+ * never as instructions. Newest first, at most `limit`, only the last 28 days, nothing classified `other`.
  */
-export async function storeSignals(deps: CommsDeps, workspaceId: string, storeId: string, limit = 3): Promise<{ category: string; summary: string; at: string }[]> {
+export async function storeSignals(deps: Pick<CommsDeps, "store" | "now">, storeId: string, limit = 3): Promise<StoreSignal[]> {
   const cutoff = deps.now().getTime() - 28 * 86_400_000;
-  return (await deps.store.listNotes(workspaceId))
-    .filter((n) => n.storeId === storeId && Date.parse(n.at) >= cutoff && n.category !== "other")
-    .slice(0, limit)
-    .map((n) => ({ category: n.category, summary: n.summary, at: n.at }));
+  return (await deps.store.listSignals(storeId, 20)).filter((s) => Date.parse(s.at) >= cutoff).slice(0, limit);
+}
+
+/** The edition agent's hook (AgentDeps.storeSignals): the live store, never throws into a build. */
+export async function liveStoreSignals(storeId: string): Promise<StoreSignal[]> {
+  try {
+    const { liveCommsDeps } = await import("../comms/deps");
+    return await storeSignals(await liveCommsDeps(), storeId);
+  } catch {
+    return [];
+  }
 }
