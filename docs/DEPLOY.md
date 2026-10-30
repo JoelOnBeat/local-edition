@@ -80,6 +80,23 @@ benign wrongly blocked; Token Factory spend about $0.0003, job cost about $0.005
 and `eval` JobRun with `nebiusJobId = local-edition-certify-eval-202610300615` and the 50-row eval table. The job shows `DELETING` in
 `nebius ai job list` (the runner deletes it in a `finally`).
 
+## Connectors (deploy of 30 Oct 14:30 MYT)
+
+- D1: `0003_square.sql` and `0004_comms.sql` applied remote (`deploy.sh` runs `d1 migrations apply` every time).
+- Vars in `wrangler.jsonc`: `SQUARE_MODE=live`, `COMPOSIO_AUTH_CONFIG_GMAIL`, `COMPOSIO_AUTH_CONFIG_OUTLOOK`, `COMPOSIO_SAMPLE_USER_ID=le-sample`,
+  `SLACK_HEAD_OFFICE_CHANNEL=head-office`; `COMPOSIO_SAMPLE_GMAIL_ACCOUNT` and `COMMS_SAMPLE_MANAGER_EMAIL` are empty until the sample mailbox is
+  connected. `APP_URL` stays `https://localedition.pages.dev` (Square signs APP_URL + path).
+- Secrets: `scripts/deploy-secrets.sh` pushes every secret store value that is not on the Worker yet (idempotent; run it again when a value appears;
+  `--force` rotates). Set now: `SQUARE_TOKEN_KEY` (generated into the secret store as `LOCALEDITION_SQUARE_TOKEN_KEY`), `COMPOSIO_API_KEY`, `COMMS_ENC_KEY`.
+  Waiting for the secret store: `SQUARE_ACCESS_TOKEN`, `SQUARE_APP_ID`, `SQUARE_APP_SECRET`, `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, `SLACK_CLIENT_ID`,
+  `SLACK_CLIENT_SECRET`, `QLOO_API_KEY`. Not scripted on purpose: `SQUARE_WEBHOOK_SIGNATURE_KEY` (scripts/square-webhook.ts), `COMPOSIO_WEBHOOK_SECRET`.
+- Pages hop: bodies and signature headers reach the Worker unchanged. Pinned by `tests/fix-a/pages-worker.test.ts` (raw body bytes plus
+  `x-square-hmacsha256-signature`, `x-slack-signature`, `x-slack-request-timestamp`, `webhook-id/-timestamp/-signature`); live, a custom-signed
+  `POST /api/jobs/monday` through Pages passed HMAC verification, and `/api/connectors/square/webhook`, `/slack/interactions`, `/mail/webhook` answer from the
+  Worker (503 "not configured" until their secrets exist).
+
 ## Qloo
 
-See the section "Qloo" below (probe, ledger, mode switch).
+Built and tested: the hard call ledger (`src/server/qloo/ledger.ts`: 300 live calls through 15 Dec, 40 a day, reserved before each call, Durable Object
+instance `qloo`), a 14-day KV response cache, no live retries, cache-only mode; regenerate cannot reach Qloo (test). Production stays `QLOO_MODE=replay`
+until the key exists and the shared probe (32 calls) has run.
