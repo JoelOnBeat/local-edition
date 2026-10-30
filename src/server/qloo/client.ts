@@ -82,6 +82,24 @@ export function normalizeParams(params: Params): Record<string, string> {
   return out;
 }
 
+/**
+ * The hackathon key allows 10 requests a second (`x-second-ratelimit-limit`, observed 30 Oct) and 50,000 a month. A block profile fans out
+ * to seven tag queries and a build runs stores side by side, so live calls share at most 4 in flight per isolate; a 429 would end a
+ * probe-sized budget faster than any cap.
+ */
+const MAX_IN_FLIGHT = 4;
+let inFlight = 0;
+const waiting: (() => void)[] = [];
+async function takeSlot(): Promise<() => void> {
+  if (inFlight >= MAX_IN_FLIGHT) await new Promise<void>((resolve) => waiting.push(resolve));
+  else inFlight++;
+  return () => {
+    const next = waiting.shift();
+    if (next) next();
+    else inFlight--;
+  };
+}
+
 /** `qloo:resp:v1:<sha256 of path and sorted params>`: the key (header) is never part of it. */
 async function responseKey(path: string, params: Record<string, string>): Promise<string> {
   const text = `${path}?${Object.entries(params).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([k, v]) => `${k}=${v}`).join("&")}`;
@@ -119,16 +137,23 @@ export class QlooClient {
     const url = buildUrl(this.cfg.baseUrl ?? QLOO_HOST, path, params);
     let gate: QlooGate | null = null;
     let cacheKey = "";
-    if (this.mode === "live") {
+    if (this.mode === "live" || this.mode === "replay") {
       gate = (await this.cfg.gate?.().catch(() => null)) ?? null;
-      if (!gate) throw new UpstreamError("spend_cap", QLOO_PROVIDER, "Live Qloo calls are not available right now. Using the saved taste data instead.");
-      cacheKey = await responseKey(path, params);
-      const saved = await gate.cache.get<unknown>(cacheKey).catch(() => null);
-      const parsed = saved === null ? null : schema.safeParse(saved);
-      if (parsed?.success) return { data: parsed.data, mode: "cache", path, params };
-      if (this.cfg.cacheOnly) throw new UpstreamError("spend_cap", QLOO_PROVIDER, "This page uses saved Qloo data and makes no new call.");
-      await gate.ledger.reserve(1); // throws the spend_cap UpstreamError when the total or today's slice is spent
+      if (this.mode === "live" && !gate) throw new UpstreamError("spend_cap", QLOO_PROVIDER, "Live Qloo calls are not available right now. Using the saved taste data instead.");
+      if (gate) {
+        cacheKey = await responseKey(path, params);
+        // Saved real answers come first in both modes: replay (production default) serves them with no call and no credit, then falls back
+        // to recordings and the synthetic fixtures; live goes on to the ledger only when nothing is saved.
+        const saved = await gate.cache.get<unknown>(cacheKey).catch(() => null);
+        const parsed = saved === null ? null : schema.safeParse(saved);
+        if (parsed?.success) return { data: parsed.data, mode: "cache", path, params };
+      }
+      if (this.mode === "live") {
+        if (this.cfg.cacheOnly) throw new UpstreamError("spend_cap", QLOO_PROVIDER, "This page uses saved Qloo data and makes no new call.");
+        await gate!.ledger.reserve(1); // throws the spend_cap UpstreamError when the total or today's slice is spent
+      }
     }
+    const release = this.mode === "live" ? await takeSlot() : () => {};
     try {
       const res = await fetchJson<T>({
         provider: QLOO_PROVIDER,
@@ -149,13 +174,15 @@ export class QlooClient {
         sleep: this.cfg.sleep,
         random: this.cfg.random,
       });
-      if (gate && res.mode === "live") await gate.cache.put(cacheKey, res.data, QLOO_RESPONSE_TTL_SECONDS).catch(() => undefined);
+      if (gate && this.mode === "live" && res.mode === "live") await gate.cache.put(cacheKey, res.data, QLOO_RESPONSE_TTL_SECONDS).catch(() => undefined);
       return { data: res.data, mode: res.mode, path, params };
     } catch (e) {
       if (e instanceof UpstreamError && e.code === "unauthorized" && e.status === 403) {
         throw new UpstreamError("unauthorized", QLOO_PROVIDER, "Qloo has not enabled this kind of data for this key.", { status: 403 });
       }
       throw e;
+    } finally {
+      release();
     }
   }
 
@@ -192,7 +219,7 @@ export function createQlooClient(overrides: Partial<QlooClientConfig> & { env?: 
   const { mode, status } = resolveQlooMode(env);
   const { env: _env, ...rest } = overrides;
   void _env;
-  return new QlooClient({ mode, status, apiKey: env.QLOO_API_KEY, gate: defaultGate, ...rest });
+  return new QlooClient({ mode, status, apiKey: env.QLOO_API_KEY, gate: mode === "live" || mode === "replay" ? defaultGate : undefined, ...rest });
 }
 
 let shared: QlooClient | undefined;

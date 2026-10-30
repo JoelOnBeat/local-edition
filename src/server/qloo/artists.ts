@@ -13,6 +13,8 @@ export interface ArtistOptions {
   /** Music genre tags, e.g. `urn:tag:genre:music:soul`. */
   tags?: string[];
   excludeIds?: string[];
+  /** entity id -> brand name, for the "matched because" line (the response names no one). */
+  anchorNames?: Record<string, string>;
   /** Default 30, max 50. */
   take?: number;
   /** Default `low`; `rising` runs `off` and `high`. */
@@ -74,7 +76,7 @@ export async function artistsLocal(
       popularity: e.popularity ?? null,
       image: imageOf(e),
       spotifyId: spotifyIdOf(e),
-      because: topContributor(e.query?.explainability, new Map()),
+      because: topContributor(e.query?.explainability, new Map(Object.entries(options.anchorNames ?? {}))),
       evidenceId: "",
     });
   }

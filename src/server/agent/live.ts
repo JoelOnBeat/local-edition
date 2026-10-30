@@ -9,6 +9,7 @@ import { blockProfile } from "../qloo/block";
 import { brandsLocal } from "../qloo/brands";
 import { placesNear } from "../qloo/places";
 import { rising } from "../qloo/rising";
+import { resolveAnchors } from "../qloo/anchors";
 import { TavilyBudgetError, eventChain, isDemoWorkspace, prefetchEventChains, tavilyModeFor, workspaceOfChain } from "../tavily";
 import type { EventChainBatch, EventChainResult } from "../tavily";
 import { weekPhrase } from "../tavily/request";
@@ -39,7 +40,15 @@ import type {
 /** The block profile's city baseline cache key (`qloo/block.ts`); the verifier reads it back to recompute lifts. */
 const baselineKey = (chain: Chain, group: string) => `qloo:baseline:v1:${chain.city.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}:${group}`;
 
-const anchorIds = (chain: Chain) => chain.anchors.map((a) => a.entityId);
+/**
+ * The chain's anchors as real Qloo entity ids and names. The sample chain's anchors carry placeholder ids (`sample-blue-bottle-coffee`),
+ * which the queries drop, so without this the place, artist and rising queries would run with no anchor signal at all. Resolved through
+ * /search once per brand and saved in the cache for 24 hours (the saved answer costs no call).
+ */
+async function resolvedAnchors(chain: Chain, cache: { cache: ReturnType<typeof repoCache> }) {
+  const refs = await resolveAnchors(chain, cache);
+  return { ids: refs.map((r) => r.entityId), names: Object.fromEntries(refs.map((r) => [r.entityId, r.name])) };
+}
 const ids = (evidenceId: string) => (evidenceId ? [evidenceId] : []);
 
 function qlooPort(repo: Repo): QlooPort {
@@ -62,7 +71,8 @@ function qlooPort(repo: Repo): QlooPort {
     },
 
     async placesNear(store, chain, o) {
-      const r = await placesNear(store, { tags: o.tagIds, take: o.limit, anchorIds: anchorIds(chain) }, cache);
+      const a = await resolvedAnchors(chain, cache);
+      const r = await placesNear(store, { tags: o.tagIds, take: o.limit, anchorIds: a.ids, anchorNames: a.names }, cache);
       const items: PlaceCandidate[] = r.hits.map((h) => ({
         entity: { entityId: h.place.entityId, name: h.place.name, type: h.place.type },
         address: h.place.address, lat: h.place.lat, lon: h.place.lon, distanceM: h.place.distanceM,
@@ -72,7 +82,8 @@ function qlooPort(repo: Repo): QlooPort {
     },
 
     async artistsLocal(store, chain, o) {
-      const r = await artistsLocal(store, anchorIds(chain), { tags: o.genres, take: o.limit }, cache);
+      const a = await resolvedAnchors(chain, cache);
+      const r = await artistsLocal(store, a.ids, { tags: o.genres, take: o.limit, anchorNames: a.names }, cache);
       const items: ArtistCandidate[] = r.hits.map((h) => ({ entity: h.artist, affinity: h.affinity ?? undefined, evidenceIds: ids(h.evidenceId) }));
       return { items, evidence: r.evidence };
     },
@@ -84,7 +95,7 @@ function qlooPort(repo: Repo): QlooPort {
 
     async rising(store, chain, o) {
       if (o.kind === "brand") return { items: [], evidence: [] };
-      const r = await rising(store, { anchorIds: anchorIds(chain), kinds: [o.kind] }, cache);
+      const r = await rising(store, { anchorIds: (await resolvedAnchors(chain, cache)).ids, kinds: [o.kind] }, cache);
       const items: RisingCandidate[] = r.hits.map((h) => ({
         entity: h.entity, kind: h.kind, rankDelta: h.rankOff === null ? undefined : h.rankOff - h.rankHigh, evidenceIds: h.evidenceIds,
       }));

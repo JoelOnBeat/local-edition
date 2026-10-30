@@ -21,8 +21,9 @@ describe("T3 placesNear", () => {
   it("returns hits with computed distance, anchor explanation and one valid Evidence each", async () => {
     const s = store("williamsburg");
     const deps = fixtureDeps();
-    const anchors = anchorIds(await resolveAnchors(chain, deps));
-    const r = await placesNear(s, { anchorIds: anchors, tags: ["urn:tag:genre:place:art_gallery", "urn:tag:genre:place:restaurant:bakery"], take: 10 }, deps);
+    const refs = await resolveAnchors(chain, deps);
+    const anchors = anchorIds(refs);
+    const r = await placesNear(s, { anchorIds: anchors, anchorNames: Object.fromEntries(refs.map((x) => [x.entityId, x.name])), tags: ["urn:tag:genre:place:art_gallery", "urn:tag:genre:place:restaurant:bakery"], take: 10 }, deps);
     expect(r.hits.length).toBeGreaterThanOrEqual(2);
     expect(r.droppedNoCoords).toBe(0);
     for (const h of r.hits) {
@@ -167,6 +168,8 @@ describe("T3 rising", () => {
     const r2 = await rising(store("astoria"), { kinds: ["place"] }, fixtureDeps({ client: move.client }));
     expect(r2.hits).toHaveLength(1);
     expect(r2.hits[0]).toMatchObject({ rankOff: null, rankHigh: 1, momentum: null });
+    // /v2/trending refuses places with a 400 (observed 30 Oct), so a rising place never spends a call on it.
+    expect(move.calls.map((c) => c.method)).not.toContain("trending");
   });
 });
 

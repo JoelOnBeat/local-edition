@@ -12,6 +12,8 @@ export interface PlaceOptions {
   radiusM?: number;
   /** Qloo entity ids of the chain's taste anchors; placeholders that are not UUIDs are ignored. */
   anchorIds?: string[];
+  /** entity id -> brand name, for the "matched because" line: Qloo's explainability carries ids and scores only (observed 30 Oct). */
+  anchorNames?: Record<string, string>;
   excludeIds?: string[];
   /** Default 15, max 50 (Qloo's cap). */
   take?: number;
@@ -64,7 +66,7 @@ export async function placesNear(store: Store, options: PlaceOptions = {}, parti
   const deps = resolveDeps(partial);
   const call = await deps.client.insights(placeQuery(store, options));
   const raw = entitiesOf(call.data);
-  const anchorNames = new Map<string, string>();
+  const anchorNames = new Map<string, string>(Object.entries(options.anchorNames ?? {}));
   const hits: PlaceHit[] = [];
   const evidence: Evidence[] = [];
   let droppedNoCoords = 0;

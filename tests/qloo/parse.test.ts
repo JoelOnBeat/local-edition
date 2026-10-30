@@ -94,3 +94,32 @@ describe("T2 geometry", () => {
     expect(ring[0]).toEqual(ring[4]);
   });
 });
+
+describe("shapes observed on the hackathon host (30 Oct 2026), rebuilt from synthetic values", () => {
+  it("reads the explainability the host returns: one key per signal holding { entity_id, score } rows", () => {
+    const names = new Map([["AAAAAAAA-0000-4000-8000-000000000001", "Example Roasters"], ["AAAAAAAA-0000-4000-8000-000000000002", "Example Goods"]]);
+    const expl = { "signal.interests.entities": [{ entity_id: "AAAAAAAA-0000-4000-8000-000000000001", score: 0.3 }, { entity_id: "AAAAAAAA-0000-4000-8000-000000000002", score: 0.7 }] };
+    expect(topContributor(expl, names)).toBe("Example Goods");
+    expect(topContributor({ "signal.interests.entities": [] }, names)).toBeNull();
+  });
+
+  it("reads a /search row, which has `types` (plural) and no `subtype`", () => {
+    const ref = entityRef({ entity_id: "AAAAAAAA-0000-4000-8000-000000000003", name: "Example Roasters", types: ["urn:entity:brand"] }, "urn:entity:place");
+    expect(ref).toEqual({ entityId: "AAAAAAAA-0000-4000-8000-000000000003", name: "Example Roasters", type: "urn:entity:brand" });
+    // An insights row: type is the bare "urn:entity" and the kind is in `subtype`.
+    expect(entityRef({ entity_id: "AAAAAAAA-0000-4000-8000-000000000004", name: "Example Gallery", type: "urn:entity", subtype: "urn:entity:place" }, "urn:entity:artist")?.type).toBe("urn:entity:place");
+  });
+
+  it("reads the Spotify id from external.spotify, an array of objects", () => {
+    expect(spotifyIdOf({ external: { spotify: [{ id: "abc123", verified: true, followers: 10 }] } })).toBe("abc123");
+  });
+
+  it("reads place coordinates from the top-level `location` object", () => {
+    expect(latLonOf({ location: { lat: 40.7143, lon: -73.9612, geohash: "dr5rsgz45nqk" } })).toEqual({ lat: 40.7143, lon: -73.9612 });
+  });
+
+  it("reads /v2/analysis/compare rows: results.tags[] with query.score", () => {
+    const env = { results: { tags: [{ tag_id: "urn:tag:genre:place", name: "Place", query: { score: 0.73, "a.signal.interests.entities": [], "b.signal.interests.entities": [] } }] } };
+    expect(compareTagsOf(env)).toEqual([{ tagId: "urn:tag:genre:place", name: "Place", score: 0.73 }]);
+  });
+});

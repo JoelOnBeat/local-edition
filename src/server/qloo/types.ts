@@ -26,6 +26,8 @@ export const QlooEntity = z.looseObject({
   name: z.string().optional(),
   type: z.string().optional(),
   subtype: z.string().optional(),
+  /** /search and /entities rows: `["urn:entity:brand"]` (insights rows use `type` + `subtype`). */
+  types: z.array(z.string()).optional(),
   popularity: num.optional(),
   tags: z.array(QlooTag).optional(),
   properties: z.record(z.string(), z.unknown()).optional(),

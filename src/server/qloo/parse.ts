@@ -33,7 +33,8 @@ export function tagNamespace(tagId: string): string {
 
 export function entityRef(e: QlooEntity, fallbackType: string): QlooEntityRef | undefined {
   if (!e.entity_id || !e.name) return undefined;
-  const sub = e.subtype?.startsWith("urn:entity:") ? e.subtype : undefined;
+  // Observed 30 Oct: insights rows carry `type: "urn:entity"` + `subtype: "urn:entity:<kind>"`; /search and /entities rows carry `types: ["urn:entity:<kind>"]`.
+  const sub = e.subtype?.startsWith("urn:entity:") ? e.subtype : e.types?.find((t) => t.startsWith("urn:entity:"));
   const type = sub ?? (e.type?.startsWith("urn:entity:") && e.type !== "urn:entity" ? e.type : fallbackType);
   return { entityId: e.entity_id, name: e.name, type };
 }
@@ -78,7 +79,9 @@ export function imageOf(e: QlooEntity): string | null {
 
 export function spotifyIdOf(e: QlooEntity): string | null {
   const ext = isObj(e.external) ? e.external : undefined;
-  const sp = ext && isObj(ext.spotify) ? ext.spotify : undefined;
+  // Observed 30 Oct: `external.spotify` is an array of `{ id, verified, followers, ... }`; the older object form is still accepted.
+  const spRaw = ext?.spotify;
+  const sp = Array.isArray(spRaw) ? (isObj(spRaw[0]) ? spRaw[0] : undefined) : isObj(spRaw) ? spRaw : undefined;
   const id = sp?.id;
   if (typeof id === "string") return id;
   if (Array.isArray(id) && typeof id[0] === "string") return id[0];
@@ -87,7 +90,7 @@ export function spotifyIdOf(e: QlooEntity): string | null {
 
 /**
  * `query.explainability` is documented as "which input entities contributed (normalised 0-1)".
- * Tolerates an array, `{ entities: [...] }`, or an id -> weight map; returns the top contributor.
+ * Observed shape: `{ "signal.interests.entities": [{ entity_id, score }] }`. Also tolerates an array, `{ entities: [...] }`, or an id -> weight map; returns the top contributor.
  */
 export function topContributor(expl: unknown, names: Map<string, string>): string | null {
   const entries: { id?: string; name?: string; w: number }[] = [];
@@ -102,7 +105,13 @@ export function topContributor(expl: unknown, names: Map<string, string>): strin
   if (Array.isArray(expl)) expl.forEach((v) => add(v));
   else if (isObj(expl)) {
     if (Array.isArray(expl.entities)) expl.entities.forEach((v) => add(v));
-    else Object.entries(expl).forEach(([k, v]) => add(v, k));
+    else {
+      for (const [k, v] of Object.entries(expl)) {
+        // Observed 30 Oct: one key per signal (`signal.interests.entities`) holding `[{ entity_id, score }]`.
+        if (Array.isArray(v)) v.forEach((x) => add(x));
+        else add(v, k);
+      }
+    }
   }
   entries.sort((a, b) => b.w - a.w);
   const top = entries[0];

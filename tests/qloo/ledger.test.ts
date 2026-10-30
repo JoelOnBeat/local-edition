@@ -119,4 +119,14 @@ describe("the hard Qloo call ledger", () => {
     const src = readFileSync("src/server/agent/regenerate.ts", "utf8");
     expect(src).not.toMatch(/qloo/i);
   });
+  it("replay mode (the production default) serves a saved real answer first, with no call and no credit, then falls back to the fixtures", async () => {
+    const gate = testGate();
+    const live = liveClient(vi.fn(async () => ok(PLACES)), gate);
+    await live.search({ query: "Muji", types: "urn:entity:brand" }); // a live answer, saved
+    const reserved = gate.stub.reserved;
+    const replay = new QlooClient({ mode: "replay", status: "replay", recorder: new MemoryRecorder(), sleep: noSleep, gate: async () => gate });
+    expect((await replay.search({ query: "Muji", types: "urn:entity:brand" })).mode).toBe("cache");
+    expect((await replay.search({ query: "Aesop", types: "urn:entity:brand" })).mode).toBe("fixture"); // nothing saved: synthetic
+    expect(gate.stub.reserved).toBe(reserved);
+  });
 });

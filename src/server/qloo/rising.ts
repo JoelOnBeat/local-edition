@@ -109,7 +109,9 @@ async function risingForKind(store: Store, kind: RisingKind, o: RisingOptions, d
   const byId = new Map(highEntities.map((e) => [e.entity_id, e]));
   const biasMovesOrder = idsOf(offEntities).join() !== idsOf(highEntities).join();
 
-  const momentumIds = picked.slice(0, o.momentumFor ?? 5).map((p) => p.id);
+  // /v2/trending answers 400 for places (observed 30 Oct: only actor, artist, brand, movie, person, podcast, tv_show), so a place never
+  // asks and never spends a call. A trending call also needs signal.interests.entities, filter.start_date and filter.end_date.
+  const momentumIds = kind === "artist" ? picked.slice(0, o.momentumFor ?? 5).map((p) => p.id) : [];
   const trend = momentumIds.length ? await momentum(store, kind, momentumIds, deps) : null;
 
   const evidence: Evidence[] = [];

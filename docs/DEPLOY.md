@@ -97,6 +97,12 @@ and `eval` JobRun with `nebiusJobId = local-edition-certify-eval-202610300615` a
 
 ## Qloo
 
-Built and tested: the hard call ledger (`src/server/qloo/ledger.ts`: 300 live calls through 15 Dec, 40 a day, reserved before each call, Durable Object
-instance `qloo`), a 14-day KV response cache, no live retries, cache-only mode; regenerate cannot reach Qloo (test). Production stays `QLOO_MODE=replay`
-until the key exists and the shared probe (32 calls) has run.
+- Hard call ledger (`src/server/qloo/ledger.ts`): 300 live calls through 15 Dec and 40 a day, reserved before each call and never refunded (Durable Object
+  instance `qloo`). Live calls are not retried and share at most 4 in flight (the key allows 10 requests a second). Responses are saved whole in KV for 14 days
+  (`cache:qloo:resp:v1:<sha256 of path + sorted params>`); regenerate cannot reach Qloo (test).
+- `QLOO_MODE=replay` in production. A replay client now reads the saved KV answers FIRST (labelled `cache`), then recordings, then the synthetic fixtures; only
+  `QLOO_MODE=live` goes on to the ledger and the network. Flip it for a flow test, run it, flip it back.
+- `QLOO_API_KEY` is a Worker secret (set 30 Oct). The probe used 38 of the 40 shared calls; its private notes live outside this repository.
+- Seeded KV (from the probe, not from git): the Williamsburg block profile (7 tag queries), the New York city baselines for ambience, specialty dishes and music
+  genres, the Blue Bottle Coffee anchor lookup and the Williamsburg brand query. Every other store and query still answers from the synthetic fixtures until a live
+  flow test fills the cache.

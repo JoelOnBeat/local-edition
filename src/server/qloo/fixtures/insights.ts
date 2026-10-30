@@ -26,7 +26,7 @@ function explain(entity: Json, anchors: string[]): Json {
   const index = entityIndex();
   const weights = anchors.map((id) => ({ entity_id: id, name: index.get(id)?.name, w: 0.2 + 0.8 * Math.abs(noise(String(entity.entity_id), id)) }));
   const sum = weights.reduce((a, b) => a + b.w, 0);
-  const query = { ...(entity.query as Json), explainability: { entities: weights.map((x) => ({ entity_id: x.entity_id, name: x.name, impact: round(x.w / sum) })) } };
+  const query = { ...(entity.query as Json), explainability: { "signal.interests.entities": weights.map((x) => ({ entity_id: x.entity_id, score: round(x.w / sum) })) } };
   return { ...entity, query };
 }
 
