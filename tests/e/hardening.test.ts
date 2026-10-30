@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Evidence } from "@/contract";
 import { createStore, deleteStore, getWorkspace, importStores } from "@/server/handlers/workspace";
 import { dedupeStores } from "@/server/handlers/csv";
-import { createVisitorWorkspace, ensureDemoWorkspace, readCookie, resolveWorkspace } from "@/server/session";
+import { clientIp } from "@/server/limits";
+import { createVisitorWorkspace, ensureDemoWorkspace, readCookie, takeWorkspaceToken } from "@/server/session";
 import { VISITOR_TTL_SECONDS, isVisitorId } from "@/server/store/ids";
 import { FileKv } from "@/server/store/file";
 import { KeyedRepo } from "@/server/store";
@@ -36,18 +37,30 @@ describe("session cookie", () => {
 
   it("forces Secure in production even when the request looks like plain http", async () => {
     vi.stubEnv("NODE_ENV", "production");
-    const res = await getWorkspace(req("/api/workspace", { ip: "10.7.0.2" }));
-    expect(res.headers.get("set-cookie")).toContain("Secure");
-    expect(res.headers.get("set-cookie")).toContain("HttpOnly");
+    // In production a workspace only comes with a session: "Try the sample chain" is the guest route.
+    const { guestRoute } = await import("@/server/auth/handlers");
+    const { setAuthStore } = await import("@/server/auth");
+    const { KvAuthStore } = await import("@/server/auth/store-kv");
+    setAuthStore(new KvAuthStore(new MemoryKv())); // production would use the D1 binding
+    const res = await guestRoute(req("/api/auth/guest", { method: "POST", ip: "10.7.0.2" }));
+    expect(res.status).toBe(200);
+    const cookies = res.headers.getSetCookie();
+    expect(cookies).toHaveLength(2);
+    for (const c of cookies) {
+      expect(c).toContain("Secure");
+      expect(c).toContain("HttpOnly");
+    }
+    setAuthStore(undefined);
   });
 
   it("does not trust x-forwarded-for to dodge the new-workspace limit in production", async () => {
     vi.stubEnv("NODE_ENV", "production");
     const limit = { capacity: 2, refillSeconds: 3600 };
     const spoof = (n: number) => new Request("http://localhost/x", { headers: { "x-forwarded-for": `1.2.3.${n}` } });
-    await resolveWorkspace(spoof(1), repo, limit);
-    await resolveWorkspace(spoof(2), repo, limit);
-    await expect(resolveWorkspace(spoof(3), repo, limit)).rejects.toMatchObject({ status: 429 });
+    // Every spoofed address is the same "unknown" client in production, so the third draw from the bucket is refused.
+    expect(await takeWorkspaceToken(repo, clientIp(spoof(1)), limit)).toBe(true);
+    expect(await takeWorkspaceToken(repo, clientIp(spoof(2)), limit)).toBe(true);
+    expect(await takeWorkspaceToken(repo, clientIp(spoof(3)), limit)).toBe(false);
   });
 });
 

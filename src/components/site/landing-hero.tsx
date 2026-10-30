@@ -1,3 +1,4 @@
+import { SampleChainLink } from "@/components/account/session-links";
 import Link from "next/link";
 
 /** Landing hero: what Local Edition is and who it is for, set like a newspaper front page. */
@@ -25,13 +26,11 @@ export function LandingHero() {
           </p>
           <div className="grid content-start gap-4">
             <div className="flex flex-wrap gap-3">
-              <Link
-                href="/app"
+              <SampleChainLink
                 data-testid="landing-open-app"
                 className="rounded-(--radius) bg-(--accent) px-5 py-3 text-[16px] font-semibold text-(--accent-ink) hover:opacity-90"
-              >
-                Open the sample chain
-              </Link>
+                signedOutLabel="Try the sample chain"
+              />
               <Link
                 href="#how"
                 className="rounded-(--radius) border border-(--rule) px-5 py-3 text-[16px] font-semibold text-(--ink) hover:border-(--ink)"

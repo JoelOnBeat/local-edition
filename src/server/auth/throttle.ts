@@ -20,6 +20,8 @@ export const WINDOWS = {
   signupEmail: { limit: 3, windowMs: 3_600_000 },
   signinIp: { limit: 30, windowMs: 600_000 },
   signinEmail: { limit: 10, windowMs: 600_000 },
+  codeIp: { limit: 10, windowMs: 600_000 },
+  codeEmail: { limit: 5, windowMs: 600_000 },
   accountIp: { limit: 10, windowMs: 3_600_000 },
 } as const satisfies Record<string, Window>;
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { meRoute, signoutRoute, signupRoute } from "@/server/auth/handlers";
+import { guestRoute, meRoute, signoutRoute, signupRoute } from "@/server/auth/handlers";
 import { getEdition, listEditions } from "@/server/handlers/editions";
 import { createStore, deleteStore, getWorkspace } from "@/server/handlers/workspace";
 import { peekWorkspace } from "@/server/session";
@@ -33,17 +33,20 @@ describe("cross-tenant access", () => {
     expect(a.jar.get("le_ws")).toBe(a.workspaceId); // and the cookie is put right again
   });
 
-  it("an anonymous visitor holding an account's workspace id gets a fresh sample workspace, not the account", async () => {
+  it("holding an account's workspace id without its session opens nothing: 401, not the account", async () => {
     const b = await account("b@kettleandkiln.example", "Birch Coffee");
     const thief = new Jar();
     thief.set("le_ws", b.workspaceId);
     const res = await call(getWorkspace, "/api/workspace", { jar: thief, ip: "203.0.113.9" });
-    const body = await res.json();
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: "Sign in to continue.", code: "unauthenticated" });
+    // Even as a guest (a real session of their own) the forged cookie names nothing: the guest gets the guest's own sample workspace.
+    await call(guestRoute, "/api/auth/guest", { method: "POST", jar: thief, ip: "203.0.113.9" });
+    thief.set("le_ws", b.workspaceId);
+    const body = await (await call(getWorkspace, "/api/workspace", { jar: thief })).json();
     expect(body.workspace.id).not.toBe(b.workspaceId);
-    expect(body.workspace.id).toMatch(/^ws_/);
     expect(body.chain.isSample).toBe(true);
     expect(JSON.stringify(body)).not.toContain("Birch");
-    expect(thief.get("le_ws")).toBe(body.workspace.id);
   });
 
   it("public read pages never show an account to someone without its session", async () => {
@@ -77,9 +80,7 @@ describe("cross-tenant access", () => {
     await call(signoutRoute, "/api/auth/signout", { method: "POST", jar: a.jar });
     // The copied cookie pair (session and workspace) is dead: no session, and an acct_ id alone opens nothing.
     const replay = await getWorkspace(new Request("http://localhost/api/workspace", { headers: { cookie: staleCookie, "cf-connecting-ip": "203.0.113.10" } }));
-    const body = await replay.json();
-    expect(body.workspace.id).toMatch(/^ws_/);
-    expect(JSON.stringify(body)).not.toContain("Alder");
+    expect(replay.status).toBe(401);
     const me = await (await call(meRoute, "/api/auth/me", { headers: { cookie: staleCookie } })).json();
     expect(me.user).toBeNull();
     expect(me.workspace).toBeNull(); // me does not hand out the account workspace to a cookie without a session

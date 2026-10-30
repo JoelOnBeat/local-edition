@@ -88,6 +88,6 @@ describe("api-client accounts (mock backend)", () => {
 
   it("mock fixtures parse and every error code the screens must handle is declared with a status", () => {
     expect(MeResponse.parse(mockSignedIn()).user?.email).toBe(MOCK_USER.email);
-    expect(Object.keys(AUTH_ERROR_CODES).sort()).toEqual(["bad_origin", "email_taken", "invalid_credentials", "invalid_input", "not_skippable", "rate_limited", "too_many_attempts", "unauthenticated"]);
+    expect(Object.keys(AUTH_ERROR_CODES).sort()).toEqual(["bad_origin", "code_expired", "email_taken", "email_unavailable", "invalid_code", "invalid_credentials", "invalid_input", "not_skippable", "rate_limited", "too_many_attempts", "unauthenticated"]);
   });
 });

@@ -1,5 +1,5 @@
+import { SampleChainLink } from "@/components/account/session-links";
 import type { Metadata } from "next";
-import Link from "next/link";
 import { LandingEdition } from "@/components/site/landing-edition";
 import { HackathonNote, LandingHero } from "@/components/site/landing-hero";
 import { LandingIntegrations } from "@/components/site/landing-integrations";
@@ -31,12 +31,10 @@ export default function Home() {
             </p>
           </div>
           <div className="grid gap-4">
-            <Link
-              href="/app"
+            <SampleChainLink
               className="justify-self-start rounded-(--radius) bg-(--accent) px-5 py-3 text-[16px] font-semibold text-(--accent-ink) hover:opacity-90"
-            >
-              Open the sample chain
-            </Link>
+              signedOutLabel="Try the sample chain"
+            />
             <HackathonNote />
           </div>
         </div>

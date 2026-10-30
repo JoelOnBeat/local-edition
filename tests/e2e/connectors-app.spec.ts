@@ -8,6 +8,10 @@ import { Connection, ConnectionsResponse, DeliveriesResponse } from "../../src/c
  */
 test.skip(process.env.SMOKE_MODE !== "app", "runs against a server started in app data mode (SMOKE_MODE=app)");
 
+test.beforeEach(async ({ page }) => {
+  await page.request.post("/api/auth/guest"); // "Try the sample chain": the app needs a (guest) session like any other
+});
+
 test("build, approve, merged connections, deliveries read, anchors search", async ({ page }) => {
   test.setTimeout(100_000);
   await page.goto("/app");

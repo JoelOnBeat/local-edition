@@ -1,5 +1,6 @@
 import { afterEach, beforeEach } from "vitest";
 import { setAuthStore } from "@/server/auth";
+import { setCodeSender, type CodeMessage, type CodeSender } from "@/server/auth/code-sender";
 import { setPasswordIterations } from "@/server/auth/password";
 import { KvAuthStore } from "@/server/auth/store-kv";
 import { setDocDb, createMemoryDocDb } from "@/server/connectors/comms/docs";
@@ -17,12 +18,19 @@ export interface Rig {
   ledger: MemoryLedger;
   docs: ReturnType<typeof createMemoryDocDb>;
   blobs: MemoryBlobStore;
+  /** The code sender: every message "sent" lands in `sent`. Replace `rig.sender` behaviour with `setCodeSender(...)` to test failures. */
+  sender: CodeSender;
+  sent: CodeMessage[];
 }
 
 export function authRig(): Rig {
   const rig = {} as Rig;
   beforeEach(() => {
+    delete process.env.LE_ALLOW_ANONYMOUS; // sessions are required here, as in production
     rig.repo = freshApp();
+    rig.sent = [];
+    rig.sender = { name: "test", send: async (m: CodeMessage) => { rig.sent.push(m); } };
+    setCodeSender(rig.sender);
     rig.kv = new MemoryKv();
     setAuthStore(new KvAuthStore(rig.kv));
     rig.ledger = new MemoryLedger();
@@ -34,6 +42,8 @@ export function authRig(): Rig {
     setPasswordIterations(1000);
   });
   afterEach(() => {
+    process.env.LE_ALLOW_ANONYMOUS = "1";
+    setCodeSender(undefined);
     setAuthStore(undefined);
     setLedger(undefined);
     setDocDb(undefined);

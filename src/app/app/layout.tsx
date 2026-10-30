@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SessionGuard } from "@/components/account/session-guard";
 import { AppShell } from "@/components/app/app-shell";
 import { WorkspaceProvider } from "@/components/app/workspace-context";
 
@@ -6,8 +7,10 @@ export const metadata: Metadata = { title: { default: "Portfolio", template: "%s
 
 export default function AppLayout({ children }: LayoutProps<"/app">) {
   return (
-    <WorkspaceProvider>
-      <AppShell>{children}</AppShell>
-    </WorkspaceProvider>
+    <SessionGuard>
+      <WorkspaceProvider>
+        <AppShell>{children}</AppShell>
+      </WorkspaceProvider>
+    </SessionGuard>
   );
 }

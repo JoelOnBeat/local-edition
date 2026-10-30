@@ -11,7 +11,7 @@ import type { RouteSpec } from "./route-spec";
  * without a matching session.
  */
 
-export const SESSION_COOKIE = "le_sid";
+export { SESSION_COOKIE } from "@/lib/session-paths";
 export const PASSWORD_MIN = 10;
 export const PASSWORD_MAX = 128;
 
@@ -50,7 +50,10 @@ export const SigninInput = z.object({
 });
 export type SigninInput = z.infer<typeof SigninInput>;
 
-export const DeleteAccountInput = z.object({ password: z.string().min(1).max(1024) });
+/** An account with a password confirms with it; an account made by one-time code (no password) confirms by typing its email address. */
+export const DeleteAccountInput = z
+  .object({ password: z.string().min(1).max(1024).optional(), confirmEmail: z.string().max(254).optional() })
+  .refine((v) => v.password !== undefined || v.confirmEmail !== undefined, { message: "Send your password, or your email address if the account has no password." });
 export type DeleteAccountInput = z.infer<typeof DeleteAccountInput>;
 
 export const AuthUser = z.object({
@@ -58,6 +61,8 @@ export const AuthUser = z.object({
   name: z.string(),
   email: z.string(),
   createdAt: z.string(),
+  /** False for an account made by one-time code: deleting it is confirmed by typing the email address instead. */
+  hasPassword: z.boolean().default(true),
 });
 export type AuthUser = z.infer<typeof AuthUser>;
 
@@ -66,11 +71,19 @@ export const AuthResult = z.object({
   workspaceId: z.string(),
   /** True when the visitor's sample workspace was carried into the account (`keepWorkspace`). */
   keptWorkspace: z.boolean(),
+  /** True when this call made the account (a one-time code for an address with none yet). */
+  created: z.boolean().default(false),
 });
 export type AuthResult = z.infer<typeof AuthResult>;
 
 export const MeResponse = z.object({
   user: AuthUser.nullable(),
+  /** `user`: signed in. `guest`: "Try the sample chain", a real session on a sample workspace. null: signed out, or the cookie is expired or invalid. */
+  session: z.enum(["user", "guest"]).nullable(),
+  /** The owner finished onboarding (all steps done or skipped). null without a user session. Guests have nothing to finish. */
+  onboardingComplete: z.boolean().nullable(),
+  /** A code sender is configured: sign-in by emailed one-time code is on (the password form stays as the second way). */
+  codeSignIn: z.boolean(),
   /** The workspace this browser would use: the account's, the visitor's sample, or none yet. Never creates one. */
   workspace: z.object({ id: z.string(), kind: z.enum(["account", "sample"]) }).nullable(),
   /** A signed-out visitor with a live sample workspace: offer "keep my workspace" on the sign-up screen. */
@@ -88,10 +101,34 @@ export const AUTH_ERROR_CODES = {
   bad_origin: 403, // a state-changing request from another site
   email_taken: 409, // sign-up with an address that already has an account
   not_skippable: 400, // onboarding: this step cannot be skipped
+  invalid_code: 401, // the one-time code does not match (5 wrong tries burn it)
+  code_expired: 401, // no live code for this address: it expired, was used, or was never sent
+  email_unavailable: 503, // the code email could not be sent (no sender configured, or Gmail refused or revoked access): use the password
   too_many_attempts: 429, // repeated failures: back-off, `Retry-After` header carries the seconds
   rate_limited: 429, // too many sign-in / sign-up requests from this network or for this address
 } as const;
 export type AuthErrorCode = keyof typeof AUTH_ERROR_CODES;
+
+// ---- One-time codes (email + code sign-in; sign-up and sign-in are the same step)
+
+export const CODE_LENGTH = 6;
+export const CODE_TTL_SECONDS = 600;
+export const CODE_RESEND_SECONDS = 30;
+
+export const CodeRequestInput = z.object({ email: Email });
+export const CodeRequestResponse = z.object({ ok: z.literal(true), resendAfterSeconds: z.number(), expiresInSeconds: z.number() });
+export type CodeRequestResponse = z.infer<typeof CodeRequestResponse>;
+
+/** The code as typed or pasted: spaces and dashes are ignored ("123 456", "123-456"). */
+export const CodeVerifyInput = z.object({
+  email: Email,
+  code: z.string().max(32).transform((s) => s.replace(/[\s-]/g, "")).pipe(z.string().regex(new RegExp(`^\\d{${CODE_LENGTH}}$`), `Enter the ${CODE_LENGTH}-digit code.`)),
+  keepWorkspace: z.boolean().default(false),
+});
+
+/** `guest` when this call made (or found) the sample session; `user` when the caller was already signed in and keeps their own workspace. */
+export const GuestResult = z.object({ workspaceId: z.string(), session: z.enum(["guest", "user"]) });
+export type GuestResult = z.infer<typeof GuestResult>;
 
 // ---- Onboarding
 
@@ -150,6 +187,9 @@ export const SKIPPABLE_STEPS: readonly OnboardingStepId[] = ["voice", "tools"];
 export const authRoutes = {
   signup: { method: "POST", path: "/api/auth/signup", stream: "E", bodyKind: "json", sse: false, request: z.object({ body: SignupInput }), response: AuthResult },
   signin: { method: "POST", path: "/api/auth/signin", stream: "E", bodyKind: "json", sse: false, request: z.object({ body: SigninInput }), response: AuthResult },
+  guest: { method: "POST", path: "/api/auth/guest", stream: "E", bodyKind: "none", sse: false, request: z.object({}), response: GuestResult },
+  codeRequest: { method: "POST", path: "/api/auth/code/request", stream: "E", bodyKind: "json", sse: false, request: z.object({ body: CodeRequestInput }), response: CodeRequestResponse },
+  codeVerify: { method: "POST", path: "/api/auth/code/verify", stream: "E", bodyKind: "json", sse: false, request: z.object({ body: CodeVerifyInput }), response: AuthResult },
   signout: { method: "POST", path: "/api/auth/signout", stream: "E", bodyKind: "none", sse: false, request: z.object({}), response: OkResponse },
   me: { method: "GET", path: "/api/auth/me", stream: "E", bodyKind: "none", sse: false, request: z.object({}), response: MeResponse },
   deleteAccount: { method: "DELETE", path: "/api/account", stream: "E", bodyKind: "json", sse: false, request: z.object({ body: DeleteAccountInput }), response: OkResponse },

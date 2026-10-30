@@ -1,10 +1,9 @@
 "use client";
 
-import { getApi } from "@/lib/api-client";
-import { useAsync } from "../lib/use-async";
+import { useSession } from "./session-context";
 
-/** Who is signed in on this browser (and whether a visitor's sample workspace could be kept). Never creates a workspace. */
+/** Who is signed in on this browser: the shared answer of the page's one /api/auth/me call. */
 export function useMe() {
-  const r = useAsync("me", () => getApi().getMe());
-  return { me: r.data, loading: r.loading, error: r.error, reload: r.reload };
+  const { me, loading, error, refresh } = useSession();
+  return { me, loading, error, reload: refresh };
 }

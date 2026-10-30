@@ -19,7 +19,7 @@ const stores: Record<string, () => Promise<AuthStore>> = {
 };
 
 const user = (n: number, over: Partial<UserRow> = {}): UserRow => ({ id: `user_${n}`, email: `u${n}@example.com`, name: `User ${n}`, passwordHash: "h", workspaceId: `acct_${n}`, createdAt: "2026-10-30T00:00:00.000Z", ...over });
-const session = (id: string, userId: string, createdAt: number, expiresAt = createdAt + 1000) => ({ id, userId, createdAt, lastSeenAt: createdAt, expiresAt });
+const session = (id: string, userId: string, createdAt: number, expiresAt = createdAt + 1000) => ({ id, kind: "user" as const, userId, workspaceId: `acct_${userId.slice(5)}`, createdAt, lastSeenAt: createdAt, expiresAt });
 
 describe.each(Object.keys(stores))("AuthStore contract (%s)", (name) => {
   it("keeps emails unique and finds users by email and id", async () => {
@@ -37,7 +37,7 @@ describe.each(Object.keys(stores))("AuthStore contract (%s)", (name) => {
     const s = await stores[name]();
     await s.createUser(user(1));
     await s.createSession(session("aaa", "user_1", 1000));
-    expect((await s.findSession("aaa"))?.user.email).toBe("u1@example.com");
+    expect((await s.findSession("aaa"))?.user?.email).toBe("u1@example.com");
     await s.touchSession("aaa", 5000, 9000);
     expect((await s.findSession("aaa"))?.session).toMatchObject({ lastSeenAt: 5000, expiresAt: 9000, createdAt: 1000 });
     await s.deleteSession("aaa");

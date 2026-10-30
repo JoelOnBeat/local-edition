@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { meRoute, signinRoute, signoutRoute, signupRoute } from "@/server/auth/handlers";
+import { guestRoute, meRoute, signinRoute, signoutRoute, signupRoute } from "@/server/auth/handlers";
 import { getWorkspace } from "@/server/handlers/workspace";
 import { Jar, PASSWORD, call, signupBody, authRig } from "./helpers";
 
@@ -69,10 +69,11 @@ describe("sign-up", () => {
 
   it("brings a visitor's sample workspace into the account when asked, and only then", async () => {
     const keepJar = new Jar();
+    await call(guestRoute, "/api/auth/guest", { method: "POST", jar: keepJar }); // "Try the sample chain"
     const sample = await (await call(getWorkspace, "/api/workspace", { jar: keepJar })).json();
     expect(sample.chain.isSample).toBe(true);
     const me = await (await call(meRoute, "/api/auth/me", { jar: keepJar })).json();
-    expect(me).toMatchObject({ user: null, canKeepWorkspace: true, workspace: { id: sample.workspace.id, kind: "sample" } });
+    expect(me).toMatchObject({ user: null, session: "guest", canKeepWorkspace: true, workspace: { id: sample.workspace.id, kind: "sample" } });
 
     const res = await signup(keepJar, { keepWorkspace: true });
     const result = await res.json();
@@ -89,7 +90,7 @@ describe("sign-up", () => {
 
     // Not asked: the account starts empty even though the visitor had a sample.
     const emptyJar = new Jar();
-    await call(getWorkspace, "/api/workspace", { jar: emptyJar });
+    await call(guestRoute, "/api/auth/guest", { method: "POST", jar: emptyJar });
     await signup(emptyJar, { email: "second@kettleandkiln.example" });
     expect((await (await call(getWorkspace, "/api/workspace", { jar: emptyJar })).json()).stores).toEqual([]);
   });
@@ -138,7 +139,7 @@ describe("sign-in, me, sign-out", () => {
     const jar = new Jar();
     jar.set("le_sid", "A".repeat(43));
     const res = await call(meRoute, "/api/auth/me", { jar });
-    expect(await res.json()).toEqual({ user: null, workspace: null, canKeepWorkspace: false });
+    expect(await res.json()).toEqual({ user: null, session: null, onboardingComplete: null, codeSignIn: true, workspace: null, canKeepWorkspace: false });
     expect(res.headers.getSetCookie()).toEqual([]);
     jar.set("le_sid", "short");
     expect((await (await call(meRoute, "/api/auth/me", { jar })).json()).user).toBeNull();

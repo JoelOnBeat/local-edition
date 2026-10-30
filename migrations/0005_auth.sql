@@ -12,9 +12,12 @@ CREATE TABLE IF NOT EXISTS users (
   created_at     TEXT NOT NULL
 );
 
+-- kind user: user_id is the account. kind guest: "Try the sample chain", user_id is '' and workspace_id is the visitor's sample workspace.
 CREATE TABLE IF NOT EXISTS sessions (
   id            TEXT PRIMARY KEY,                 -- SHA-256 (hex) of the cookie token
-  user_id       TEXT NOT NULL,
+  kind          TEXT NOT NULL DEFAULT 'user',
+  user_id       TEXT NOT NULL DEFAULT '',
+  workspace_id  TEXT NOT NULL DEFAULT '',
   created_at    INTEGER NOT NULL,
   last_seen_at  INTEGER NOT NULL,
   expires_at    INTEGER NOT NULL
@@ -28,6 +31,16 @@ CREATE TABLE IF NOT EXISTS onboarding (
   json          TEXT NOT NULL,
   updated_at    INTEGER NOT NULL
 );
+
+-- One-time sign-in codes: one live code per address, only a hash is kept, five wrong tries burn it.
+CREATE TABLE IF NOT EXISTS login_codes (
+  email       TEXT PRIMARY KEY,                   -- normalised
+  code_hash   TEXT NOT NULL,
+  expires_at  INTEGER NOT NULL,
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  sent_at     INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS login_codes_expires ON login_codes (expires_at);
 
 -- Atomic counters for sign-in / sign-up rate limits and failure back-off. Keys are hashes (never a raw address or email).
 -- at is the window start for a rate-limit counter and the time of the last failure for a failure counter.

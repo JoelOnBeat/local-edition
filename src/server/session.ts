@@ -5,6 +5,7 @@ import { HttpError } from "./http/errors";
 import { clientIp, ipHash } from "./limits";
 import { serial } from "./serial";
 import { sampleSeed } from "./sample/chain";
+import { getAuthStore } from "./auth";
 import { getPrincipal } from "./auth/sessions";
 import { DEMO_WORKSPACE_ID, getRepo, isAccountId, remapId, workspaceSuffix, WorkspaceExistsError, type Repo, type SeedWithId } from "./store";
 
@@ -141,9 +142,14 @@ export async function peekWorkspace(request: Request, repo?: Repo): Promise<Work
 }
 
 /**
- * Cookie -> workspace id. A missing, unknown or tampered cookie gets a fresh seeded workspace (rate
- * limited per IP). The `demo` id is never accepted from a cookie: it belongs to the weekly job.
+ * Session -> workspace id. Data routes need a session: an account's, or the guest session "Try the sample chain" creates
+ * (POST /api/auth/guest). Without a valid one this answers 401 `unauthenticated`, which the client turns into sign-in. A signed-in
+ * user always gets their own workspace, whatever `le_ws` says. Tests that predate sessions set LE_ALLOW_ANONYMOUS=1 (honoured outside
+ * production only) to keep the old behaviour: a missing or unknown cookie gets a fresh seeded workspace, rate limited per IP.
+ * The `demo` id is never accepted from a cookie: it belongs to the weekly job.
  */
+const allowAnonymous = (): boolean => process.env.NODE_ENV !== "production" && process.env.LE_ALLOW_ANONYMOUS === "1";
+
 export async function resolveWorkspace(
   request: Request,
   repo?: Repo,
@@ -153,10 +159,18 @@ export async function resolveWorkspace(
   // A signed-in user always gets their own workspace, whatever `le_ws` says: the cookie cannot point them at someone else's.
   const principal = await getPrincipal(request);
   if (principal) {
-    if (!(await store.getWorkspace(principal.workspaceId))) await (await import("./auth/workspace")).ensureAccountWorkspace(store, principal.user);
+    if (!(await store.getWorkspace(principal.workspaceId))) {
+      if (principal.kind === "guest") {
+        // The sample workspace expired: the guest session is over with it.
+        await (await getAuthStore()).deleteSession(principal.session.id);
+        throw new HttpError(401, "unauthenticated", "Your sample session ended. Open the sample chain again.");
+      }
+      await (await import("./auth/workspace")).ensureAccountWorkspace(store, principal.user);
+    }
     const cookie = readCookie(request, WORKSPACE_COOKIE);
     return cookie === principal.workspaceId ? { workspaceId: principal.workspaceId } : { workspaceId: principal.workspaceId, setCookie: buildSetCookie(principal.workspaceId, isSecureRequest(request)) };
   }
+  if (!allowAnonymous()) throw new HttpError(401, "unauthenticated", "Sign in to continue.");
   const cookie = readCookie(request, WORKSPACE_COOKIE);
   // An `acct_` id is an account's workspace: without that account's session it is treated like any unknown cookie.
   if (cookie && cookie !== DEMO_WORKSPACE_ID && !isAccountId(cookie) && (await store.getWorkspace(cookie))) return { workspaceId: cookie };

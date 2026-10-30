@@ -1,5 +1,5 @@
 import type {
-  AgentEvent, AuthResult, CommsState, MeResponse, OnboardingState, OnboardingUpdate, SigninInput, SignupInput, ConnectionsResponse, Delivery, ItemAction, RegenerateSuggestion, RouteId, RouteInput, RouteOutput,
+  AgentEvent, AuthResult, CodeRequestResponse, CommsState, GuestResult, MeResponse, OnboardingState, OnboardingUpdate, CodeVerifyInput, SigninInput, SignupInput, ConnectionsResponse, Delivery, ItemAction, RegenerateSuggestion, RouteId, RouteInput, RouteOutput,
 } from "@/contract";
 import type { z } from "zod";
 import type { SeqEvent } from "./sse-client";
@@ -73,11 +73,17 @@ export interface ApiClient {
   /** Creates the account, its workspace and a session. `keepWorkspace` brings the visitor's sample workspace along. */
   signUp(input: z.input<typeof SignupInput>): Promise<AuthResult>;
   signIn(input: z.input<typeof SigninInput>): Promise<AuthResult>;
+  /** "Try the sample chain": a real guest session on a private sample workspace (reuses the session if there is one). */
+  startGuest(): Promise<GuestResult>;
+  /** Emails a six-digit code. 503 `email_unavailable` when no sender works: offer the password. */
+  requestCode(email: string): Promise<CodeRequestResponse>;
+  /** Checks the code (spaces and dashes ignored) and signs in; an address with no account gets one (`created: true`). */
+  verifyCode(input: z.input<typeof CodeVerifyInput>): Promise<AuthResult>;
   signOut(): Promise<void>;
   /** Who is signed in, and whether a signed-out visitor could keep their sample workspace. Never creates a workspace. */
   getMe(): Promise<MeResponse>;
   /** Deletes the signed-in account and everything it owns. Asks for the password again. */
-  deleteAccount(password: string): Promise<void>;
+  deleteAccount(confirm: string | { password?: string; confirmEmail?: string }): Promise<void>;
   getOnboarding(): Promise<OnboardingState>;
   updateOnboarding(update: OnboardingUpdate): Promise<OnboardingState>;
   /** Job-only routes, signed with an HMAC. Exposed for tests; the browser never holds the secret. */

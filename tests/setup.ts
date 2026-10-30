@@ -10,6 +10,9 @@ import { createMemoryRepo } from "@/server/store/memory";
  *   by `npm test`, and a fresh memory repo, so rate-limit buckets and the spend ledger never leak across tests.
  */
 process.env.STORE_DRIVER ??= "memory";
+// Tests written before sessions existed call the handlers with no session. Real sessions are required everywhere else (src/server/session.ts);
+// tests/auth/ turns this off to test exactly that.
+process.env.LE_ALLOW_ANONYMOUS ??= "1";
 
 beforeEach(() => {
   setRecorder(new MemoryRecorder());

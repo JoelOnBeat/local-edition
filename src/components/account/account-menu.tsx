@@ -21,9 +21,10 @@ export function AccountMenu() {
       </nav>
     );
   }
+  const user = me.user;
   return (
     <div data-testid="account-menu" data-state="signed-in">
-      <span data-testid="account-email">{me.user.email}</span>{" "}
+      <span data-testid="account-email">{user.email}</span>{" "}
       <button data-testid="account-signout" type="button" disabled={actions.busy !== null} onClick={() => void actions.signOut()}>
         Sign out
       </button>{" "}
@@ -33,10 +34,10 @@ export function AccountMenu() {
           style={{ display: "inline" }}
           onSubmit={(e) => {
             e.preventDefault();
-            void actions.deleteAccount(password);
+            void actions.deleteAccount(user.hasPassword ? password : { confirmEmail: password });
           }}
         >
-          <input data-testid="account-delete-password" type="password" aria-label="Password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <input data-testid="account-delete-password" type={user.hasPassword ? "password" : "email"} aria-label={user.hasPassword ? "Password" : "Type your email address to confirm"} placeholder={user.hasPassword ? "Password" : "Type your email address"} value={password} onChange={(e) => setPassword(e.target.value)} />
           <button data-testid="account-delete-confirm" type="submit" disabled={actions.busy !== null || password === ""}>
             Delete my account and data
           </button>

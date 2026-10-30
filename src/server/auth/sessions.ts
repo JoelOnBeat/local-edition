@@ -18,20 +18,26 @@ export async function sha256Hex(text: string): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export interface Principal {
-  user: UserRow;
-  session: SessionRow;
-  workspaceId: string;
-}
+/** Who a request is. `user`: an account. `guest`: "Try the sample chain", a real session on a sample workspace with no account behind it. */
+export type Principal =
+  | { kind: "user"; user: UserRow; session: SessionRow; workspaceId: string }
+  | { kind: "guest"; user: null; session: SessionRow; workspaceId: string };
 
-export const toAuthUser = (u: UserRow): AuthUser => ({ id: u.id, name: u.name, email: u.email, createdAt: u.createdAt });
+export const toAuthUser = (u: UserRow): AuthUser => ({ id: u.id, name: u.name, email: u.email, createdAt: u.createdAt, hasPassword: u.passwordHash !== "" });
 
 /** Creates a session for the user and returns the raw token (the only time it exists outside the cookie). */
-export async function issueSession(store: AuthStore, userId: string, now = Date.now()): Promise<{ token: string; maxAgeSeconds: number }> {
+export async function issueSession(store: AuthStore, user: { id: string; workspaceId: string }, now = Date.now()): Promise<{ token: string; maxAgeSeconds: number }> {
   const token = b64u(crypto.getRandomValues(new Uint8Array(32)));
   const id = await sha256Hex(token);
-  await store.createSession({ id, userId, createdAt: now, lastSeenAt: now, expiresAt: now + SESSION_TTL_MS });
-  await store.trimSessions(userId, MAX_SESSIONS_PER_USER, id);
+  await store.createSession({ id, kind: "user", userId: user.id, workspaceId: user.workspaceId, createdAt: now, lastSeenAt: now, expiresAt: now + SESSION_TTL_MS });
+  await store.trimSessions(user.id, MAX_SESSIONS_PER_USER, id);
+  return { token, maxAgeSeconds: SESSION_TTL_MS / 1000 };
+}
+
+/** A guest session on a visitor's sample workspace. It never outlives that workspace's 30-day cookie. */
+export async function issueGuestSession(store: AuthStore, workspaceId: string, now = Date.now()): Promise<{ token: string; maxAgeSeconds: number }> {
+  const token = b64u(crypto.getRandomValues(new Uint8Array(32)));
+  await store.createSession({ id: await sha256Hex(token), kind: "guest", userId: "", workspaceId, createdAt: now, lastSeenAt: now, expiresAt: now + SESSION_TTL_MS });
   return { token, maxAgeSeconds: SESSION_TTL_MS / 1000 };
 }
 
@@ -64,5 +70,6 @@ export async function getPrincipal(request: Request, store?: AuthStore, now = Da
     session = { ...session, lastSeenAt: now, expiresAt: now + SESSION_TTL_MS };
     await auth.touchSession(id, session.lastSeenAt, session.expiresAt);
   }
-  return { user: found.user, session, workspaceId: found.user.workspaceId };
+  if (found.user === null) return { kind: "guest", user: null, session, workspaceId: session.workspaceId };
+  return { kind: "user", user: found.user, session, workspaceId: found.user.workspaceId };
 }

@@ -8,8 +8,8 @@ import { expect, test, type Page } from "@playwright/test";
  *
  * Run it against `LE_DATA_DIR=<scratch dir> QLOO_MODE=replay TF_MODE=replay TAVILY_MODE=replay npm run dev -- --port 3107` with
  * `SMOKE_MODE=app BASE_URL=http://localhost:3107 PORT=3107 npx playwright test tests/e2e/accounts.spec.ts --workers=1`.
- * NOTE: with Next 16.4.3 `next dev` rewrites .next/dev/logs/next-development.log on every browser log line and rebuilds on it, so any page
- * reloads in a loop under a real browser. `experimental: { mcpServer: false }` in next.config.ts stops it (not committed: that file is the foundation's).
+ * Start the server with CODE_SENDER=log as well (codes are then readable from /api/auth/dev-outbox, a 404 in production); the password path
+ * is still covered here. next.config.ts has `experimental.mcpServer: false`: without it `next dev` reloads pages in a loop under a browser.
  */
 test.skip(process.env.SMOKE_MODE !== "app", "runs against a server started in app data mode (SMOKE_MODE=app)");
 
@@ -37,6 +37,13 @@ async function open(page: Page, path: string) {
   const hydrated = page.waitForResponse((r) => r.url().endsWith("/api/auth/me"));
   await page.goto(path);
   await hydrated;
+}
+
+/** The sign-in screen leads with the emailed code when a sender is configured; this switches to the password form. */
+async function usePassword(page: Page) {
+  const toggle = page.getByTestId("signin-use-password");
+  if (await toggle.isVisible().catch(() => false)) await toggle.click();
+  await expect(page.getByTestId("signin-form")).toBeVisible();
 }
 
 const stepStatus = (page: Page, id: string) => page.getByTestId(`step-nav-${id}`);
@@ -104,10 +111,11 @@ test("sign up, onboard on the photo + CSV fallback, build, approve, sign out, si
   expect((await (await page.request.get("/api/auth/me")).json()).user).toBeNull();
 
   // 9. Wrong password first (plain error, no sign-in), then the right one: back in the same workspace, onboarding already complete.
-  await page.getByTestId("signin-email").fill(email);
+  await usePassword(page);
+  await page.getByTestId("signin-pw-email").fill(email);
   await page.getByTestId("signin-password").fill("not the password at all");
   await page.getByTestId("signin-submit").click();
-  await expect(page.getByTestId("signin-error")).toHaveAttribute("data-code", "invalid_credentials");
+  await expect(page.getByTestId("signin-pw-error")).toHaveAttribute("data-code", "invalid_credentials");
   await page.getByTestId("signin-password").fill(PASSWORD);
   await page.getByTestId("signin-submit").click();
   await expect(page).toHaveURL(/\/app$/);
@@ -118,9 +126,11 @@ test("sign up, onboard on the photo + CSV fallback, build, approve, sign out, si
 
 test("a visitor who tried the sample chain keeps it on sign-up; deleting the account removes it", async ({ page }) => {
   const email = `omar.${unique()}@birchcoffee.example`;
-  await open(page, "/app"); // "Try the sample chain": no account, an anonymous sample workspace
-  await expect(page.getByTestId("account-signup")).toBeVisible();
+  await open(page, "/"); // "Try the sample chain": a real guest session on a private sample workspace
+  await page.getByTestId("landing-open-app").click();
+  await expect(page).toHaveURL(/\/app$/);
   await expect(page.getByTestId("nav-portfolio")).toBeVisible();
+  await expect(page.getByTestId("account-signup")).toBeVisible();
   await page.getByTestId("account-signup").click();
   await expect(page.getByTestId("signup-keep")).toBeVisible();
   await page.getByTestId("signup-keep").check();
@@ -143,8 +153,9 @@ test("a visitor who tried the sample chain keeps it on sign-up; deleting the acc
   await expect(page).toHaveURL(/\/signin\?deleted=1$/);
   await expect(page.getByTestId("signin-deleted")).toBeVisible();
 
-  await page.getByTestId("signin-email").fill(email);
+  await usePassword(page);
+  await page.getByTestId("signin-pw-email").fill(email);
   await page.getByTestId("signin-password").fill(PASSWORD);
   await page.getByTestId("signin-submit").click();
-  await expect(page.getByTestId("signin-error")).toHaveAttribute("data-code", "invalid_credentials");
+  await expect(page.getByTestId("signin-pw-error")).toHaveAttribute("data-code", "invalid_credentials");
 });

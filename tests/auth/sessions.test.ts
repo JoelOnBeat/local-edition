@@ -19,10 +19,10 @@ describe("sessions", () => {
 
   it("resolves a good token to its user and workspace, and a stranger's token to nothing", async () => {
     const store = await user();
-    const { token } = await issueSession(store, "user_t1");
+    const { token } = await issueSession(store, { id: "user_t1", workspaceId: "acct_t1" });
     expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);
     const p = await getPrincipal(at(token));
-    expect(p?.user.id).toBe("user_t1");
+    expect(p?.user?.id).toBe("user_t1");
     expect(p?.workspaceId).toBe("acct_t1");
     expect(await getPrincipal(at("B".repeat(43)))).toBeNull();
     expect(await getPrincipal(new Request("http://localhost/x"))).toBeNull();
@@ -30,7 +30,7 @@ describe("sessions", () => {
 
   it("keeps only the SHA-256 of the token", async () => {
     const store = await user();
-    const { token } = await issueSession(store, "user_t1");
+    const { token } = await issueSession(store, { id: "user_t1", workspaceId: "acct_t1" });
     const keys = await rig.kv.list("sess:");
     expect(keys).toEqual([`sess:${await sha256Hex(token)}`]);
     expect(JSON.stringify(await rig.kv.get(keys[0]))).not.toContain(token);
@@ -38,7 +38,7 @@ describe("sessions", () => {
 
   it("expires after 30 days and deletes the dead row", async () => {
     const store = await user();
-    const { token } = await issueSession(store, "user_t1");
+    const { token } = await issueSession(store, { id: "user_t1", workspaceId: "acct_t1" });
     vi.setSystemTime(Date.now() + SESSION_TTL_MS - 1000);
     expect(await getPrincipal(at(token))).not.toBeNull();
     vi.setSystemTime(Date.now() + 2000 + SESSION_TTL_MS);
@@ -48,7 +48,7 @@ describe("sessions", () => {
 
   it("pushes an in-use session forward, at most once a day", async () => {
     const store = await user();
-    const { token } = await issueSession(store, "user_t1");
+    const { token } = await issueSession(store, { id: "user_t1", workspaceId: "acct_t1" });
     const id = await sha256Hex(token);
     const first = (await store.findSession(id))!.session;
     vi.setSystemTime(Date.now() + 3600_000);
@@ -64,7 +64,7 @@ describe("sessions", () => {
     const tokens: string[] = [];
     for (let i = 0; i < MAX_SESSIONS_PER_USER + 3; i++) {
       vi.setSystemTime(Date.now() + 1000);
-      tokens.push((await issueSession(store, "user_t1")).token);
+      tokens.push((await issueSession(store, { id: "user_t1", workspaceId: "acct_t1" })).token);
     }
     expect(await rig.kv.list("sess:")).toHaveLength(MAX_SESSIONS_PER_USER);
     expect(await getPrincipal(at(tokens[0]))).toBeNull();

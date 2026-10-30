@@ -13,6 +13,8 @@ export interface OnboardingMemory {
   basicsConfirmed: boolean;
   current: OnboardingStepId | null;
   updatedAt: number;
+  /** When every step last read done or skipped; null (or absent) while some step is open. `/api/auth/me` reads this instead of recomputing. */
+  completedAt?: number | null;
 }
 
 export const TITLES: Record<OnboardingStepId, string> = {

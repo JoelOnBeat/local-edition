@@ -1,3 +1,4 @@
+import { SampleChainLink, StartLink } from "@/components/account/session-links";
 import Link from "next/link";
 
 /** Public-site header and footer for the landing, privacy and terms pages. */
@@ -32,13 +33,10 @@ export function SiteHeader() {
               {n.label}
             </Link>
           ))}
-          <Link
-            href="/app"
+          <StartLink
             data-testid="site-open-app"
             className="rounded-(--radius) bg-(--accent) px-3 py-2 text-[14px] font-semibold text-(--accent-ink) hover:opacity-90"
-          >
-            Open the sample chain
-          </Link>
+          />
         </nav>
       </div>
     </header>
@@ -58,7 +56,7 @@ export function SiteFooter() {
         </div>
         <div className="grid content-start gap-1.5">
           <span className="text-[11px] font-semibold uppercase tracking-[0.09em]">Product</span>
-          <Link href="/app" className="hover:text-(--ink)">Sample chain</Link>
+          <SampleChainLink className="text-left hover:text-(--ink)" signedOutLabel="Sample chain" />
           <Link href="/proof" className="hover:text-(--ink)">Proof</Link>
           <Link href="/limits" className="hover:text-(--ink)">Limits</Link>
         </div>

@@ -8,6 +8,7 @@ import { squareDeps } from "../connectors/square/deps";
 import { getAuthStore } from "./index";
 import { assertSameOrigin } from "./origin";
 import { getOnboarding, updateOnboarding, type OnboardingDeps } from "./onboarding";
+import * as codes from "./code-service";
 import * as service from "./service";
 import { networkOf, takeWindow, WINDOWS } from "./throttle";
 
@@ -43,6 +44,9 @@ export const signupRoute = authRoute(authRoutes.signup, { window: "signupIp", sa
 export const signinRoute = authRoute(authRoutes.signin, { window: "signinIp", sameOrigin: true }, ({ body }, ctx) => service.signin(ctx.request, body));
 export const signoutRoute = authRoute(authRoutes.signout, { sameOrigin: true }, (_in, ctx) => service.signout(ctx.request));
 export const deleteAccountRoute = authRoute(authRoutes.deleteAccount, { window: "accountIp", sameOrigin: true }, ({ body }, ctx) => service.deleteAccount(ctx.request, body));
+export const guestRoute = authRoute(authRoutes.guest, { sameOrigin: true }, (_in, ctx) => codes.startGuest(ctx.request));
+export const codeRequestRoute = authRoute(authRoutes.codeRequest, { window: "codeIp", sameOrigin: true }, ({ body }, ctx) => codes.requestCode(ctx.request, body));
+export const codeVerifyRoute = authRoute(authRoutes.codeVerify, { window: "signinIp", sameOrigin: true }, ({ body }, ctx) => codes.verifyCode(ctx.request, body));
 export const meRoute = authRoute(authRoutes.me, { sameOrigin: false }, async (_in, ctx) => ({ body: await service.me(ctx.request), cookies: [] }));
 
 async function liveDeps(repo: OnboardingDeps["repo"]): Promise<OnboardingDeps> {

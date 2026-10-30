@@ -15,7 +15,12 @@ export interface UserRow {
 export interface SessionRow {
   /** SHA-256 hex of the cookie token. */
   id: string;
+  /** `guest`: "Try the sample chain", a real session on a visitor's sample workspace with no account behind it. */
+  kind: "user" | "guest";
+  /** The account; '' for a guest. */
   userId: string;
+  /** The workspace this session works in. */
+  workspaceId: string;
   createdAt: number;
   lastSeenAt: number;
   expiresAt: number;
@@ -28,6 +33,14 @@ export interface CounterState {
   count: number;
   /** Window start (rate-limit counter) or time of the last failure (failure counter), epoch ms. */
   at: number;
+}
+
+export interface LoginCodeRow {
+  email: string;
+  codeHash: string;
+  expiresAt: number;
+  attempts: number;
+  sentAt: number;
 }
 
 export class EmailTakenError extends Error {
@@ -47,13 +60,21 @@ export interface AuthStore {
   deleteUser(userId: string): Promise<void>;
 
   createSession(session: SessionRow): Promise<void>;
-  /** The session and its user; null when unknown. Expiry is the caller's check (an expired row is still returned). */
-  findSession(idHash: string): Promise<{ session: SessionRow; user: UserRow } | null>;
+  /** The session and its user (null for a guest); null when unknown. Expiry is the caller's check (an expired row is still returned). */
+  findSession(idHash: string): Promise<{ session: SessionRow; user: UserRow | null } | null>;
   touchSession(idHash: string, lastSeenAt: number, expiresAt: number): Promise<void>;
   deleteSession(idHash: string): Promise<void>;
   /** Keeps only the `keep` newest sessions of the user (never the one named in `protect`). */
   trimSessions(userId: string, keep: number, protect: string): Promise<void>;
   deleteExpiredSessions(now: number): Promise<void>;
+
+  /** Replaces the address's live code (a resend). */
+  putLoginCode(row: LoginCodeRow): Promise<void>;
+  getLoginCode(email: string): Promise<LoginCodeRow | null>;
+  /** Counts a wrong try and returns the total. */
+  bumpLoginCodeAttempts(email: string): Promise<number>;
+  deleteLoginCode(email: string): Promise<void>;
+  deleteExpiredLoginCodes(now: number): Promise<void>;
 
   getOnboarding(workspaceId: string): Promise<OnboardingDoc | null>;
   putOnboarding(workspaceId: string, doc: OnboardingDoc): Promise<void>;

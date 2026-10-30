@@ -1,6 +1,6 @@
 import { serial } from "../serial";
 import type { KvLike } from "../store";
-import { EmailTakenError, type AuthStore, type CounterState, type OnboardingDoc, type SessionRow, type UserRow } from "./store";
+import { EmailTakenError, type AuthStore, type CounterState, type LoginCodeRow, type OnboardingDoc, type SessionRow, type UserRow } from "./store";
 
 /**
  * Key-value driver for `next dev` (file), tests (memory) and any non-D1 setup. Keys: user:<id> · uemail:<email> -> id ·
@@ -44,6 +44,7 @@ export class KvAuthStore implements AuthStore {
 
   async createSession(s: SessionRow) {
     await this.kv.put(`sess:${s.id}`, s);
+    if (s.kind === "guest") return;
     await serial(`auth:usess:${s.userId}`, async () => {
       const list = (await this.get<string[]>(`usess:${s.userId}`)) ?? [];
       await this.kv.put(`usess:${s.userId}`, [...list.filter((h) => h !== s.id), s.id]);
@@ -52,6 +53,7 @@ export class KvAuthStore implements AuthStore {
   async findSession(idHash: string) {
     const session = await this.get<SessionRow>(`sess:${idHash}`);
     if (!session) return null;
+    if (session.kind === "guest") return { session, user: null };
     const user = await this.getUserById(session.userId);
     return user ? { session, user } : null;
   }
@@ -62,7 +64,7 @@ export class KvAuthStore implements AuthStore {
   async deleteSession(idHash: string) {
     const s = await this.get<SessionRow>(`sess:${idHash}`);
     await this.kv.delete(`sess:${idHash}`);
-    if (!s) return;
+    if (!s || s.kind === "guest") return;
     await serial(`auth:usess:${s.userId}`, async () => {
       const list = (await this.get<string[]>(`usess:${s.userId}`)) ?? [];
       await this.kv.put(`usess:${s.userId}`, list.filter((h) => h !== idHash));
@@ -78,6 +80,30 @@ export class KvAuthStore implements AuthStore {
     for (const key of await this.kv.list("sess:")) {
       const s = await this.get<SessionRow>(key);
       if (s && s.expiresAt <= now) await this.deleteSession(s.id);
+    }
+  }
+
+  async putLoginCode(c: LoginCodeRow) {
+    await this.kv.put(`code:${c.email}`, { ...c, attempts: 0 });
+  }
+  getLoginCode(email: string) {
+    return this.get<LoginCodeRow>(`code:${email}`);
+  }
+  bumpLoginCodeAttempts(email: string): Promise<number> {
+    return serial(`auth:code:${email}`, async () => {
+      const c = await this.get<LoginCodeRow>(`code:${email}`);
+      if (!c) return 0;
+      await this.kv.put(`code:${email}`, { ...c, attempts: c.attempts + 1 });
+      return c.attempts + 1;
+    });
+  }
+  async deleteLoginCode(email: string) {
+    await this.kv.delete(`code:${email}`);
+  }
+  async deleteExpiredLoginCodes(now: number) {
+    for (const key of await this.kv.list("code:")) {
+      const c = await this.get<LoginCodeRow>(key);
+      if (c && c.expiresAt <= now) await this.kv.delete(key);
     }
   }
 

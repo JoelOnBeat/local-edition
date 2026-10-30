@@ -1,5 +1,5 @@
 import { SKIPPABLE_STEPS, type OnboardingState, type OnboardingUpdate } from "@/contract";
-import { computeOnboarding, EMPTY_ONBOARDING, TITLES, type OnboardingFacts } from "@/lib/onboarding";
+import { computeOnboarding, EMPTY_ONBOARDING, TITLES, type OnboardingFacts, type OnboardingMemory } from "@/lib/onboarding";
 import { HttpError } from "../http/errors";
 import type { Repo } from "../store";
 import { getAuthStore, type AuthStore } from "./index";
@@ -25,9 +25,18 @@ async function gather(deps: OnboardingDeps, workspace: { id: string; chainId: st
   };
 }
 
+/** Remembers whether every step reads done or skipped, so `/api/auth/me` can answer "finished?" without recomputing it. */
+async function syncCompletion(auth: AuthStore, workspaceId: string, doc: OnboardingMemory | null, state: OnboardingState, now: number): Promise<OnboardingState> {
+  const was = Boolean(doc?.completedAt);
+  if (state.complete === was && (doc || !state.complete)) return state;
+  await auth.putOnboarding(workspaceId, { ...(doc ?? EMPTY_ONBOARDING), completedAt: state.complete ? now : null });
+  return state;
+}
+
 export async function getOnboarding(deps: OnboardingDeps, workspace: { id: string; chainId: string }): Promise<OnboardingState> {
   const auth = deps.auth ?? (await getAuthStore());
-  return computeOnboarding(await gather(deps, workspace), await auth.getOnboarding(workspace.id));
+  const doc = await auth.getOnboarding(workspace.id);
+  return syncCompletion(auth, workspace.id, doc, computeOnboarding(await gather(deps, workspace), doc), (deps.now ?? Date.now)());
 }
 
 export async function updateOnboarding(deps: OnboardingDeps, workspace: { id: string; chainId: string }, input: OnboardingUpdate): Promise<OnboardingState> {
@@ -53,6 +62,8 @@ export async function updateOnboarding(deps: OnboardingDeps, workspace: { id: st
   doc.skipped = [...new Set([...doc.skipped, ...(input.skip ?? [])])].filter((s) => !unskip.has(s));
   if (input.current) doc.current = input.current;
   doc.updatedAt = (deps.now ?? Date.now)();
+  const state = computeOnboarding(await gather(deps, workspace), doc);
+  doc.completedAt = state.complete ? (doc.completedAt ?? doc.updatedAt) : null;
   await auth.putOnboarding(workspace.id, doc);
-  return computeOnboarding(await gather(deps, workspace), doc);
+  return state;
 }
