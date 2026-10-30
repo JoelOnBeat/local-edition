@@ -77,3 +77,28 @@ describe("GET /api/calendar/[token]", () => {
     expect((await res.text()).startsWith("BEGIN:VCALENDAR\r\n")).toBe(true);
   });
 });
+
+describe("post-approval dispatch", () => {
+  it("publishes one approved special on its own, and ignores one that is not approved", async () => {
+    const { dispatchSquare, dispatchSquareItem } = await import("./dispatch");
+    const { vi } = await import("vitest");
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(h.fake.fetch);
+    try {
+      await connectSandbox({ ...h.deps, ledger: h.ledger }, h.workspaceId);
+      const edition = (await h.repo.getEdition("ed_williamsburg_2026-10-26"))!;
+      const special = edition.items.find((i) => i.kind === "special")!;
+      const upserts = () => h.fake.calls.filter((c) => c.path === "/v2/catalog/object" && c.method === "POST").length;
+      await h.repo.updateEditionItem(edition.id, { ...special, status: "draft" }, special.version);
+      await dispatchSquareItem("demo", edition.id, special.id);
+      expect(upserts()).toBe(0);
+      const draft = (await h.repo.getEdition(edition.id))!.items.find((i) => i.id === special.id)!;
+      await h.repo.updateEditionItem(edition.id, { ...draft, status: "approved" }, draft.version);
+      await dispatchSquareItem("demo", edition.id, special.id);
+      await dispatchSquare({ workspaceId: "demo", editionId: edition.id }); // the edition-level pass finds it already delivered
+      expect(upserts()).toBe(1);
+      expect((await h.ledger.listDeliveries("demo", edition.id))[0].status).toBe("sent");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
