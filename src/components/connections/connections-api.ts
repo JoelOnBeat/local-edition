@@ -157,3 +157,12 @@ export async function runAction(provider: ConnectorProvider): Promise<string> {
   const r = await call("/api/connectors/mail/poll", PollResponse, { method: "POST" });
   return r.newReplies > 0 ? `${r.newReplies} new ${r.newReplies === 1 ? "reply" : "replies"} from stores.` : `Checked ${r.checked} threads: no new replies.`;
 }
+
+/** Square's status alone, for the setup page. */
+export async function loadSquare(): Promise<SquareStatus> {
+  if (isMock()) {
+    await wait();
+    return structuredClone(mock.square);
+  }
+  return call("/api/connectors/square", SquareStatus);
+}
