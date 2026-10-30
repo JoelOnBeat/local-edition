@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { ButtonLink } from "@/components/ui";
+import { Icon } from "@/components/app-ui/icons";
 import { SiteShell } from "@/components/site/site-chrome";
+import { PublicBody, PublicHero } from "./_parts/public-hero";
 import { ProofView } from "./_parts/proof-view";
 
 export const metadata: Metadata = {
@@ -11,19 +13,21 @@ export const metadata: Metadata = {
 export default function ProofPage() {
   return (
     <SiteShell>
-      <div className="mx-auto grid max-w-[1180px] gap-8 px-4 py-10 sm:px-6 md:py-14">
-        <header className="grid gap-3">
-          <span className="text-[11.5px] font-semibold uppercase tracking-[0.1em] text-muted">Proof</span>
-          <h1 className="max-w-[20ch] font-display text-[clamp(36px,5.6vw,64px)] font-extrabold leading-[0.98] tracking-[-0.03em]">
-            What ran, and how well it worked.
-          </h1>
-          <p className="max-w-[64ch] text-[17px] leading-[1.55] text-ink-2">
-            Read from the same data the app uses. What Local Edition cannot do yet is on{" "}
-            <Link href="/limits" className="font-semibold text-ink underline underline-offset-4">the limits page</Link>.
-          </p>
-        </header>
+      <PublicHero
+        pill="Proof"
+        pillIcon={<Icon name="shield" />}
+        title="What ran, and how well it worked."
+        lede="Read from the same data the app uses: the model behind each step, what the guardrails caught, and every Nebius job run."
+        actions={
+          <>
+            <ButtonLink href="/limits" variant="secondary" size="sm">Read the limits</ButtonLink>
+            <ButtonLink href="#guardrails" variant="ghost" size="sm">Guardrail results</ButtonLink>
+          </>
+        }
+      />
+      <PublicBody>
         <ProofView />
-      </div>
+      </PublicBody>
     </SiteShell>
   );
 }

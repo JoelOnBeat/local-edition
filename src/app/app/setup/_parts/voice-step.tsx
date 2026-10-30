@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import type { Chain, Evidence } from "@/contract";
-import { Button, EvidenceChip, Notice } from "@/components/ui";
+import { Button, EvidenceChip, Input, Notice, Textarea, cx } from "@/components/ui";
+import { Icon } from "@/components/app-ui/icons";
 import { getApi } from "@/lib/api-client";
 
 /** Step 2: the chain's name and up to three lines of brand voice. Every edition is written, and guarded, in this voice. */
 
 const MAX = 140;
-const input = "w-full rounded-[var(--radius)] border border-rule bg-paper px-3 text-[14.5px] text-ink placeholder:text-muted focus:border-ink-2";
 
 export function VoiceStep({ chain, onSaved }: { chain: Chain; onSaved: (c: Chain) => void }) {
   const api = getApi();
@@ -54,34 +54,34 @@ export function VoiceStep({ chain, onSaved }: { chain: Chain; onSaved: (c: Chain
 
   return (
     <div className="grid gap-4">
-      <label className="grid max-w-md gap-1.5">
-        <span className="text-[13px] font-medium text-ink-2">Chain name</span>
-        <input data-testid="voice-chain-name" className={`${input} h-10`} value={name} maxLength={80} onChange={(e) => setName(e.target.value)} />
+      <label className="grid max-w-md gap-2">
+        <span className="text-[14px] font-medium leading-5 text-ink">Chain name</span>
+        <Input data-testid="voice-chain-name" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} />
       </label>
 
       <div className="grid gap-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-[13px] font-medium text-ink-2">How your chain talks, in up to three lines</span>
-          <Button data-testid="voice-draft" size="sm" loading={drafting} onClick={draft}>Draft from our website</Button>
+          <span className="text-[14px] font-medium leading-5 text-ink">How your chain talks, in up to three lines</span>
+          <Button data-testid="voice-draft" size="sm" loading={drafting} onClick={draft} icon={<Icon name="sparkles" size={14} />}>Draft from our website</Button>
         </div>
         {lines.map((l, i) => {
           const over = l.trim().length > MAX;
           return (
             <div key={i} className="grid gap-1">
               <div className="flex items-start gap-2">
-                <span className="mt-2.5 w-5 shrink-0 font-mono text-[12px] text-muted">{i + 1}</span>
-                <textarea
+                <span className="mt-2.5 flex size-6 shrink-0 items-center justify-center rounded-md bg-white text-[12px] font-semibold text-ink-2 shadow-plate tnum">{i + 1}</span>
+                <Textarea
                   rows={2} value={l} data-testid={`voice-line-${i}`} aria-label={`Brand voice line ${i + 1}`} aria-invalid={over}
                   placeholder={["Warm and plain-spoken, like the person who knows your order.", "We talk about the block, not about ourselves.", "Short sentences, no hype."][i]}
                   onChange={(e) => setLines(lines.map((x, j) => (j === i ? e.target.value : x)))}
-                  className={`${input} min-h-[64px] py-2 ${over ? "border-flag" : ""}`}
+                  className="min-h-[64px] resize-y"
                 />
               </div>
-              <span className={`justify-self-end font-mono text-[11.5px] ${over ? "text-flag" : "text-muted"}`}>{l.trim().length}/{MAX}</span>
+              <span className={cx("justify-self-end font-mono text-[12px] tnum", over ? "text-flag" : "text-muted")}>{l.trim().length}/{MAX}</span>
             </div>
           );
         })}
-        <p className="text-[12.5px] text-muted">Drafting reads a few pages of your site once (Tavily), then Nemotron Lightning writes the lines.</p>
+        <p className="text-[13px] leading-5 text-muted">Drafting reads a few pages of your site once (Tavily), then Nemotron Lightning writes the lines.</p>
       </div>
 
       {sources.length ? (
@@ -89,7 +89,7 @@ export function VoiceStep({ chain, onSaved }: { chain: Chain; onSaved: (c: Chain
       ) : null}
       {msg ? <div data-testid="voice-message" data-tone={msg.tone}><Notice tone={msg.tone}>{msg.text}</Notice></div> : null}
       <div>
-        <Button data-testid="voice-save" variant="primary" size="sm" loading={saving} disabled={invalid} onClick={save}>Save brand voice</Button>
+        <Button data-testid="voice-save" variant="primary" size="sm" className="h-10 px-6" loading={saving} disabled={invalid} onClick={save}>Save brand voice</Button>
         {filled.length === 0 ? <span className="ml-3 text-[13px] text-flag">Write at least one line.</span> : null}
       </div>
     </div>

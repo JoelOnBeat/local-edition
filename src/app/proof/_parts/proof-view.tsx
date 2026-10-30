@@ -1,101 +1,101 @@
 "use client";
 
 import Link from "next/link";
-import { ErrorState, Chip, Skeleton, SkeletonText, StoreSwatch } from "@/components/ui";
+import { CardBand, ErrorState, Skeleton, StatusBar, StoreTile } from "@/components/ui";
+import { Icon } from "@/components/app-ui/icons";
+import { StatStrip } from "@/components/app-ui/stat-cells";
+import { SkeletonRows } from "@/components/app-ui/states";
+import { IconTag } from "@/components/app-ui/status";
 import { formatUsd, modelName, pct } from "@/components/lib/format";
 import { useAsync } from "@/components/lib/use-async";
 import { getApi } from "@/lib/api-client";
-import { EvalBlock, JobRuns, Section, Stat } from "./proof-parts";
+import { EvalBlock, JobRuns, ModelSteps } from "./proof-parts";
 
-/** What actually ran: which model did which step, the Ultra review, the guardrail eval, the Nebius jobs. */
-
-/** Public page: everything comes from /api/proof, so a visitor who only reads it is never given a workspace. */
+/**
+ * The body of the proof page: what actually ran (model per step, the Ultra review, the NeMo Guardrails eval, the Nebius
+ * jobs). Self-contained cards, so it sits in the public page and inside the app alike. Every number comes from /api/proof.
+ */
 const load = () => getApi().getProof();
 
 export function ProofView() {
   const q = useAsync("proof", load);
   if (q.loading && !q.data) {
     return (
-      <div className="grid gap-6" role="status" aria-label="Loading">
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-24" />)}</div>
-        <SkeletonText lines={8} />
+      <div className="grid gap-3" role="status" aria-label="Loading">
+        <div className="grid gap-px overflow-hidden rounded-lg bg-rule-subtle shadow-ring-xs sm:grid-cols-2 lg:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => <div key={i} className="grid gap-3 bg-white p-5"><Skeleton className="h-3 w-32 rounded-full" /><Skeleton className="h-8 w-20" /></div>)}
+        </div>
+        <CardBand title="Which model does what" flush><SkeletonRows rows={6} cols={2} /></CardBand>
       </div>
     );
   }
-  if (q.error || !q.data) return <div data-testid="proof-error"><ErrorState message={q.error?.message ?? "The proof did not load."} onRetry={q.reload} /></div>;
+  if (q.error || !q.data) {
+    return (
+      <div data-testid="proof-error">
+        <CardBand title="Proof" flush><ErrorState message={q.error?.message ?? "The proof did not load."} onRetry={q.reload} /></CardBand>
+      </div>
+    );
+  }
 
   const proof = q.data;
   const reviewed = proof.reviews;
   const needs = reviewed.filter((r) => r.verdict === "needs_change");
-  const seen = new Set(proof.seenModels);
+  const ev = proof.eval;
   const latestCertify = proof.jobRuns.find((r) => r.mode === "certify");
 
   return (
-    <div className="grid gap-12">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat testId="proof-spend-per-edition" label="Model spend per edition" value={proof.spendPerEditionUsd === null ? "n/a" : formatUsd(proof.spendPerEditionUsd)} sub="Token Factory, averaged" />
-        <Stat testId="proof-cached-ratio" label="Prompt served from cache" value={proof.cachedRatio === null ? "n/a" : pct(proof.cachedRatio)} sub="Token Factory prefix cache" />
-        <Stat testId="proof-reviewed" label="Editions reviewed by Ultra" value={`${reviewed.length}/${proof.editionCount}`} sub={`${needs.length} sent back with a change`} />
-        <Stat testId="proof-catch-rate" label="Guardrail catch rate" value={proof.eval ? pct(proof.eval.catchRate) : "n/a"} sub={proof.eval ? `${pct(proof.eval.falsePositiveRate)} false positives` : "no eval yet"} />
-      </div>
+    <div className="grid gap-3">
+      <StatStrip cells={[
+        {
+          testId: "proof-catch-rate", icon: "shield", label: "Guardrail catch rate", value: ev ? pct(ev.catchRate) : "n/a",
+          visual: ev ? <StatusBar value={ev.catchRate * 100} label={`${ev.caught} of ${ev.cases} attacks`} className="text-[13px]" /> : undefined,
+          sub: ev ? `${pct(ev.falsePositiveRate)} false positives` : "No eval has run yet",
+        },
+        {
+          testId: "proof-reviewed", icon: "layers", label: "Editions reviewed by Ultra", value: `${reviewed.length}/${proof.editionCount}`,
+          sub: proof.editionCount ? `${needs.length} sent back with a change` : "No editions this week yet",
+        },
+        { testId: "proof-spend-per-edition", icon: "coins", label: "Model spend per edition", value: proof.spendPerEditionUsd === null ? "n/a" : formatUsd(proof.spendPerEditionUsd), sub: "Token Factory, averaged" },
+        { testId: "proof-cached-ratio", icon: "bolt", label: "Prompt served from cache", value: proof.cachedRatio === null ? "n/a" : pct(proof.cachedRatio), sub: "Token Factory prefix cache" },
+      ]} />
 
-      <Section id="models" kicker="Model per step" title="Which model does what" lede="Every model runs on Nebius Token Factory. A green dot means this workspace's latest editions name that model as the one that ran.">
-        <div className="overflow-hidden rounded-[var(--radius)] border border-rule">
-          <table className="w-full border-collapse text-left text-[14px]">
-            <thead className="hidden bg-paper-2 text-[11.5px] uppercase tracking-[0.08em] text-muted md:table-header-group">
-              <tr><th className="px-4 py-2 font-semibold">Step</th><th className="px-4 py-2 font-semibold">Model</th><th className="px-4 py-2 font-semibold">What it does</th></tr>
-            </thead>
-            <tbody className="divide-y divide-rule">
-              {proof.steps.map((s) => (
-                <tr key={s.step} data-testid="proof-model-row" data-seen={seen.has(s.model)} className="grid gap-1 px-4 py-3 md:table-row md:p-0">
-                  <td className="font-semibold md:px-4 md:py-3">{s.step}</td>
-                  <td className="md:px-4 md:py-3">
-                    <span className="inline-flex items-center gap-2 font-mono text-[12.5px]">
-                      {seen.has(s.model) ? <span className="h-2 w-2 shrink-0 rounded-full bg-ok" title="Seen in this workspace's editions" /> : null}
-                      <span className="break-all">{s.model}</span>
-                    </span>
-                  </td>
-                  <td className="text-ink-2 md:px-4 md:py-3">{s.does}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Section>
+      <CardBand id="guardrails" title="NeMo Guardrails: how often they are right" icon={<Icon name="shield" />} flush={!ev} className="scroll-mt-24">
+        <EvalBlock result={ev} />
+      </CardBand>
 
-      <Section id="review" kicker="Ultra review" title={`${modelName("nvidia/Nemotron-3-Ultra-550b-a55b")} reads the whole chain`} lede="After every store's edition is drafted, the reviewer reads them side by side. It flags two stores pushing the same special, or an event that clashes with a neighbour's.">
+      <CardBand id="models" title="Which model does what" icon={<Icon name="cpu" />} flush className="scroll-mt-24"
+        footer={<span>Every model runs on Nebius Token Factory. A green dot: this workspace&apos;s latest editions name it.</span>}>
+        <ModelSteps steps={proof.steps} seen={new Set(proof.seenModels)} />
+      </CardBand>
+
+      <CardBand id="review" title={`${modelName("nvidia/Nemotron-3-Ultra-550b-a55b")} reads the whole chain`} icon={<Icon name="layers" />} flush={reviewed.length === 0} className="scroll-mt-24" bodyClassName={reviewed.length ? "p-2" : undefined}>
         {reviewed.length === 0 ? (
-          <p className="text-[14.5px] text-muted">No review has run on this week&apos;s editions yet. It runs from the portfolio.</p>
+          <p className="px-6 py-10 text-center text-[14px] leading-5 text-ink-2">No review has run on this week&apos;s editions yet. It runs after every build, reading all stores side by side.</p>
         ) : (
           <ul className="grid gap-2 md:grid-cols-2">
-            {reviewed.map((r) => {
-              return (
-                <li key={r.storeId} data-testid="proof-review" data-store-id={r.storeId} data-verdict={r.verdict} className="grid gap-1.5 rounded-[var(--radius)] border border-rule bg-paper p-3.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <Link href={`/app/stores/${r.storeId}`} className="min-w-0 font-semibold hover:underline">
-                      <StoreSwatch colorIndex={r.colorIndex} name={r.storeName} />
-                    </Link>
-                    <Chip tone={r.verdict === "approve" ? "ok" : "warn"} dot>{r.verdict === "approve" ? "Approve" : "Needs a change"}</Chip>
-                  </div>
-                  <p className="text-[14px] leading-[1.5] text-ink-2">{r.reason}</p>
-                  {r.hint ? <p className="text-[13px] text-ink"><span className="font-semibold">Change:</span> {r.hint}</p> : null}
-                </li>
-              );
-            })}
+            {reviewed.map((r) => (
+              <li key={r.storeId} data-testid="proof-review" data-store-id={r.storeId} data-verdict={r.verdict} className="grid content-start gap-2 rounded-lg bg-paper-2 p-4 shadow-[inset_0_0_0_1px_var(--rule-subtle)]">
+                <div className="flex items-center justify-between gap-3">
+                  <Link href={`/app/stores/${r.storeId}`} className="flex min-w-0 items-center gap-2.5 text-[14px] font-medium text-ink-strong hover:underline hover:decoration-stone-300 hover:underline-offset-[3px]">
+                    <StoreTile colorIndex={r.colorIndex} name={r.storeName} size="lg" />
+                    <span className="truncate">{r.storeName}</span>
+                  </Link>
+                  {r.verdict === "approve" ? <IconTag tone="ok" icon="check">Clears</IconTag> : <IconTag tone="warn" icon="pencil">Wants a change</IconTag>}
+                </div>
+                <p className="text-[14px] leading-[22px] text-ink-2">{r.reason}</p>
+                {r.hint ? <p className="rounded-md bg-warn-bg/60 px-2.5 py-1.5 text-[13px] leading-5 text-warn-ink"><span className="font-medium">Change:</span> {r.hint}</p> : null}
+              </li>
+            ))}
           </ul>
         )}
-      </Section>
+      </CardBand>
 
-      <Section id="guardrails" kicker="NeMo Guardrails" title="How often the guardrails are right" lede="A red-team set of health claims, off-voice copy and prompt injections, plus ordinary lines that should pass, scored by the NeMo Guardrails library in a Nebius job.">
-        <EvalBlock result={proof.eval} />
-      </Section>
-
-      <Section id="jobs" kicker="Nebius jobs" title="The latest job runs" lede={<>Certify, eval and import are Nebius Serverless Jobs, <strong className="text-ink">started from the CLI, on demand</strong>. Nothing schedules them. The weekly rebuild runs in the Worker and never calls Nebius&apos;s control plane.</>}>
+      <CardBand id="jobs" title="Nebius jobs, started from the CLI on demand" icon={<Icon name="terminal" />} flush className="scroll-mt-24"
+        footer={<span>Nothing schedules them. The weekly rebuild runs in the Worker and never calls Nebius&apos;s control plane.{latestCertify ? "" : " No certify run yet: items show the live check only."}</span>}>
         <JobRuns runs={proof.jobRuns} />
-        {latestCertify ? null : <p className="text-[13.5px] text-muted">No certify run yet: items show the live check only.</p>}
-      </Section>
+      </CardBand>
 
-      <p className="border-t border-rule pt-4 font-mono text-[12px] text-muted">
+      <p className="px-1 pt-1 font-mono text-[12px] text-muted">
         Deployed from {proof.gitSha ? proof.gitSha.slice(0, 12) : "a local build"} · certify script {proof.scriptSha ? proof.scriptSha.slice(0, 12) : "not run yet"}
       </p>
     </div>

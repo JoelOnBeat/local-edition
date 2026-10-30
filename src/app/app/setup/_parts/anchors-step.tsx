@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import type { Chain, QlooEntityRef } from "@/contract";
-import { Button, EmptyState, Notice, ProviderBadge, Spinner, cx } from "@/components/ui";
+import { Button, EmptyState, Input, Notice, Spinner, cx } from "@/components/ui";
+import { Icon } from "@/components/app-ui/icons";
+import { LogoTile } from "@/components/app-ui/tiles";
 import { getApi } from "@/lib/api-client";
 
 /** Step 3: one to three brands the chain resembles. Qloo uses them to tell what the chain's own crowd likes on each block. */
@@ -55,16 +57,16 @@ export function AnchorsStep({ chain, onSaved }: { chain: Chain; onSaved: (c: Cha
   return (
     <div className="grid gap-4">
       <div className="grid gap-2">
-        <span className="text-[13px] font-medium text-ink-2">Your chain resembles <span className="font-mono text-muted">{picked.length}/3</span></span>
+        <span className="text-[14px] font-medium leading-5 text-ink">Your chain resembles <span className="font-mono text-[12px] font-normal text-muted tnum">{picked.length}/3</span></span>
         {picked.length === 0 ? (
           <p className="text-[14px] text-muted">None yet. Search for a brand your customers also love.</p>
         ) : (
           <ul className="flex flex-wrap gap-2">
             {picked.map((p) => (
-              <li key={p.entityId} data-testid="anchor-picked" data-entity-id={p.entityId} className="inline-flex h-9 items-center gap-2 rounded-full border border-ink bg-ink pl-3.5 pr-1 text-[14px] text-paper">
+              <li key={p.entityId} data-testid="anchor-picked" data-entity-id={p.entityId} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-white pl-3 pr-1 text-[14px] font-medium text-ink-strong shadow-pill">
                 {p.name}
                 <button data-testid="anchor-remove" type="button" onClick={() => toggle(p)} aria-label={`Remove ${p.name}`}
-                  className="grid h-7 w-7 place-items-center rounded-full hover:bg-paper/20">×</button>
+                  className="grid size-6 place-items-center rounded-full text-faint hover:bg-stone-100 hover:text-ink"><Icon name="x" size={12} strokeWidth={2.4} /></button>
               </li>
             ))}
           </ul>
@@ -73,12 +75,14 @@ export function AnchorsStep({ chain, onSaved }: { chain: Chain; onSaved: (c: Cha
 
       <form onSubmit={search} className="flex max-w-xl gap-2">
         <label className="sr-only" htmlFor="anchor-q">Brand name</label>
-        <input id="anchor-q" data-testid="anchor-query" value={q} maxLength={80} onChange={(e) => setQ(e.target.value)} placeholder="Blue Bottle, Aesop, Muji…"
-          className="h-10 min-w-0 flex-1 rounded-[var(--radius)] border border-rule bg-paper px-3 text-[14.5px] placeholder:text-muted focus:border-ink-2" />
-        <Button data-testid="anchor-search" type="submit" loading={searching} disabled={!q.trim()}>Search Qloo</Button>
+        <span className="relative min-w-0 flex-1">
+          <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
+          <Input id="anchor-q" data-testid="anchor-query" value={q} maxLength={80} onChange={(e) => setQ(e.target.value)} placeholder="Blue Bottle, Aesop, Muji…" className="pl-9" />
+        </span>
+        <Button data-testid="anchor-search" type="submit" size="sm" className="h-10" loading={searching} disabled={!q.trim()}>Search Qloo</Button>
       </form>
 
-      {searching && !results ? <p className="flex items-center gap-2 text-[14px] text-muted"><Spinner /> Searching Qloo brands…</p> : null}
+      {searching && !results ? <p className="flex items-center gap-2 text-[14px] text-ink-2"><Spinner /> Searching Qloo brands…</p> : null}
       {results ? (
         results.length === 0 ? (
           <div data-testid="anchor-empty"><EmptyState title={`No brands match “${q.trim()}”`} body="Try the brand's shorter name, or a brand with a similar crowd." className="py-6" /></div>
@@ -89,13 +93,13 @@ export function AnchorsStep({ chain, onSaved }: { chain: Chain; onSaved: (c: Cha
               return (
                 <li key={r.entityId}>
                   <button data-testid="anchor-result" data-entity-id={r.entityId} type="button" onClick={() => toggle(r)} aria-pressed={on}
-                    className={cx("flex w-full items-center justify-between gap-3 rounded-[var(--radius)] border px-3 py-2.5 text-left text-[14.5px]",
-                      on ? "border-ink bg-paper-2" : "border-rule hover:border-ink-2")}>
+                    className={cx("flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left text-[14px] transition-[background-color,box-shadow,scale] duration-150 active:scale-[.99]",
+                      on ? "bg-accent-subtle shadow-[inset_0_0_0_1.5px_var(--accent)]" : "bg-white shadow-ring-xs hover:bg-stone-50")}>
                     <span className="min-w-0">
                       <span className="block truncate font-medium">{r.name}</span>
-                      <span className="block truncate font-mono text-[11px] text-muted">{r.type.replace("urn:entity:", "")} · {r.entityId.slice(0, 12)}</span>
+                      <span className="block truncate text-[12px] capitalize text-muted">{r.type.replace("urn:entity:", "").replace(/_/g, " ")}</span>
                     </span>
-                    <span className={cx("shrink-0 text-[13px]", on ? "text-ok" : "text-muted")}>{on ? "✓ Added" : "Add"}</span>
+                    <span className={cx("inline-flex shrink-0 items-center gap-1 text-[13px] font-medium", on ? "text-accent-text" : "text-ink-2")}>{on ? <><Icon name="check" size={14} />Added</> : "Add"}</span>
                   </button>
                 </li>
               );
@@ -103,11 +107,11 @@ export function AnchorsStep({ chain, onSaved }: { chain: Chain; onSaved: (c: Cha
           </ul>
         )
       ) : null}
-      <p className="flex items-center gap-1.5 text-[12.5px] text-muted"><ProviderBadge provider="qloo" compact /> Brand search runs on Qloo. Only brand names go to Qloo, never anything about your customers.</p>
+      <p className="flex items-center gap-2 text-[13px] leading-5 text-muted"><LogoTile provider="qloo" size="xs" />Brand search runs on Qloo. Only brand names go to Qloo, never anything about your customers.</p>
 
       {msg ? <div data-testid="anchors-message" data-tone={msg.tone}><Notice tone={msg.tone}>{msg.text}</Notice></div> : null}
       <div>
-        <Button data-testid="anchors-save" variant="primary" size="sm" loading={saving} disabled={!dirty || picked.length === 0} onClick={save}>Save taste anchors</Button>
+        <Button data-testid="anchors-save" variant="primary" size="sm" className="h-10 px-6" loading={saving} disabled={!dirty || picked.length === 0} onClick={save}>Save taste anchors</Button>
       </div>
     </div>
   );
