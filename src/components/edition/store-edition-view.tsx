@@ -1,27 +1,37 @@
 "use client";
 
-import Link from "next/link";
-import { useState } from "react";
-import type { EditionItem } from "@/contract";
+import { useState, type ReactNode } from "react";
+import type { EditionItem, Store } from "@/contract";
 import { getApi } from "@/lib/api-client";
-import { Button, Dot, EmptyState, ErrorState, Masthead, Notice, Skeleton, SkeletonText, StatusChip } from "../ui";
-import { formatDate, modelName } from "../lib/format";
+import { Button, ButtonLink, CardBand, EmptyState, ErrorState, Notice, Pill, StatusChip } from "../ui";
+import { Band, Gap, Page, PageHeader } from "../app-ui/frame";
+import { Icon } from "../app-ui/icons";
+import { LogoTile } from "../app-ui/tiles";
+import { isNvidia } from "./store-chip";
+import { formatDate, formatDateTime, modelName } from "../lib/format";
 import { useAsync } from "../lib/use-async";
 import { useWorkspace } from "../app/workspace-context";
+import { WeekPicker } from "../app/shell-controls";
 import { BuildButton } from "../portfolio/build-button";
+import { countApproved } from "../portfolio/status-meta";
 import { BlockTaste } from "./block-taste";
 import { DeliveryStrip } from "./delivery-strip";
+import { EditionSkeleton } from "./edition-skeleton";
 import { EvidenceDrawer } from "./evidence-drawer";
 import { ItemBlock } from "./item-block";
 import { EventContent, PartnerContent, SoundContent, SpecialContent } from "./item-content";
 import { ReviewNote } from "./review-note";
 import { StaffCardButton } from "./staff-card-button";
+import { StoreChip } from "./store-chip";
 import { StoreReplies } from "./store-replies";
+import { WhyThisWeek } from "./why-this-week";
 import { useDeliveries } from "./use-deliveries";
 import { useItemActions } from "./use-item-actions";
 import { useStoreReplies } from "./use-store-replies";
 
-/** /app/stores/[storeId]: the store's edition as a small front page. */
+const crumbs = (store?: Store) => [{ href: "/app", label: "Portfolio" }, { label: store?.name ?? "Store" }];
+
+/** /app/stores/[storeId]: the store's edition, four item cards beside the reviewer, the block's taste and where it went. */
 export function StoreEditionView({ storeId }: { storeId: string }) {
   const w = useWorkspace();
   const api = getApi();
@@ -33,29 +43,42 @@ export function StoreEditionView({ storeId }: { storeId: string }) {
   const replies = useStoreReplies(edition?.id);
   const [drawer, setDrawer] = useState<EditionItem | null>(null);
 
-  if (w.error && !w.bundle) return <ErrorState message={w.error.message} onRetry={w.reload} />;
-  if (w.loading || !w.bundle) return <EditionSkeleton />;
+  if (w.error && !w.bundle) return <Page><Band top={false} grow><CardBand title="Edition" flush><ErrorState message={w.error.message} onRetry={w.reload} /></CardBand></Band></Page>;
+  if (w.loading || !w.bundle || w.editionsLoading) return <EditionSkeleton />;
   if (!store) {
     return (
-      <EmptyState title="That store is not in this chain" body="It may have been removed in Setup. Pick a store from the portfolio."
-        action={<Link href="/app" className="text-sm font-medium underline underline-offset-4">Back to the portfolio</Link>} />
+      <Page>
+        <PageHeader crumbs={crumbs()} title="Store not found" />
+        <Gap />
+        <Band grow>
+          <CardBand title="Store" flush className="flex-1" bodyClassName="flex flex-1 items-center justify-center">
+            <EmptyState icon={<Icon name="store" size={20} />} title="That store is not in this chain" body="It may have been removed in setup. Pick a store from the portfolio."
+              action={<ButtonLink href="/app" size="sm" variant="secondary" icon={<Icon name="arrowLeft" size={14} />}>Back to the portfolio</ButtonLink>} />
+          </CardBand>
+        </Band>
+      </Page>
     );
   }
   const isCurrent = w.week === w.currentWeek;
-  const title = `The ${store.name} Edition`;
-  if (w.editionsLoading) return <EditionSkeleton />;
-  if (w.editionsError) return <ErrorState message={w.editionsError.message} onRetry={w.reloadEditions} />;
+  if (w.editionsError) {
+    return <Page><PageHeader crumbs={crumbs(store)} title={<StoreChip store={store} />} /><Gap /><Band grow><CardBand title="Edition" flush><ErrorState message={w.editionsError.message} onRetry={w.reloadEditions} /></CardBand></Band></Page>;
+  }
   if (!edition) {
     return (
-      <div className="space-y-6">
-        <Masthead title={title} colorIndex={store.colorIndex} kicker={`${w.bundle.chain.name} · Local Edition`}
-          dateline={<><span>Week of {formatDate(w.week)}</span><Dot /><span>{store.addressLabel}</span></>} />
-        <EmptyState
-          title={isCurrent ? "No edition for this store yet" : "Nothing was built for this store that week"}
-          body={isCurrent ? `Build ${store.name}'s edition now. The agent reads the block's taste from Qloo and drafts a special, a sound brief, a partner and an event night.` : "Pick another week in the top bar."}
-          action={isCurrent ? <BuildButton storeIds={[store.id]} label={`Build ${store.name}'s edition`} /> : undefined}
-        />
-      </div>
+      <Page>
+        <PageHeader crumbs={crumbs(store)} pill={<Pill icon={<Icon name="calendar" />}>Week of {formatDate(w.week)}</Pill>} title={<StoreChip store={store} />} lede={store.addressLabel} actions={<WeekPicker />} />
+        <Gap />
+        <Band grow>
+          <CardBand title="This week's edition" icon={<Icon name="file" />} flush className="flex-1" bodyClassName="flex flex-1 items-center justify-center">
+            <EmptyState
+              icon={<Icon name="file" size={20} />}
+              title={isCurrent ? "No edition for this store yet" : "Nothing was built for this store that week"}
+              body={isCurrent ? `Build ${store.name}'s edition now. The agent reads the block's taste from Qloo and drafts a special, a sound brief, a partner and an event night.` : "Pick another week in the top bar."}
+              action={isCurrent ? <BuildButton storeIds={[store.id]} label={`Build ${store.name}'s edition`} size="sm" /> : undefined}
+            />
+          </CardBand>
+        </Band>
+      </Page>
     );
   }
 
@@ -66,93 +89,81 @@ export function StoreEditionView({ storeId }: { storeId: string }) {
   const event = byKind("event");
   const readOnly = !isCurrent;
   const allApproved = edition.status === "approved";
-  const block = (item: EditionItem | undefined, content: React.ReactNode, lead = false) =>
-    item ? (
-      <ItemBlock edition={edition} item={item} actions={actions} onEvidence={setDrawer} lead={lead} readOnly={readOnly}>{content}</ItemBlock>
-    ) : null;
+  const block = (item: EditionItem | undefined, content: ReactNode) =>
+    item ? <ItemBlock key={item.id} edition={edition} item={item} actions={actions} onEvidence={setDrawer} readOnly={readOnly}>{content}</ItemBlock> : null;
 
   return (
-    <div className="space-y-8">
-      <div>
-        <Link href="/app" className="text-[13px] text-muted hover:text-ink">← Portfolio</Link>
-        <Masthead
-          className="mt-2"
-          title={title}
-          kicker={`${w.bundle.chain.name} · Local Edition`}
-          issueNo={edition.issueNo}
-          colorIndex={store.colorIndex}
-          dateline={
+    <Page>
+      <PageHeader
+        crumbs={crumbs(store)}
+        pill={
+          <div className="flex flex-wrap items-center gap-2">
+            <Pill icon={<Icon name="file" />}>Edition No. {edition.issueNo} · Week of {formatDate(edition.weekOf, { year: false })}</Pill>
+            <span data-testid="edition-status" data-status={edition.status}><StatusChip status={edition.status} /></span>
+          </div>
+        }
+        title={<StoreChip store={store} />}
+        lede={
+          <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+            <span className="[overflow-wrap:anywhere]">{store.addressLabel}</span>
+            <span className="text-faint" aria-hidden>·</span>
+            <span>approved <b className="font-medium text-ink tnum">{countApproved(edition)} of {edition.items.length}</b></span>
+            <span className="text-faint" aria-hidden>·</span>
+            <span className="inline-flex items-center gap-1.5">built by {isNvidia(edition.generatedBy.agentModel) ? <LogoTile provider="nemotron" size="xs" /> : null}<span className="font-medium text-ink">{modelName(edition.generatedBy.agentModel)}</span></span>
+          </p>
+        }
+        actions={
+          readOnly ? (
             <>
-              <span data-testid="edition-status" data-status={edition.status}><StatusChip status={edition.status} /></span>
-              <span>Week of {formatDate(edition.weekOf)}</span><Dot />
-              <span className="min-w-0 [overflow-wrap:anywhere]">{store.addressLabel}</span><Dot />
-              <span className="text-muted">Built by {modelName(edition.generatedBy.agentModel)}</span>
+              <WeekPicker />
+              <span className="inline-flex h-8 items-center gap-2 rounded-lg bg-stone-100 px-3 text-[14px] text-ink-2"><Icon name="clock" size={14} />Read only</span>
             </>
-          }
-          actions={
-            readOnly ? null : (
-              <>
-                {allApproved ? <StaffCardButton editionId={edition.id} /> : null}
-                {!allApproved ? (
-                  <Button data-testid="approve-all" variant="primary" size="sm" loading={actions.busy === "approve-all"} disabled={actions.busy !== null} onClick={actions.approveAll}>
-                    Approve all
-                  </Button>
-                ) : null}
-              </>
-            )
-          }
-        />
-        {actions.notice ? <Notice tone="ok" className="mt-3" data-testid="approve-all-notice">{actions.notice}</Notice> : null}
-        {actions.problem && actions.problem.itemId === null ? (
-          <Notice tone={actions.problem.tone} className="mt-3" data-testid="edition-problem"
-            action={actions.problem.fix === "reload" ? <Button size="sm" onClick={() => actions.fix(actions.problem!)}>Reload</Button> : undefined}>
-            {actions.problem.message}
-          </Notice>
-        ) : null}
-      </div>
-
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:gap-10">
-        {block(special, special ? <SpecialContent item={special} base={w.bundle.menu.find((m) => m.id === special.baseMenuItemId)} /> : null, true)}
-        <div className="space-y-6">
-          <ReviewNote review={edition.review} storeById={w.storeById} />
-          <BlockTaste profile={profile.data?.profile} loading={profile.loading} colorIndex={store.colorIndex} />
+          ) : (
+            <>
+              <WeekPicker />
+              {allApproved ? <StaffCardButton editionId={edition.id} /> : null}
+              {!allApproved ? (
+                <Button data-testid="approve-all" variant="primary" size="sm" loading={actions.busy === "approve-all"} disabled={actions.busy !== null} onClick={actions.approveAll} icon={<Icon name="check" size={14} strokeWidth={2.4} />}>
+                  Approve all
+                </Button>
+              ) : null}
+            </>
+          )
+        }
+      />
+      <Gap />
+      <Band grow>
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_400px]">
+          <div className="grid min-w-0 content-start gap-3">
+            {actions.notice ? <Notice tone="ok" data-testid="approve-all-notice">{actions.notice}</Notice> : null}
+            {actions.problem && actions.problem.itemId === null ? (
+              <Notice tone={actions.problem.tone} data-testid="edition-problem"
+                action={actions.problem.fix === "reload" ? <Button size="sm" onClick={() => actions.fix(actions.problem!)}>Reload</Button> : undefined}>
+                {actions.problem.message}
+              </Notice>
+            ) : null}
+            {edition.sourceChange ? (
+              <Notice tone="warn">
+                <span className="inline-flex items-center gap-2"><LogoTile provider="square" size="xs" /><b className="font-medium text-ink">{edition.sourceChange.summary}</b></span>
+                <span className="ml-1 font-mono text-[12px] text-muted">{formatDateTime(edition.sourceChange.at)}</span>
+              </Notice>
+            ) : null}
+            {block(special, special ? <SpecialContent item={special} base={w.bundle.menu.find((m) => m.id === special.baseMenuItemId)} profile={profile.data?.profile.tags} /> : null)}
+            {block(sound, sound ? <SoundContent item={sound} /> : null)}
+            {block(partner, partner ? <PartnerContent item={partner} /> : null)}
+            {block(event, event ? <EventContent item={event} /> : null)}
+          </div>
+          <aside className="grid min-w-0 content-start gap-3 lg:sticky lg:top-20 lg:self-start">
+            <ReviewNote review={edition.review} storeById={w.storeById} />
+            <BlockTaste profile={profile.data?.profile} loading={profile.loading} />
+            <WhyThisWeek edition={edition} onEvidence={setDrawer} />
+            <DeliveryStrip deliveries={deliveries} />
+            <StoreReplies edition={edition} replies={replies} actions={actions} readOnly={readOnly} />
+          </aside>
         </div>
-      </div>
-
-      <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3 lg:gap-10">
-        {block(sound, sound ? <SoundContent item={sound} /> : null)}
-        {block(partner, partner ? <PartnerContent item={partner} /> : null)}
-        {block(event, event ? <EventContent item={event} /> : null)}
-      </div>
-
-      <DeliveryStrip deliveries={deliveries} />
-      <StoreReplies edition={edition} replies={replies} actions={actions} readOnly={readOnly} />
-      {w.bundle.chain.isSample ? (
-        <p className="border-t border-rule pt-3 text-[12px] text-muted">
-          Sample chain: the stores, partner places and event listings are invented for the demo. Nothing here is a real customer.
-        </p>
-      ) : null}
-
+      </Band>
       <EvidenceDrawer edition={edition} item={drawer} profile={profile.data?.profile} onClose={() => setDrawer(null)} />
-    </div>
+    </Page>
   );
 }
 
-function EditionSkeleton() {
-  return (
-    <div className="space-y-8" role="status" aria-label="Loading the edition">
-      <div className="space-y-3">
-        <Skeleton className="h-1.5 w-full" />
-        <Skeleton className="h-14 w-full max-w-2xl" />
-        <Skeleton className="h-5 w-full" />
-      </div>
-      <div className="grid gap-8 lg:grid-cols-[2fr_1fr]">
-        <div className="space-y-4"><Skeleton className="h-10 w-3/4" /><SkeletonText lines={4} /></div>
-        <SkeletonText lines={6} />
-      </div>
-      <div className="grid gap-8 md:grid-cols-3">
-        {[0, 1, 2].map((i) => <SkeletonText key={i} lines={6} />)}
-      </div>
-    </div>
-  );
-}

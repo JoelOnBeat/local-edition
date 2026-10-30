@@ -1,35 +1,57 @@
 import type { EditionReview, Store } from "@/contract";
-import { StoreSwatch } from "../ui";
+import { CardBand, StoreTile } from "../ui";
+import { Icon } from "../app-ui/icons";
+import { IconTag } from "../app-ui/status";
+import { LogoTile } from "../app-ui/tiles";
+import { isNvidia } from "./store-chip";
 import { modelName } from "../lib/format";
 
-/** The Ultra reviewer's verdict, set like an editor's note in the margin. */
+/** The portfolio reviewer's verdict on this edition, as a rail card. */
 export function ReviewNote({ review, storeById }: { review: EditionReview | null | undefined; storeById: (id: string) => Store | undefined }) {
   if (!review) {
     return (
-      <aside data-testid="review-note" data-verdict="none" className="rounded-[var(--radius)] border border-dashed border-rule p-4 text-[13px] text-muted">
-        The portfolio reviewer has not read this edition yet. It reads every store side by side and flags editions that repeat each other.
-      </aside>
+      <CardBand data-testid="review-note" data-verdict="none" title="Reviewer's note" icon={<Icon name="sparkles" />} actions={<IconTag icon="clock">Not yet</IconTag>}>
+        <p className="text-[14px] leading-[22px] text-ink-2">
+          The portfolio reviewer has not read this edition yet. It reads every store side by side and flags editions that repeat each other.
+        </p>
+      </CardBand>
     );
   }
   const ok = review.verdict === "approve";
   return (
-    <aside data-testid="review-note" data-verdict={review.verdict} className="rounded-[var(--radius)] border p-4" style={{ borderColor: ok ? "var(--rule)" : "color-mix(in oklab, var(--warn) 50%, var(--rule))", background: ok ? "var(--paper-2)" : "color-mix(in oklab, var(--warn) 7%, var(--paper))" }}>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">Reviewer&apos;s note</p>
-      <p className="mt-1 font-display text-[19px] font-semibold leading-tight" style={{ color: ok ? "var(--ink)" : "var(--warn)" }}>
-        {ok ? "Clears the desk" : "Needs a change"}
-      </p>
-      <p className="mt-2 text-[14px] leading-relaxed text-ink-2">{review.reason}</p>
-      {review.hint ? <p className="mt-2 border-l-2 border-warn pl-3 text-[13.5px] leading-relaxed text-ink">{review.hint}</p> : null}
-      {review.clashWith.length ? (
-        <p className="mt-3 flex flex-wrap items-center gap-2 text-[12.5px] text-muted">
-          Repeats:
-          {review.clashWith.map((id) => {
-            const s = storeById(id);
-            return s ? <StoreSwatch key={id} colorIndex={s.colorIndex} name={s.name} size="sm" className="text-ink" /> : <span key={id}>{id}</span>;
-          })}
+    <CardBand
+      data-testid="review-note"
+      data-verdict={review.verdict}
+      title="Reviewer's note"
+      icon={<Icon name="sparkles" />}
+      actions={ok ? <IconTag tone="ok" icon="check">Clears</IconTag> : <IconTag tone="warn" icon="pencil">Wants a change</IconTag>}
+      footer={
+        <span className="flex min-w-0 items-center gap-2">
+          {isNvidia(review.reviewedBy) ? <LogoTile provider="nemotron" size="xs" /> : null}
+          <span className="truncate font-mono text-[12px] text-ink-2">{modelName(review.reviewedBy)}</span>
+        </span>
+      }
+    >
+      <p className="text-[14px] leading-[22px] text-ink-2 [overflow-wrap:anywhere]">{review.reason}</p>
+      {review.hint ? (
+        <p className="mt-3 rounded-lg bg-warn-bg/60 px-3 py-2.5 text-[14px] leading-[22px] text-ink shadow-[inset_0_0_0_1px_rgb(180_83_9/.12)] [overflow-wrap:anywhere]">
+          {review.hint}
         </p>
       ) : null}
-      <p className="mt-3 font-mono text-[11px] text-muted">{modelName(review.reviewedBy)}</p>
-    </aside>
+      {review.clashWith.length ? (
+        <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[13px] text-muted">
+          Repeats
+          {review.clashWith.map((id) => {
+            const s = storeById(id);
+            return s ? (
+              <span key={id} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-rule bg-white pl-1 pr-2 text-[13px] font-medium text-ink-strong">
+                <StoreTile colorIndex={s.colorIndex} name={s.name} size="sm" />
+                {s.name}
+              </span>
+            ) : <span key={id} className="font-mono text-[12px]">{id}</span>;
+          })}
+        </div>
+      ) : null}
+    </CardBand>
   );
 }
