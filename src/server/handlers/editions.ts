@@ -1,9 +1,11 @@
 import type { Edition, EditionItem } from "@/contract";
 import { routes } from "@/contract";
 import { invalidateCard } from "../agent/card-state";
+import { dispatchApproved } from "../connectors/dispatch";
 import { HttpError } from "../http/errors";
+import { runInBackground } from "../jobs/background";
 import { getCheckCopy } from "../jobs/wiring-guardrails";
-import { NotFoundError, VersionConflictError } from "../store";
+import { NotFoundError, VersionConflictError, type Repo } from "../store";
 import { reapStaleDrafts } from "../store/reaper";
 import { limitSpend } from "./limit";
 import { applyPatch, autoApprovable, deriveEditionStatus, recheckItem } from "./items";
@@ -26,10 +28,16 @@ function conflict(e: unknown): never {
 }
 
 /** Keeps the edition's status in step with its items after any item write. */
-async function syncStatus(ctx: WsContext, editionId: string): Promise<Edition> {
-  const fresh = (await ctx.repo.getEdition(editionId))!;
+async function syncStatus(repo: Repo, editionId: string): Promise<Edition> {
+  const fresh = (await repo.getEdition(editionId))!;
   const status = deriveEditionStatus(fresh);
-  return status === fresh.status ? fresh : ctx.repo.setEditionStatus(editionId, status);
+  return status === fresh.status ? fresh : repo.setEditionStatus(editionId, status);
+}
+
+/** The edition just became approved: tell the connected tools (Slack staff card, store-manager email, Square). Never blocks or fails the request. */
+function afterStatus(ctx: WsContext, before: Edition["status"], after: Edition): Edition {
+  if (before !== "approved" && after.status === "approved") runInBackground(dispatchApproved({ workspaceId: ctx.workspace.id, editionId: after.id }));
+  return after;
 }
 
 function requireBuilt(edition: Edition): void {
@@ -79,21 +87,30 @@ export const patchItem = wsRoute(patchItemSpec, async ({ params, body }, ctx) =>
   const stored = await ctx.repo.updateEditionItem(edition.id, next, expected).catch(conflict);
   // The staff card was written from the old copy: blank it so the public link stops serving it.
   if (body.action !== "approve") await invalidateCard(ctx.repo, edition.id);
-  await syncStatus(ctx, edition.id);
+  afterStatus(ctx, edition.status, await syncStatus(ctx.repo, edition.id));
   return stored;
 });
 
-export const approveAll = wsRoute(routes.approveAll, async ({ params }, ctx) => {
-  const edition = await ownedEdition(ctx, params.id);
+/**
+ * Approves every item that has clearly passed guardrails and re-derives the edition's status. The one approval path: the app's
+ * "approve all" and the Slack Approve button both call it, so Slack never approves what the app would refuse.
+ * Returns the edition as stored afterwards; items left in review keep their status.
+ */
+export async function approveEditionItems(repo: Repo, edition: Edition): Promise<Edition> {
   requireBuilt(edition);
   for (const item of edition.items.filter(autoApprovable)) {
     try {
-      await ctx.repo.updateEditionItem(edition.id, { ...item, status: "approved" }, item.version);
+      await repo.updateEditionItem(edition.id, { ...item, status: "approved" }, item.version);
     } catch (e) {
       if (!(e instanceof VersionConflictError)) throw e; // edited elsewhere meanwhile: leave it for review
     }
   }
-  return syncStatus(ctx, edition.id);
+  return syncStatus(repo, edition.id);
+}
+
+export const approveAll = wsRoute(routes.approveAll, async ({ params }, ctx) => {
+  const edition = await ownedEdition(ctx, params.id);
+  return afterStatus(ctx, edition.status, await approveEditionItems(ctx.repo, edition));
 });
 
 /**
