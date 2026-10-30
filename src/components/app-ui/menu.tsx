@@ -8,10 +8,12 @@ import { cx } from "@/components/ui";
  * A small dropdown: a trigger and a panel that scales in (.95 → 1, 150ms quint). Outside click and Escape close it and
  * focus returns to the trigger. The panel stays mounted so test ids inside it exist; closed it is hidden from everyone.
  */
-export function Dropdown({ trigger, children, align = "start", width = "w-80", label, className, panelClassName, triggerClassName, testId }: {
+export function Dropdown({ trigger, children, align = "start", side = "bottom", width = "w-80", label, className, panelClassName, triggerClassName, testId }: {
   trigger: (open: boolean) => ReactNode;
   children: (close: () => void) => ReactNode;
   align?: "start" | "end";
+  /** "top" opens upward (sidebar identity block). */
+  side?: "top" | "bottom";
   width?: string;
   label: string;
   className?: string;
@@ -59,8 +61,9 @@ export function Dropdown({ trigger, children, align = "start", width = "w-80", l
         aria-label={label}
         hidden={!open}
         className={cx(
-          "le-pop absolute top-[calc(100%+8px)] z-50 max-w-[calc(100vw-16px)] rounded-2xl bg-white p-1.5 shadow-ring-lg",
-          align === "end" ? "right-0 origin-top-right" : "left-0 origin-top-left",
+          "le-pop absolute z-50 max-w-[calc(100vw-16px)] rounded-2xl bg-white p-1.5 shadow-ring-lg",
+          side === "top" ? "bottom-[calc(100%+8px)]" : "top-[calc(100%+8px)]",
+          align === "end" ? (side === "top" ? "right-0 origin-bottom-right" : "right-0 origin-top-right") : side === "top" ? "left-0 origin-bottom-left" : "left-0 origin-top-left",
           width,
           panelClassName,
         )}

@@ -5,44 +5,37 @@ import { Icon } from "./icons";
 import "./app-ui.css";
 
 /**
- * The ByDefault page frame for app pages: full-bleed hairline rules, rails at the 1192px container edges (xl), a joint
- * where they cross, white frame cards inside bands, and header-band cards for data.
+ * The ByDefault page frame for app pages. With the sidebar present only the horizontal hairline rules stay (no rails or
+ * joints, DESIGN-SYSTEM §10.4): white frame cards inside bands, and header-band cards for data.
  */
 
-/** 25px cross that interrupts a rule where it meets a rail. */
-function Joint({ className }: { className: string }) {
-  return (
-    <svg width="25" height="25" viewBox="0 0 25 25" aria-hidden className={cx("pointer-events-none absolute z-[1] hidden xl:block", className)}>
-      <rect width="25" height="25" fill="var(--paper)" />
-      <path d="M12.5 4v17M4 12.5h17" stroke="#E7E5E4" />
-    </svg>
-  );
-}
-
 /** A full-bleed band between two rules. `pad` "frame" holds a white frame card; "data" holds header-band cards. */
-export function Band({ children, pad = "data", className, inner, top = true }: { children: ReactNode; pad?: "frame" | "data" | "none"; className?: string; inner?: string; top?: boolean }) {
+export function Band({ children, pad = "data", className, inner, top = true, grow }: { children: ReactNode; pad?: "frame" | "data" | "none"; className?: string; inner?: string; top?: boolean; grow?: boolean }) {
   return (
-    <section className={cx("relative border-b border-rule", top && "border-t", className)}>
+    <section className={cx("relative border-b border-rule", top && "border-t", grow && "flex flex-1 flex-col", className)}>
       <div
         className={cx(
-          "relative mx-auto w-full max-w-[1192px] border-rule xl:border-x",
+          "relative mx-auto w-full max-w-[1192px]",
+          grow && "flex flex-1 flex-col",
           pad === "frame" && "p-2 sm:p-3",
           pad === "data" && "px-2 py-4 sm:px-3 md:px-7 md:py-7",
           inner,
         )}
       >
-        {top ? <><Joint className="-left-[13px] -top-[13px]" /><Joint className="-right-[13px] -top-[13px]" /></> : null}
-        <Joint className="-bottom-[13px] -left-[13px]" />
-        <Joint className="-bottom-[13px] -right-[13px]" />
         {children}
       </div>
     </section>
   );
 }
 
+/** A page inside the app: fills the viewport height so the last `Band grow` reaches the bottom. */
+export function Page({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cx("flex min-h-dvh flex-col pt-2", className)}>{children}</div>;
+}
+
 /** The 48px gap between bands; the rails run through it. */
 export function Gap({ size = "md" }: { size?: "sm" | "md" }) {
-  return <div aria-hidden className={cx("mx-auto w-full max-w-[1192px] border-rule xl:border-x", size === "md" ? "h-8 md:h-12" : "h-4 md:h-6")} />;
+  return <div aria-hidden className={cx("mx-auto w-full max-w-[1192px]", size === "md" ? "h-6 md:h-10" : "h-4 md:h-6")} />;
 }
 
 /** White frame card (rounded-xl + ring-md drawn above the fill). */

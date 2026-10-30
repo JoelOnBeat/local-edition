@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { Button, ButtonLink, CardBand, ErrorState, Pill, SampleBadge, Skeleton, StoreTile } from "@/components/ui";
-import { Band, FrameCard, Gap, PageHeader } from "@/components/app-ui/frame";
+import { Band, FrameCard, Gap, Page, PageHeader } from "@/components/app-ui/frame";
 import { Icon } from "@/components/app-ui/icons";
 import { ScorePill } from "@/components/app-ui/status";
 import { StoreStack } from "@/components/app-ui/tiles";
@@ -19,21 +19,21 @@ export function SettingsView() {
   const { me } = useMe();
   const actions = useAccountActions();
 
-  if (error && !bundle) return <div className="pt-2"><Band><CardBand title="Settings" flush><ErrorState message={error.message} onRetry={reload} /></CardBand></Band></div>;
+  if (error && !bundle) return <Page><Band grow><CardBand title="Settings" flush><ErrorState message={error.message} onRetry={reload} /></CardBand></Band></Page>;
 
   const chain = bundle?.chain;
   const name = chain ? shortChainName(chain.name) : "";
 
   return (
-    <div className="pt-2">
+    <Page>
       <PageHeader
         pill={<Pill icon={<Icon name="settings" />}>Settings</Pill>}
-        title="Settings"
+        title="Chain settings"
         lede="Your chain as head office set it up, your account, and where the spend and the proof live."
       />
       <Gap />
-      <Band pad="frame">
-        <FrameCard>
+      <Band pad="frame" grow>
+        <FrameCard className="flex-1">
           <article className="divide-y divide-rule-subtle px-5 sm:px-6 md:px-8">
             <Row title="Chain" sub="Every edition is written for this chain, in its voice.">
               {loading || !chain || !bundle ? (
@@ -89,7 +89,7 @@ export function SettingsView() {
               ) : loading ? <Skeleton className="h-24 w-full" /> : <p className="text-[14px] text-muted">No stores yet. Import them in setup.</p>}
             </Row>
 
-            <Row title="Account" sub={me?.user ? "Signing out keeps your chain; deleting removes it." : "You are trying the sample chain as a guest."}>
+            <Row id="account" title="Account" sub={me?.user ? "Signing out keeps your chain; deleting removes it." : "You are trying the sample chain as a guest."}>
               {me?.user ? (
                 <div className="grid gap-4">
                   <div className="flex items-center gap-3">
@@ -126,13 +126,13 @@ export function SettingsView() {
           </article>
         </FrameCard>
       </Band>
-    </div>
+    </Page>
   );
 }
 
-function Row({ title, sub, children }: { title: string; sub: string; children: ReactNode }) {
+function Row({ title, sub, children, id }: { title: string; sub: string; children: ReactNode; id?: string }) {
   return (
-    <section className="grid gap-4 py-7 md:grid-cols-[220px_minmax(0,1fr)] md:gap-8 md:py-9">
+    <section id={id} className="scroll-mt-6 grid gap-4 py-7 md:grid-cols-[220px_minmax(0,1fr)] md:gap-8 md:py-9">
       <div>
         <h2 className="text-[18px] font-medium leading-[26px] text-ink">{title}</h2>
         <p className="mt-1 text-[14px] leading-5 text-ink-2">{sub}</p>

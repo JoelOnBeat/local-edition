@@ -27,13 +27,16 @@ const specialOf = (e: Edition | undefined) => {
 };
 
 /** One row per store: this week's special, where the edition stands, items approved, the reviewer's verdict, last change. */
-export function StatusTable({ stores, editionFor, hot, onHot, onOpen, loading }: {
+export function StatusTable({ stores, editionFor, hot, onHot, onOpen, loading, empty, total }: {
   stores: Store[];
   editionFor: (storeId: string) => Edition | undefined;
   hot: string | null;
   onHot: (id: string | null) => void;
   onOpen: (id: string) => void;
   loading?: boolean;
+  /** Shown as the only row when no store matches the filter or search. */
+  empty?: string;
+  total?: number;
 }) {
   const statusOf = (id: string): StoreWeekStatus => editionFor(id)?.status ?? "none";
   const rows = [...stores].sort((a, b) => STATUS_ORDER[statusOf(a.id)] - STATUS_ORDER[statusOf(b.id)] || a.colorIndex - b.colorIndex);
@@ -55,11 +58,12 @@ export function StatusTable({ stores, editionFor, hot, onHot, onOpen, loading }:
       ]}
       footer={
         <>
-          <span>Showing {stores.length} {stores.length === 1 ? "store" : "stores"}</span>
+          <span>Showing {stores.length}{total !== undefined && total !== stores.length ? ` of ${total}` : ""} {(total ?? stores.length) === 1 ? "store" : "stores"}</span>
           <span className="tnum">{built ? `${approved} of ${built} editions approved` : "No editions built"}</span>
         </>
       }
     >
+      {rows.length === 0 ? <p className="px-4 py-10 text-center text-[14px] text-muted">{empty ?? "No stores."}</p> : null}
       {rows.map((s) => {
         const e = editionFor(s.id);
         const special = specialOf(e);

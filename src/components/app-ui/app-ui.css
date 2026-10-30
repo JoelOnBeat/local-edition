@@ -33,3 +33,8 @@
 .le-map .maplibregl-cooperative-gesture-screen { font-family: var(--font-body); font-size: 14px; }
 .le-pin > span:last-child[data-hidden="true"] { opacity: 0; transition: opacity 150ms var(--ease-out-quint); }
 .le-pin:hover > span:last-child[data-hidden="true"], .le-pin[data-hot="true"] > span:last-child[data-hidden="true"] { opacity: 1; }
+
+/* Phone sidebar drawer slides in from the left. */
+@keyframes le-slide-right { from { transform: translateX(calc(-100% - 16px)); } to { transform: none; } }
+.le-drawer-left { animation: le-slide-right 420ms var(--ease-drawer) both; }
+@media (prefers-reduced-motion: reduce) { .le-drawer-left { animation: le-fade 120ms linear both; } }
