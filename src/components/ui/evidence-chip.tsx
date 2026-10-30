@@ -1,6 +1,6 @@
 import type { Evidence } from "@/contract";
 import { cx } from "./cx";
-import { ProviderBadge, type Provider } from "./provider-badge";
+import { ProviderTile, type Provider } from "./provider-badge";
 
 const sourceProvider = (s: Evidence["source"]): Provider => (s === "tokenfactory" ? "nemotron" : s);
 
@@ -15,19 +15,19 @@ export function headlineMetric(e: Evidence): string | null {
   return null;
 }
 
-/** One piece of evidence as a chip: provider, endpoint, headline number. Clicking opens the drawer. */
+/** One piece of evidence as a tag chip: provider tile, endpoint, headline number. Clicking opens the drawer. */
 export function EvidenceChip({ evidence, onClick, className }: { evidence: Evidence; onClick?: () => void; className?: string }) {
   const metric = headlineMetric(evidence);
   const body = (
     <>
-      <ProviderBadge provider={sourceProvider(evidence.source)} compact />
-      <span className="truncate font-mono text-[11.5px] text-ink-2">{evidence.endpoint}</span>
-      {metric ? <span className="shrink-0 font-mono text-[11.5px] text-ink">{metric}</span> : null}
+      <ProviderTile provider={sourceProvider(evidence.source)} size={18} />
+      <span className="truncate font-mono text-[12px] text-ink-2">{evidence.endpoint}</span>
+      {metric ? <span className="shrink-0 text-[13px] font-medium text-ink-strong tnum">{metric}</span> : null}
     </>
   );
   const cls = cx(
-    "inline-flex h-7 max-w-full items-center gap-2 rounded-[var(--radius)] border border-rule bg-paper-2 px-2 text-left",
-    onClick && "transition-colors hover:border-ink-2",
+    "inline-flex h-7 max-w-full items-center gap-1.5 rounded-md border border-rule bg-white pl-1 pr-2 text-left",
+    onClick && "transition-[background-color,scale] duration-150 ease-quint hover:bg-paper-2 active:scale-[.97]",
     className,
   );
   return onClick ? (

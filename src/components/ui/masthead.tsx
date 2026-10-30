@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
+import { Pill } from "./chip";
 import { cx } from "./cx";
-import { storeColor } from "./store-swatch";
+import { StoreTile } from "./store-swatch";
 
 /**
- * The front-page masthead of a store edition: a store-coloured rule, the title in display type,
- * and a dateline row (issue number, week, address). `actions` sits at the right of the dateline.
+ * Page header for a store edition (was the newspaper masthead): a pill for the kicker and issue number, a 36/40 heading
+ * with the store's tile inline, a caption line for the dateline, and actions on the right.
  */
 export function Masthead({
   title, kicker, issueNo, dateline, colorIndex, actions, size = "lg", className,
@@ -18,24 +19,28 @@ export function Masthead({
   size?: "md" | "lg";
   className?: string;
 }) {
+  const pill = [kicker, issueNo !== undefined ? `No. ${issueNo}` : null].filter(Boolean);
   return (
     <header className={cx("w-full", className)}>
-      <div className="h-1.5 w-full" style={{ background: colorIndex ? storeColor(colorIndex) : "var(--ink)" }} aria-hidden />
-      <div className="flex items-baseline justify-between gap-4 pt-3">
-        {kicker ? <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">{kicker}</p> : <span />}
-        {issueNo !== undefined ? <p className="font-mono text-[12px] text-muted">No. {issueNo}</p> : null}
-      </div>
+      {pill.length ? (
+        <Pill>
+          {pill.map((p, i) => (
+            <span key={i}>{i > 0 ? <span className="px-1.5 text-faint">·</span> : null}{p}</span>
+          ))}
+        </Pill>
+      ) : null}
       <h1
         className={cx(
-          "font-display font-bold leading-[0.95] tracking-[-0.02em] text-ink [overflow-wrap:anywhere]",
-          size === "lg" ? "mt-1 text-[40px] sm:text-[56px] lg:text-[72px]" : "mt-1 text-3xl sm:text-4xl",
+          "flex min-w-0 items-center gap-3 font-medium tracking-[-0.02em] text-ink [overflow-wrap:anywhere]",
+          pill.length ? "mt-5" : "",
+          size === "lg" ? "text-[30px] leading-[36px] sm:text-[36px] sm:leading-[40px]" : "text-[28px] leading-[34px]",
         )}
       >
-        {title}
+        {colorIndex ? <StoreTile colorIndex={colorIndex} name={title} size="lg" className="-rotate-1" /> : null}
+        <span className="min-w-0">{title}</span>
       </h1>
-      <div className="rule-double mt-3" />
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b border-rule py-2 text-[13px] text-ink-2">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">{dateline}</div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[14px] leading-5 text-muted">{dateline}</div>
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
     </header>
@@ -44,5 +49,5 @@ export function Masthead({
 
 /** A dot separator for datelines. */
 export function Dot() {
-  return <span className="text-rule" aria-hidden>·</span>;
+  return <span className="text-faint" aria-hidden>·</span>;
 }

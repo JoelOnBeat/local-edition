@@ -1,0 +1,119 @@
+/* Shared component helpers and motion for the ByDefault system. Imported by src/app/globals.css. */
+
+/* A ring that sits above the white fill (ByDefault puts the smooth shadow on ::after). */
+.ring-after { position: relative; }
+.ring-after::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: var(--ring-after, var(--shadow-ring-md));
+  transition: box-shadow 170ms var(--ease-out-quint);
+}
+.ring-after-xs { --ring-after: var(--shadow-ring-xs); }
+.ring-after-sm { --ring-after: var(--shadow-ring-sm); }
+.ring-after-lg { --ring-after: var(--shadow-ring-lg); }
+.ring-after-xl { --ring-after: var(--shadow-ring-xl); }
+.ring-rule { --ring: var(--rule); }
+
+/* Dark band texture: our own 64px dither, drawn in SVG (white 3% and black 20% squares). */
+.band-dither {
+  background-color: var(--band);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' shape-rendering='crispEdges'%3E%3Cg fill='%23fff' fill-opacity='.03'%3E%3Crect x='6' y='10' width='2' height='2'/%3E%3Crect x='38' y='4' width='2' height='2'/%3E%3Crect x='22' y='44' width='2' height='2'/%3E%3Crect x='54' y='30' width='2' height='2'/%3E%3C/g%3E%3Cg fill='%23000' fill-opacity='.2'%3E%3Crect x='14' y='26' width='2' height='2'/%3E%3Crect x='46' y='52' width='2' height='2'/%3E%3Crect x='30' y='18' width='2' height='2'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 64px 64px;
+  image-rendering: pixelated;
+}
+
+/* One hand underline per page, in flame. */
+.hand-underline {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 12' preserveAspectRatio='none'%3E%3Cpath d='M3 8.2C53 4.8 108 3.5 166 4c47 .4 89 1.9 131 4.4' fill='none' stroke='%23F15A0F' stroke-width='2.8' stroke-linecap='round'/%3E%3Cpath d='M40 10c64-2.8 135-3.1 210-1' fill='none' stroke='%23F15A0F' stroke-opacity='.4' stroke-width='1.4' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-size: 100% 12px;
+  background-position: 0 100%;
+  padding-bottom: 6px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+/* Dashed definition underline: grey, flame on hover. */
+.definition-underline {
+  background-image: linear-gradient(90deg, #d4d4d4 6px, transparent 6px);
+  background-size: 12px 2px;
+  background-repeat: repeat-x;
+  background-position: 0 100%;
+  padding-bottom: 2px;
+  cursor: help;
+  transition: background-image 150ms var(--ease-out-quint);
+}
+@media (hover: hover) {
+  .definition-underline:hover { background-image: linear-gradient(90deg, rgb(241 90 15 / 0.6) 6px, transparent 6px); }
+}
+
+/* Skeleton shimmer. */
+.le-skeleton {
+  background: linear-gradient(90deg, #efefef 0 40%, #f7f7f7 50%, #efefef 60% 100%);
+  background-size: 400% 100%;
+  animation: le-shimmer 1.25s linear infinite;
+}
+@keyframes le-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: 0 0; }
+}
+
+@keyframes le-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.le-live-dot { animation: le-pulse 1.2s ease-in-out infinite; }
+
+/* Item enter (new trace lines, swapped words, toasts). */
+@keyframes le-enter {
+  from { opacity: 0; filter: blur(4px); transform: translateY(0.75em); }
+  to { opacity: 1; filter: none; transform: none; }
+}
+.le-enter { animation: le-enter 450ms var(--ease-out-quint) both; }
+
+@keyframes le-label-in {
+  from { opacity: 0; filter: blur(2px); }
+  to { opacity: 1; filter: none; }
+}
+.le-label-in { animation: le-label-in 150ms var(--ease-out-quint) both; }
+
+/* Sheet slide from the right. */
+@keyframes le-slide-left {
+  from { transform: translateX(calc(100% + 16px)); }
+  to { transform: none; }
+}
+.le-slide { animation: le-slide-left 500ms var(--ease-drawer) both; }
+@keyframes le-fade { from { opacity: 0; } to { opacity: 1; } }
+.le-fade { animation: le-fade 300ms var(--ease-out-quint) both; }
+
+/* Write-on reveal (clip from the top), staggered by --i. */
+@keyframes le-write-on {
+  from { clip-path: inset(0 0 100% 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+.le-write-on { animation: le-write-on 700ms var(--ease-out-quint) both; animation-delay: calc(var(--i, 0) * 60ms); }
+
+/* Invalid input shake. */
+@keyframes le-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(6px); }
+  50% { transform: translateX(-6px); }
+  75% { transform: translateX(4px); }
+}
+.le-shake { animation: le-shake 280ms var(--ease-out-quint); }
+
+/* Stepper progress bar (landing how-it-works). */
+@keyframes le-progress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* Hide a scrollbar on an inner scroller. */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .le-enter, .le-label-in, .le-write-on, .le-shake { animation: none; }
+  .le-slide { animation: le-fade 120ms linear both; }
+  .le-skeleton, .le-live-dot { animation: none; }
+}

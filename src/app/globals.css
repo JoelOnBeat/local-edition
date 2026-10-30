@@ -1,102 +1,135 @@
 @import "tailwindcss";
+@import "../components/ui/ui.css";
 
 /*
- * Local Edition design tokens. Every lane uses only these names:
- * --paper --paper-2 --ink --ink-2 --muted --rule --accent --accent-ink --ok --warn --flag --info
- * --store-1 … --store-8 --font-display --font-body --font-mono --radius --shadow
- * Light by default, dark via prefers-color-scheme, and [data-theme="light"|"dark"] on <html> overrides both.
+ * Local Edition tokens: the ByDefault system (plans/local-edition/design/DESIGN-SYSTEM.md).
+ * Light only: dark appears as deliberate bands (--band*) and panels, never as a page theme.
+ * Shared names every lane uses: --paper --paper-2 --ink --ink-2 --muted --rule --accent --accent-ink --ok --warn --flag
+ * --info --store-1..8 --font-display --font-body --font-mono --radius --shadow. New names are listed below them.
  */
 
 :root {
-  --paper: #f7f4ec;
-  --paper-2: #efeadf;
-  --ink: #1b1915;
-  --ink-2: #3d3931;
-  --muted: #6e675a;
-  --rule: #d9d1c1;
-  --accent: #b3261e;
-  --accent-ink: #fff8f2;
-  --ok: #2e6b3f;
-  --warn: #9a6400;
-  --flag: #b42318;
-  --info: #285a8c;
+  --paper: #f7f7f7;
+  --paper-2: #fafaf9;
+  --ink: #2a2524;
+  --ink-2: #57534e;
+  --muted: #79716b;
+  --rule: #e7e5e4;
+  --accent: #f15a0f;
+  --accent-ink: #ffffff;
+  --ok: #00bb7f;
+  --warn: #fcbb00;
+  --flag: #fb2c36;
+  --info: #1447e6;
 
-  --store-1: #d4500f;
-  --store-2: #2f7d4f;
-  --store-3: #1f69ad;
-  --store-4: #8a3fa6;
-  --store-5: #a87c08;
-  --store-6: #c0265e;
-  --store-7: #0d8486;
-  --store-8: #5d6a24;
+  --sheet: #ffffff;
+  --faint: #a8a29e;
+  --ink-strong: #292524;
+  --ink-body: #44403b;
+  --empty: #948d87;
+  --rule-subtle: #f0f0f0;
+  --rule-row: #f5f5f4;
+  --rule-strong: #d4d4d4;
+  --stone-300: #d6d3d1;
+  --well: #f4f4f3;
+  --well-ring: #eeeeec;
+  --hover-tint: rgb(28 25 23 / 0.04);
+  --active-tint: rgb(28 25 23 / 0.05);
+  --row-hover: rgb(250 250 249 / 0.7);
 
-  --font-display: var(--font-bricolage), "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
-  --font-body: var(--font-plex-sans), "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-plex-mono), "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --accent-hover: #d6470a;
+  --accent-subtle: #fef4ee;
+  --accent-text: #c6440a;
+  --accent-hi: #f4793c;
+  --accent-grad-top: #f36b28;
+  --accent-grad-bot: #ec550b;
+  --accent-grad-top-h: #ef6421;
+  --accent-grad-bot-h: #e14f08;
+  --accent-dark: #ff7a3d;
+  --arc: rgb(113 39 14 / 0.06);
 
-  --radius: 6px;
-  --shadow: 0 1px 0 rgb(27 25 21 / 0.04), 0 8px 24px -12px rgb(27 25 21 / 0.18);
+  --ok-ink: #009767;
+  --ok-strong: #007956;
+  --ok-bg: #ecfdf5;
+  --ok-chip: #d0fae5;
+  --ok-meter: #00c758;
+  --ok-lime: #80cd00;
+  --warn-ink: #b45309;
+  --warn-bg: #fef3c7;
+  --mark: rgb(254 230 133 / 0.7);
+  --flag-ink: #b91c1c;
+  --flag-bg: #fef2f2;
+  --info-bg: #eff6ff;
+  --danger-ring: #d23f2c;
+  --danger-flash: #fca5a5;
+  --heat: 5 150 105;
+  --diff-del-bg: #efe5e1;
+  --diff-del-ink: #734832;
+  --diff-del-rule: #8a5a3d;
+  --diff-add-bg: #e9e8dc;
+  --diff-add-ink: #525b28;
+  --diff-add-rule: #6a7534;
+
+  --band: #18191c;
+  --band-panel: #1e1f23;
+  --band-inner: #141518;
+  --band-card: #1c1d21;
+  --band-card-2: #202125;
+  --band-card-3: #26272b;
+  --band-chip: #26272c;
+  --band-chip-2: #2a2b30;
+  --band-rule: #2c2d32;
+  --band-rail: #2e2f34;
+  --band-ring: #3f4046;
+  --band-ink: #f4f4f5;
+  --band-ink-2: #9f9fa9;
+  --band-ink-3: #71717b;
+  --band-ink-hover: #e4e4e7;
+  --band-own: #00d294;
+
+  /* Store monogram tiles only (tile, map pin, compared chart series). Never rules, bands or text. */
+  --store-1: #0f766e;
+  --store-2: #1d4ed8;
+  --store-3: #7c3aed;
+  --store-4: #be185d;
+  --store-5: #a16207;
+  --store-6: #15803d;
+  --store-7: #0e7490;
+  --store-8: #44403c;
+
+  --font-display: var(--font-geist), "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-geist), "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), "JetBrains Mono", ui-monospace, Menlo, monospace;
+
+  --radius: 12px;
+  --ring: rgb(0 0 0 / 0.05);
+  --shadow-ring-xs: 0 0 4px 0 rgb(0 0 0 / 0.04), 0 0 0 1px var(--ring);
+  --shadow-ring-sm: 0 18px 47px rgb(0 0 0 / 0.03), 0 7.5px 19px rgb(0 0 0 / 0.02), 0 4px 10.5px rgb(0 0 0 / 0.02),
+    0 2.3px 5.8px rgb(0 0 0 / 0.01), 0 1.2px 3.1px rgb(0 0 0 / 0.01), 0 0.5px 1.3px rgb(0 0 0 / 0.01), 0 0 0 1px var(--ring);
+  --shadow-ring-md: 0 17.54px 23.39px rgb(0 0 0 / 0.04), 0 9.4px 12.5px rgb(0 0 0 / 0.03), 0 5.25px 7px rgb(0 0 0 / 0.02),
+    0 2.79px 3.72px -2px rgb(0 0 0 / 0.01), 0 1.16px 1.5px rgb(0 0 0 / 0.01), 0 0 0 1px var(--ring);
+  --shadow-ring-lg: 0 25px 50px rgb(0 0 0 / 0.05), 0 12px 24px rgb(0 0 0 / 0.04), 0 6px 12px rgb(0 0 0 / 0.03),
+    0 3px 6px rgb(0 0 0 / 0.02), 0 1.5px 3px rgb(0 0 0 / 0.02), 0 0 0 1px var(--ring);
+  --shadow-ring-xl: 0 40px 80px rgb(0 0 0 / 0.06), 0 20px 40px rgb(0 0 0 / 0.05), 0 10px 20px rgb(0 0 0 / 0.04),
+    0 5px 10px rgb(0 0 0 / 0.03), 0 2px 4px rgb(0 0 0 / 0.02), 0 0 0 1px var(--ring);
+  --shadow-raised: 0 0 0 1px #0000001f, 0 1px 2px #00000014, 0 1px 3px #0000000f;
+  --shadow-pill: inset 0 0 0 1px #e7e5e4, 0 1px 2px rgb(0 0 0 / 0.04);
+  --shadow-inner-card: 0 0 0 1px rgb(0 0 0 / 0.07);
+  --shadow-well: inset 0 0 0 1px rgb(28 25 23 / 0.06);
+  --shadow-plate: 0 0 0 1px rgba(25, 28, 33, 0.04), 0 1px 2px rgba(25, 28, 33, 0.06), 0 0 2px rgba(0, 0, 0, 0.08);
+  --shadow-primary-sm: inset 0 -2px 2px #d6470a, inset 0 2px 2px #f4793c, 0 0 0 1px #f15a0f;
+  --shadow-primary-lg: 0 0 0 1px #d6470a, 0 1px 2px rgb(214 71 10 / 0.25), inset 0 1px 0 rgb(255 255 255 / 0.22);
+  --shadow: var(--shadow-ring-md);
+
+  --ease-out-quint: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out-cubic: cubic-bezier(0.65, 0.05, 0.36, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --ring-focus: 2px;
 
   color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --paper: #13120f;
-    --paper-2: #1c1a16;
-    --ink: #f1ece1;
-    --ink-2: #d2cbbd;
-    --muted: #9b9384;
-    --rule: #35312a;
-    --accent: #ec6a50;
-    --accent-ink: #1a0d09;
-    --ok: #6cc187;
-    --warn: #e3aa45;
-    --flag: #f2735f;
-    --info: #82b4e6;
-
-    --store-1: #f2803f;
-    --store-2: #5cba7f;
-    --store-3: #63a6ea;
-    --store-4: #c084e0;
-    --store-5: #e0b53c;
-    --store-6: #f0689a;
-    --store-7: #3cc4c2;
-    --store-8: #a7b85a;
-
-    --shadow: 0 1px 0 rgb(0 0 0 / 0.3), 0 10px 28px -12px rgb(0 0 0 / 0.6);
-    color-scheme: dark;
-  }
-}
-
-:root[data-theme="dark"] {
-  --paper: #13120f;
-  --paper-2: #1c1a16;
-  --ink: #f1ece1;
-  --ink-2: #d2cbbd;
-  --muted: #9b9384;
-  --rule: #35312a;
-  --accent: #ec6a50;
-  --accent-ink: #1a0d09;
-  --ok: #6cc187;
-  --warn: #e3aa45;
-  --flag: #f2735f;
-  --info: #82b4e6;
-
-  --store-1: #f2803f;
-  --store-2: #5cba7f;
-  --store-3: #63a6ea;
-  --store-4: #c084e0;
-  --store-5: #e0b53c;
-  --store-6: #f0689a;
-  --store-7: #3cc4c2;
-  --store-8: #a7b85a;
-
-  --shadow: 0 1px 0 rgb(0 0 0 / 0.3), 0 10px 28px -12px rgb(0 0 0 / 0.6);
-  color-scheme: dark;
-}
-
-/* Tailwind utilities on the tokens: bg-paper, text-ink, border-rule, font-display, bg-store-3 … */
+/* Tailwind utilities on the tokens: bg-paper, text-ink, border-rule, bg-sheet, shadow-ring-md, ease-quint … */
 @theme inline {
   --color-paper: var(--paper);
   --color-paper-2: var(--paper-2);
@@ -110,6 +143,58 @@
   --color-warn: var(--warn);
   --color-flag: var(--flag);
   --color-info: var(--info);
+  --color-sheet: var(--sheet);
+  --color-faint: var(--faint);
+  --color-ink-strong: var(--ink-strong);
+  --color-ink-body: var(--ink-body);
+  --color-empty: var(--empty);
+  --color-rule-subtle: var(--rule-subtle);
+  --color-rule-row: var(--rule-row);
+  --color-rule-strong: var(--rule-strong);
+  --color-well: var(--well);
+  --color-well-ring: var(--well-ring);
+  --color-hover-tint: var(--hover-tint);
+  --color-active-tint: var(--active-tint);
+  --color-row-hover: var(--row-hover);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-subtle: var(--accent-subtle);
+  --color-accent-text: var(--accent-text);
+  --color-accent-dark: var(--accent-dark);
+  --color-ok-ink: var(--ok-ink);
+  --color-ok-strong: var(--ok-strong);
+  --color-ok-bg: var(--ok-bg);
+  --color-ok-chip: var(--ok-chip);
+  --color-ok-meter: var(--ok-meter);
+  --color-ok-lime: var(--ok-lime);
+  --color-warn-ink: var(--warn-ink);
+  --color-warn-bg: var(--warn-bg);
+  --color-mark: var(--mark);
+  --color-flag-ink: var(--flag-ink);
+  --color-flag-bg: var(--flag-bg);
+  --color-info-bg: var(--info-bg);
+  --color-danger-ring: var(--danger-ring);
+  --color-diff-del-bg: var(--diff-del-bg);
+  --color-diff-del-ink: var(--diff-del-ink);
+  --color-diff-del-rule: var(--diff-del-rule);
+  --color-diff-add-bg: var(--diff-add-bg);
+  --color-diff-add-ink: var(--diff-add-ink);
+  --color-diff-add-rule: var(--diff-add-rule);
+  --color-band: var(--band);
+  --color-band-panel: var(--band-panel);
+  --color-band-inner: var(--band-inner);
+  --color-band-card: var(--band-card);
+  --color-band-card-2: var(--band-card-2);
+  --color-band-card-3: var(--band-card-3);
+  --color-band-chip: var(--band-chip);
+  --color-band-chip-2: var(--band-chip-2);
+  --color-band-rule: var(--band-rule);
+  --color-band-rail: var(--band-rail);
+  --color-band-ring: var(--band-ring);
+  --color-band-ink: var(--band-ink);
+  --color-band-ink-2: var(--band-ink-2);
+  --color-band-ink-3: var(--band-ink-3);
+  --color-band-ink-hover: var(--band-ink-hover);
+  --color-band-own: var(--band-own);
   --color-store-1: var(--store-1);
   --color-store-2: var(--store-2);
   --color-store-3: var(--store-3);
@@ -123,6 +208,21 @@
   --font-mono: var(--font-mono);
   --radius-ed: var(--radius);
   --shadow-ed: var(--shadow);
+  --shadow-ring-xs: var(--shadow-ring-xs);
+  --shadow-ring-sm: var(--shadow-ring-sm);
+  --shadow-ring-md: var(--shadow-ring-md);
+  --shadow-ring-lg: var(--shadow-ring-lg);
+  --shadow-ring-xl: var(--shadow-ring-xl);
+  --shadow-raised: var(--shadow-raised);
+  --shadow-pill: var(--shadow-pill);
+  --shadow-inner-card: var(--shadow-inner-card);
+  --shadow-well: var(--shadow-well);
+  --shadow-plate: var(--shadow-plate);
+  --shadow-primary-sm: var(--shadow-primary-sm);
+  --shadow-primary-lg: var(--shadow-primary-lg);
+  --ease-quint: var(--ease-out-quint);
+  --ease-drawer: var(--ease-drawer);
+  --container-site: 1190px;
 }
 
 html {
@@ -136,101 +236,46 @@ body {
   font-family: var(--font-body);
   font-feature-settings: "kern", "liga";
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
+h1, h2, h3, h4 { text-wrap: balance; }
+p { text-wrap: pretty; }
+
 ::selection {
-  background: color-mix(in oklab, var(--accent) 28%, transparent);
+  background: rgb(241 90 15 / 0.18);
 }
 
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-  border-radius: 2px;
+  border-radius: 4px;
 }
 
-/* Tabular numbers wherever mono is used for figures. */
+/* Every figure lines up. */
 .font-mono,
 .tnum {
   font-variant-numeric: tabular-nums;
 }
 
-/* A hairline rule like a newspaper column divider. */
+/* Retired editorial rule, kept as a plain hairline for any old markup. */
 .rule-double {
-  border-top: 3px double var(--ink);
+  border-top: 1px solid var(--rule);
 }
 
-@keyframes le-shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-
-@keyframes le-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
-}
-
-@keyframes le-enter {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: none; }
-}
-
-.le-enter {
-  animation: le-enter 220ms ease-out both;
-}
-
-@keyframes le-slide-up {
-  from { transform: translateY(24px); }
-  to { transform: none; }
-}
-@keyframes le-slide-left {
-  from { transform: translateX(32px); }
-  to { transform: none; }
-}
-.le-slide {
-  animation: le-slide-up 200ms ease-out both;
-}
-@media (min-width: 640px) {
-  .le-slide {
-    animation-name: le-slide-left;
-  }
-}
-
-.le-live-dot {
-  animation: le-pulse 1.4s ease-in-out infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .le-enter,
-  .le-slide,
-  .le-live-dot {
-    animation: none;
-  }
-}
-
-/* MapLibre controls follow the paper. */
+/* MapLibre controls follow the white cards. */
 .maplibregl-ctrl-group {
-  background: var(--paper) !important;
-  border: 1px solid var(--rule) !important;
-  box-shadow: none !important;
+  background: #fff !important;
+  border: 0 !important;
+  border-radius: 8px !important;
+  box-shadow: var(--shadow-raised) !important;
 }
 .maplibregl-ctrl-attrib {
-  background: color-mix(in oklab, var(--paper) 85%, transparent) !important;
+  background: rgb(255 255 255 / 0.85) !important;
   color: var(--muted) !important;
   font-family: var(--font-body);
   font-size: 10px;
 }
 .maplibregl-ctrl-attrib a {
   color: var(--muted) !important;
-}
-:root[data-theme="dark"] .maplibregl-ctrl-group button span,
-:root:not([data-theme="light"]) .maplibregl-ctrl-group button span {
-  filter: none;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .maplibregl-ctrl-group button span {
-    filter: invert(1);
-  }
-}
-:root[data-theme="dark"] .maplibregl-ctrl-group button span {
-  filter: invert(1);
 }

@@ -5,10 +5,10 @@ import { createPortal } from "react-dom";
 import { cx } from "./cx";
 
 /**
- * Side drawer on wide screens, bottom sheet on phones. Escape and the backdrop close it; focus moves into it on open
- * and returns to the opener on close.
+ * Right sheet (ByDefault geometry): inset 8px from the edges, 16px radius, slides in over a 40% backdrop. Full width minus
+ * 16px on phones. Escape and the backdrop close it; focus moves in on open and returns to the opener on close.
  */
-export function Drawer({ open, onClose, title, kicker, children, footer, width = 480 }: {
+export function Drawer({ open, onClose, title, kicker, children, footer, width = 560 }: {
   open: boolean;
   onClose: () => void;
   title: ReactNode;
@@ -36,7 +36,7 @@ export function Drawer({ open, onClose, title, kicker, children, footer, width =
   if (!open || typeof document === "undefined") return null;
   return createPortal(
     <div className="fixed inset-0 z-50">
-      <div className="absolute inset-0 bg-[color-mix(in_oklab,var(--ink)_35%,transparent)]" onClick={onClose} aria-hidden />
+      <div className="le-fade absolute inset-0 bg-black/40" onClick={onClose} aria-hidden />
       <div
         ref={panel}
         role="dialog"
@@ -44,23 +44,22 @@ export function Drawer({ open, onClose, title, kicker, children, footer, width =
         aria-modal="true"
         tabIndex={-1}
         className={cx(
-          "le-slide absolute flex flex-col bg-paper text-ink shadow-[var(--shadow)] outline-none",
-          "inset-x-0 bottom-0 max-h-[88dvh] rounded-t-[12px] border-t border-rule",
-          "sm:inset-y-0 sm:right-0 sm:left-auto sm:max-h-none sm:w-[var(--drawer-w)] sm:rounded-none sm:border-t-0 sm:border-l",
+          "le-slide absolute top-2 right-2 bottom-2 flex w-[calc(100vw-1rem)] flex-col rounded-2xl bg-[#FAFAFA] text-ink shadow-ring-lg outline-none",
+          "sm:w-[var(--drawer-w)]",
         )}
-        style={{ ["--drawer-w" as string]: `min(${width}px, 92vw)` }}
+        style={{ ["--drawer-w" as string]: `min(${width}px, 88vw)` }}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-rule px-5 pb-3 pt-4">
-          <div className="min-w-0">
-            {kicker ? <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">{kicker}</p> : null}
-            <h2 className="mt-0.5 font-display text-xl font-semibold leading-tight tracking-tight">{title}</h2>
+        <div className="mx-5 flex items-center gap-3 border-b border-rule pb-4 pt-5">
+          <div className="min-w-0 flex-1">
+            {kicker ? <p className="text-[13px] font-medium leading-5 text-muted">{kicker}</p> : null}
+            <h2 className="truncate text-[19px] font-medium leading-7 tracking-[-0.02em] text-ink">{title}</h2>
           </div>
-          <button type="button" data-testid="drawer-close" onClick={onClose} className="-mr-2 rounded-[var(--radius)] p-2 text-muted hover:bg-paper-2 hover:text-ink" aria-label="Close">
-            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+          <button type="button" data-testid="drawer-close" onClick={onClose} className="-mr-1.5 flex size-9 shrink-0 items-center justify-center rounded-md text-ink-2 transition-colors hover:bg-stone-100 hover:text-ink active:scale-[.96]" aria-label="Close">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
-        {footer ? <div className="border-t border-rule px-5 py-3">{footer}</div> : null}
+        {footer ? <div className="mx-5 border-t border-rule py-3.5">{footer}</div> : null}
       </div>
     </div>,
     document.body,
