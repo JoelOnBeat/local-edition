@@ -1,26 +1,218 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+ * Local Edition design tokens. Every lane uses only these names:
+ * --paper --paper-2 --ink --ink-2 --muted --rule --accent --accent-ink --ok --warn --flag --info
+ * --store-1 … --store-8 --font-display --font-body --font-mono --radius --shadow
+ * Light by default, dark via prefers-color-scheme, and [data-theme="light"|"dark"] on <html> overrides both.
+ */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+:root {
+  --paper: #f7f4ec;
+  --paper-2: #efeadf;
+  --ink: #1b1915;
+  --ink-2: #3d3931;
+  --muted: #6e675a;
+  --rule: #d9d1c1;
+  --accent: #b3261e;
+  --accent-ink: #fff8f2;
+  --ok: #2e6b3f;
+  --warn: #9a6400;
+  --flag: #b42318;
+  --info: #285a8c;
+
+  --store-1: #d4500f;
+  --store-2: #2f7d4f;
+  --store-3: #1f69ad;
+  --store-4: #8a3fa6;
+  --store-5: #a87c08;
+  --store-6: #c0265e;
+  --store-7: #0d8486;
+  --store-8: #5d6a24;
+
+  --font-display: var(--font-bricolage), "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-plex-sans), "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --radius: 6px;
+  --shadow: 0 1px 0 rgb(27 25 21 / 0.04), 0 8px 24px -12px rgb(27 25 21 / 0.18);
+
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not([data-theme="light"]) {
+    --paper: #13120f;
+    --paper-2: #1c1a16;
+    --ink: #f1ece1;
+    --ink-2: #d2cbbd;
+    --muted: #9b9384;
+    --rule: #35312a;
+    --accent: #ec6a50;
+    --accent-ink: #1a0d09;
+    --ok: #6cc187;
+    --warn: #e3aa45;
+    --flag: #f2735f;
+    --info: #82b4e6;
+
+    --store-1: #f2803f;
+    --store-2: #5cba7f;
+    --store-3: #63a6ea;
+    --store-4: #c084e0;
+    --store-5: #e0b53c;
+    --store-6: #f0689a;
+    --store-7: #3cc4c2;
+    --store-8: #a7b85a;
+
+    --shadow: 0 1px 0 rgb(0 0 0 / 0.3), 0 10px 28px -12px rgb(0 0 0 / 0.6);
+    color-scheme: dark;
   }
 }
 
+:root[data-theme="dark"] {
+  --paper: #13120f;
+  --paper-2: #1c1a16;
+  --ink: #f1ece1;
+  --ink-2: #d2cbbd;
+  --muted: #9b9384;
+  --rule: #35312a;
+  --accent: #ec6a50;
+  --accent-ink: #1a0d09;
+  --ok: #6cc187;
+  --warn: #e3aa45;
+  --flag: #f2735f;
+  --info: #82b4e6;
+
+  --store-1: #f2803f;
+  --store-2: #5cba7f;
+  --store-3: #63a6ea;
+  --store-4: #c084e0;
+  --store-5: #e0b53c;
+  --store-6: #f0689a;
+  --store-7: #3cc4c2;
+  --store-8: #a7b85a;
+
+  --shadow: 0 1px 0 rgb(0 0 0 / 0.3), 0 10px 28px -12px rgb(0 0 0 / 0.6);
+  color-scheme: dark;
+}
+
+/* Tailwind utilities on the tokens: bg-paper, text-ink, border-rule, font-display, bg-store-3 … */
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-rule: var(--rule);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-flag: var(--flag);
+  --color-info: var(--info);
+  --color-store-1: var(--store-1);
+  --color-store-2: var(--store-2);
+  --color-store-3: var(--store-3);
+  --color-store-4: var(--store-4);
+  --color-store-5: var(--store-5);
+  --color-store-6: var(--store-6);
+  --color-store-7: var(--store-7);
+  --color-store-8: var(--store-8);
+  --font-display: var(--font-display);
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-mono);
+  --radius-ed: var(--radius);
+  --shadow-ed: var(--shadow);
+}
+
+html {
+  background: var(--paper);
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-feature-settings: "kern", "liga";
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--accent) 28%, transparent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Tabular numbers wherever mono is used for figures. */
+.font-mono,
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* A hairline rule like a newspaper column divider. */
+.rule-double {
+  border-top: 3px double var(--ink);
+}
+
+@keyframes le-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes le-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+@keyframes le-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+.le-enter {
+  animation: le-enter 220ms ease-out both;
+}
+
+.le-live-dot {
+  animation: le-pulse 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .le-enter,
+  .le-live-dot {
+    animation: none;
+  }
+}
+
+/* MapLibre controls follow the paper. */
+.maplibregl-ctrl-group {
+  background: var(--paper) !important;
+  border: 1px solid var(--rule) !important;
+  box-shadow: none !important;
+}
+.maplibregl-ctrl-attrib {
+  background: color-mix(in oklab, var(--paper) 85%, transparent) !important;
+  color: var(--muted) !important;
+  font-family: var(--font-body);
+  font-size: 10px;
+}
+.maplibregl-ctrl-attrib a {
+  color: var(--muted) !important;
+}
+:root[data-theme="dark"] .maplibregl-ctrl-group button span,
+:root:not([data-theme="light"]) .maplibregl-ctrl-group button span {
+  filter: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .maplibregl-ctrl-group button span {
+    filter: invert(1);
+  }
+}
+:root[data-theme="dark"] .maplibregl-ctrl-group button span {
+  filter: invert(1);
 }
