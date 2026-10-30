@@ -40,7 +40,7 @@ export function reviewsOf(editions: Edition[], stores: Store[]): ProofReview[] {
   return editions.flatMap((e): ProofReview[] => {
     const store = byId.get(e.storeId);
     return e.review && store
-      ? [{ storeId: store.id, storeName: store.name, colorIndex: store.colorIndex, verdict: e.review.verdict, reason: e.review.reason, hint: e.review.hint, reviewedBy: e.review.reviewedBy }]
+      ? [{ storeId: store.id, storeName: store.name, colorIndex: store.colorIndex, verdict: e.review.verdict, reason: e.review.reason, hint: e.review.hint, reviewedBy: e.review.reviewedBy, reviewedAt: e.review.at }]
       : [];
   });
 }

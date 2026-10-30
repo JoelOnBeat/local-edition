@@ -5,11 +5,13 @@ import { ButtonLink, CardBand, Chip, EmptyState } from "../ui";
 import { Icon } from "../app-ui/icons";
 import { formatInt } from "../lib/format";
 import { ModelChip, usd } from "./trace-entry";
-import { runWhen, useKnownRuns, type RunSummary } from "./run-summary";
+import { runWhen, useRunSummaries, type RunSummary } from "./run-summary";
 
-export const RUN_STATE: Record<RunSummary["state"], { label: string; tone: "ok" | "info" | "warn" }> = {
+export const RUN_STATE: Record<RunSummary["state"], { label: string; tone: "ok" | "info" | "warn" | "flag" }> = {
   live: { label: "Running", tone: "info" },
   finished: { label: "Finished", tone: "ok" },
+  partial: { label: "Finished, some skipped", tone: "warn" },
+  failed: { label: "Failed", tone: "flag" },
   stopped: { label: "Stream ended", tone: "warn" },
 };
 
@@ -20,7 +22,7 @@ export function RunStateChip({ state }: { state: RunSummary["state"] }) {
 
 /** Portfolio card: the newest run this browser started, with what it did and cost, linking to its trace. */
 export function LastRunCard({ buildAction, className }: { buildAction?: ReactNode; className?: string }) {
-  const runs = useKnownRuns();
+  const { runs, ready } = useRunSummaries();
   const r = runs[0];
   return (
     <CardBand
@@ -30,13 +32,13 @@ export function LastRunCard({ buildAction, className }: { buildAction?: ReactNod
       actions={r ? <RunStateChip state={r.state} /> : null}
       flush
       data-testid="last-run-card"
-      footer={r && runs.length > 1 ? <ButtonLink href="/app/runs" variant="ghost" size="sm" className="-ml-2.5">All runs in this tab <span className="text-muted tnum">({runs.length})</span></ButtonLink> : undefined}
+      footer={r && runs.length > 1 ? <ButtonLink href="/app/runs" variant="ghost" size="sm" className="-ml-2.5">All runs <span className="text-muted tnum">({runs.length})</span></ButtonLink> : undefined}
     >
       {!r ? (
         <EmptyState
           icon={<Icon name="terminal" size={20} />}
-          title="No run in this browser yet"
-          body="A build streams its trace to the tab that starts it: every Qloo call, model and cost, store by store."
+          title={ready ? "No run in this workspace yet" : "Loading runs"}
+          body="A build records its trace: every Qloo call, model and cost, store by store. It replays from the server, in any tab."
           action={buildAction ?? <ButtonLink href="/app" variant="secondary" size="sm">Build this week&apos;s editions</ButtonLink>}
           className="py-10"
         />
@@ -47,7 +49,7 @@ export function LastRunCard({ buildAction, className }: { buildAction?: ReactNod
             <span className="truncate font-mono text-[12px] text-muted">{r.runId}</span>
           </p>
           <dl className="grid grid-cols-3 gap-3">
-            {[["Stores", `${r.done}/${r.total}`], ["Tool calls", formatInt(r.toolCalls)], ["Model cost", usd(r.usd)]].map(([k, v]) => (
+            {[["Stores", `${r.done}/${r.total}`], ["Tool calls", r.toolCalls === null ? "–" : formatInt(r.toolCalls)], ["Model cost", usd(r.usd)]].map(([k, v]) => (
               <div key={k} className="min-w-0">
                 <dt className="truncate text-[13px] text-muted">{k}</dt>
                 <dd className="text-[20px] font-medium leading-7 tracking-[-0.02em] text-ink tnum">{v}</dd>

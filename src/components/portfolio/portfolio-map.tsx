@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { preconnect } from "react-dom";
 import type { Map as MlMap, Marker } from "maplibre-gl";
 import type { Store } from "@/contract";
 import { storeColor, storeMonogram } from "../ui";
@@ -8,6 +9,7 @@ import { STATUS_META, type StoreWeekStatus } from "./status-meta";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 const STYLE_LIGHT = "https://tiles.openfreemap.org/styles/positron";
+const TILE_HOST = "https://tiles.openfreemap.org";
 /** MapLibre's worker, served from our own origin (scripts/vendor-maplibre-worker.mjs copies it from node_modules). */
 const WORKER_PATH = "/vendor/maplibre-gl-worker.mjs";
 
@@ -72,6 +74,10 @@ export function PortfolioMap({ stores, statusOf, hot, onHot, onOpen }: {
 
   useEffect(() => {
     let cancelled = false;
+    // The basemap is slow to start from cold (style, then tile index, then tiles, each a round trip to another host: measured 5-12 s on the
+    // live site). Open the connection and start the style download while MapLibre's own bundle is still loading.
+    preconnect(TILE_HOST);
+    void fetch(STYLE_LIGHT).catch(() => undefined);
     (async () => {
       const ml = await import("maplibre-gl");
       if (cancelled || !box.current) return;

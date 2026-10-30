@@ -48,13 +48,16 @@ export async function realBuildPorts(): Promise<BuildPorts & { env: PlatformEnv 
     async afterBuild(params, editionIds) {
       await (await import("../connectors/slack/after-build")).postDigestAfterBuild(params.workspaceId, editionIds);
     },
-    // The week's Tavily batch, once, before the first store (it does not fit inside one agent tool call's 25 s).
+    // The week's Tavily batch and the menu's embeddings, once, before the first store (neither fits inside one agent tool call's 25 s).
     async prefetchEvents(params, storeIds) {
       const workspace = await repo.getWorkspace(params.workspaceId);
       const chain = workspace && (await repo.getChain(workspace.chainId));
       if (!chain) return;
       const stores = (await repo.listStores(chain.id)).filter((s) => storeIds.includes(s.id));
-      await (await getAgentDeps()).tavily.prefetchWeek?.(stores, chain);
+      const deps = await getAgentDeps();
+      await deps.tavily.prefetchWeek?.(stores, chain);
+      // The menu's embeddings, once per menu version, so no store's `menu_match` waits on a cold embedding endpoint (never throws).
+      await (await import("../agent/embed-cache")).warmMenuEmbeddings(deps, await repo.listMenu(chain.id));
     },
     // The existing per-store pipeline (tool loop, evidence check, copy, guardrails, persist); one store per call.
     buildStore(storeId, params): AsyncIterable<AgentEvent> {
@@ -70,5 +73,10 @@ export async function realBuildPorts(): Promise<BuildPorts & { env: PlatformEnv 
 
 export async function realWeeklyPorts(): Promise<WeeklyPorts> {
   const base = await realBuildPorts();
-  return { ...base, repo: await getRepo(), now: () => new Date() };
+  return {
+    ...base,
+    repo: await getRepo(),
+    now: () => new Date(),
+    reviewDemo: async () => (await import("../agent/review-demo")).reviewDemoWorkspace(await getAgentDeps()),
+  };
 }

@@ -61,6 +61,33 @@ describe("WeeklyRebuild", () => {
   });
 });
 
+describe("WeeklyRebuild: the chain review is the build's last step", () => {
+  const at = (ports: WeeklyPorts) => runWeeklyRebuild(new FakeStep(), ports, params({ runId: "weekly-r", workspaceId: DEMO_WORKSPACE_ID, trigger: "cron" }));
+
+  it("runs the review once, after every store and before the job is recorded finished", async () => {
+    const { ports, repo } = await weeklyPorts();
+    const order: string[] = [];
+    const out = await at({
+      ...ports,
+      reviewDemo: async () => { order.push(`review (job is ${(await repo.latestJobRun())?.status})`); return { reviewed: 2, stopped: null }; },
+    });
+    expect(order).toEqual(["review (job is running)"]);
+    expect(out.job?.status).toBe("done");
+  });
+
+  it("skips the review when no edition was built, and a failing review never fails the rebuild", async () => {
+    const { ports, ids } = await weeklyPorts();
+    let calls = 0;
+    const none = await at({ ...scriptedPorts(ports.runLog, ids, (id) => [{ type: "error", storeId: id, code: "store_failed", message: "no" } as never]), repo: ports.repo, now: ports.now, reviewDemo: async () => { calls++; return { reviewed: 0, stopped: null }; } });
+    expect(none.build?.editionIds).toEqual([]);
+    expect(calls).toBe(0);
+
+    const second = await weeklyPorts();
+    const out = await at({ ...second.ports, reviewDemo: async () => { throw new Error("ultra down"); } });
+    expect(out.job?.status).toBe("done");
+  });
+});
+
 describe("WeeklyRebuild: L1, retried job-start", () => {
   it("a retry of job-start after its record was written still builds (it finds its own job, not a rival)", async () => {
     const { ports, repo, ids } = await weeklyPorts();

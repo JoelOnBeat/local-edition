@@ -82,6 +82,7 @@ export const mockProof: ProofResponse = {
   seenModels: seenModels(mockEditions),
   editionCount: mockEditions.length,
   reviews: reviewsOf(mockEditions, SAMPLE_STORES),
+  sample: true,
 };
 
 export const mockLimits: LimitsResponse = {

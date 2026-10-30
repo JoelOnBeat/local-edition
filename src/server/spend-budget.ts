@@ -1,5 +1,5 @@
 import { serverEnv } from "@/lib/env";
-import { HttpError, UpstreamError } from "./http/errors";
+import { HttpError, RetryAfterError, UpstreamError } from "./http/errors";
 import { createLogger } from "./log";
 import { serial } from "./serial";
 import { getRepo } from "./store";
@@ -39,6 +39,19 @@ const IP_TTL_SECONDS = 2 * 24 * 3600;
 /** Dollars to the micro-dollar, so 40 charges of $0.02 add up to exactly $0.80 and not $0.8000000000000002. */
 const usd6 = (n: number) => Math.round(n * 1e6) / 1e6;
 const dayOf = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+
+const DAY_MS = 24 * 3600 * 1000;
+/** When the network's daily counter starts over: the next 00:00 UTC (the counter is keyed by UTC date). */
+export const nextBudgetReset = (now: number): number => (Math.floor(now / DAY_MS) + 1) * DAY_MS;
+const clock = (ms: number, timeZone: string) => new Date(ms).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone });
+
+/** "This network has used its model budget for today. It resets at 08:00 Kuala Lumpur time (00:00 UTC, 20:00 New York), in 5 h 12 min." */
+export function ipBudgetMessage(now: number): string {
+  const reset = nextBudgetReset(now);
+  const mins = Math.max(1, Math.ceil((reset - now) / 60_000));
+  const left = mins >= 60 ? `${Math.floor(mins / 60)} h ${String(mins % 60).padStart(2, "0")} min` : `${mins} min`;
+  return `This network has used its model budget for today. It resets at ${clock(reset, "Asia/Kuala_Lumpur")} Kuala Lumpur time (${clock(reset, "UTC")} UTC, ${clock(reset, "America/New_York")} New York), in ${left}.`;
+}
 
 interface Counter {
   usd: number;
@@ -107,7 +120,7 @@ export async function chargeSpendBudget(charge: BudgetCharge, opts: BudgetOption
         throw new HttpError(429, "workspace_budget", "This workspace has used its share of the model budget. The sample editions stay available.");
       }
       if (usd6(ipSpent + charge.usd) > IP_DAILY_BUDGET_USD) {
-        throw new HttpError(429, "ip_budget", "This network has used its model budget for today. Try again tomorrow.");
+        throw new RetryAfterError(429, "ip_budget", ipBudgetMessage(now), (nextBudgetReset(now) - now) / 1000);
       }
       await repo.cachePut<Counter>(ipKey, { usd: usd6(ipSpent + charge.usd) }, IP_TTL_SECONDS);
       if (wsKey) await repo.cachePut<Counter>(wsKey, { usd: usd6(wsSpent + charge.usd) }, WORKSPACE_TTL_SECONDS);

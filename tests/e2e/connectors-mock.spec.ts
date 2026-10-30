@@ -25,6 +25,11 @@ test("build, approve, deliveries, sync log, store reply, accept suggestion", asy
   await expect(page.getByTestId("delivery-square")).toHaveAttribute("data-status", "sent");
   await page.getByTestId("approve-all").click();
   await expect(page.getByTestId("edition-status")).toHaveAttribute("data-status", "approved");
+  // The staff card's public link sits next to the approved edition: a "Staff card" button, Copy link and Open.
+  await expect(page.getByTestId("staff-card-group")).toHaveAttribute("data-state", "ready", { timeout: 15_000 });
+  await expect(page.getByTestId("staff-card")).toHaveText("Staff card");
+  await expect(page.getByTestId("staff-card-copy")).toBeVisible();
+  await expect(page.getByTestId("staff-card-open")).toHaveAttribute("href", /\/card\/[\w-]+$/);
   await expect(page.getByTestId("delivery-slack")).toHaveAttribute("data-status", "sent");
   await expect(page.getByTestId("delivery-gmail")).toHaveAttribute("data-status", "sent");
 

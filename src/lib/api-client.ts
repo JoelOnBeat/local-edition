@@ -1,15 +1,15 @@
 import { z } from "zod";
 import {
-  authRoutes, CommsState, ConnectionsResponse, DeliveriesResponse, RegenerateSuggestion, formatIfMatch, routes,
+  authRoutes, CommsState, RUN_ID_HEADER, RunsResponse, runsRoutes, ConnectionsResponse, DeliveriesResponse, RegenerateSuggestion, formatIfMatch, routes,
   type AgentEvent, type RouteId, type RouteOutput,
 } from "@/contract";
 import { clientDataMode } from "./env";
 import { createMockApi } from "./mock-api";
-import { ApiClientError, type SeqEvent, type AgentEventStream, type ApiClient, type ApiClientOptions, type Out } from "./api-types";
+import { ApiClientError, type ResumeOptions, type SeqEvent, type AgentEventStream, type ApiClient, type ApiClientOptions, type Out } from "./api-types";
 import { parseSseFrames, parseSseStream } from "./sse-client";
 
 export { ApiClientError } from "./api-types";
-export type { AgentEventStream, ApiClient, ApiClientOptions, StreamOptions } from "./api-types";
+export type { AgentEventStream, ApiClient, ApiClientOptions, ResumeOptions, StreamOptions } from "./api-types";
 
 /** Typed client for every route in `routes`. NEXT_PUBLIC_DATA_MODE=mock returns src/mocks data. */
 
@@ -93,8 +93,10 @@ function createHttpApi(baseUrl = "", fetchImpl: typeof fetch = (...a) => fetch(.
     return parsed.data;
   };
 
-  async function* resume(afterSeq: number, signal?: AbortSignal): AsyncGenerator<SeqEvent> {
-    const res = await send("buildEditions", { headers: { "last-event-id": String(Math.max(0, Math.trunc(afterSeq))) }, body: {} }, signal);
+  async function* resume(afterSeq: number, opts: ResumeOptions = {}): AsyncGenerator<SeqEvent> {
+    const headers: Record<string, string> = { "last-event-id": String(Math.max(0, Math.trunc(afterSeq))) };
+    if (opts.runId) headers[RUN_ID_HEADER] = opts.runId;
+    const res = await send("buildEditions", { headers, body: {} }, opts.signal);
     if (!res.body) throw new ApiClientError(502, "no_stream", "The server did not open a stream.");
     yield* parseSseFrames(res.body);
   }
@@ -138,7 +140,8 @@ function createHttpApi(baseUrl = "", fetchImpl: typeof fetch = (...a) => fetch(.
     getComms: () => call("GET", "/api/connectors/comms", CommsState),
     patchSuggestion: (id, status) => call("PATCH", `/api/connectors/comms/suggestions/${encodeURIComponent(id)}`, RegenerateSuggestion, { status }),
     pollMail: () => call("POST", "/api/connectors/mail/poll", PollResponse),
-    resumeBuild: (afterSeq, o) => resume(afterSeq, o?.signal),
+    resumeBuild: (afterSeq, o) => resume(afterSeq, o),
+    listRuns: () => call(runsRoutes.list.method, runsRoutes.list.path, RunsResponse),
     signUp: (input) => call("POST", authRoutes.signup.path, authRoutes.signup.response, input),
     signIn: (input) => call("POST", authRoutes.signin.path, authRoutes.signin.response, input),
     startGuest: () => call("POST", authRoutes.guest.path, authRoutes.guest.response),

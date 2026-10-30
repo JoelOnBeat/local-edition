@@ -73,6 +73,15 @@ describe("per-network daily dollar cap: $0.80", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("the refusal says when the day starts over, as a time, and sends Retry-After", async () => {
+    // 21:30 UTC: the counter (keyed by UTC date) resets in 2 h 30 min, at 00:00 UTC = 08:00 Kuala Lumpur = 20:00 New York.
+    const at = Date.UTC(2026, 9, 30, 21, 30);
+    for (const id of ["ws_a", "ws_b"]) await chargeSpendBudget({ workspaceId: id, ipKey: "net1", usd: 0.4 }, { force: true, now: at, capUsd: 5, spentUsd: spentNothing });
+    const refused = await chargeSpendBudget({ workspaceId: "ws_c", ipKey: "net1", usd: 0.2 }, { force: true, now: at, capUsd: 5, spentUsd: spentNothing }).catch((e: unknown) => e);
+    expect(refused).toMatchObject({ status: 429, code: "ip_budget", retryAfterSeconds: 9000 });
+    expect((refused as Error).message).toBe("This network has used its model budget for today. It resets at 08:00 Kuala Lumpur time (00:00 UTC, 20:00 New York), in 2 h 30 min.");
+  });
+
   it("a charge before the cookie is resolved (menu photo, brand voice) counts against the network only", async () => {
     for (let i = 0; i < 40; i++) await charge(0.02, { workspaceId: undefined });
     await expect(charge(0.02, { workspaceId: undefined })).rejects.toMatchObject({ code: "ip_budget" });

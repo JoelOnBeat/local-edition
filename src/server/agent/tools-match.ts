@@ -1,26 +1,11 @@
 import { z } from "zod";
 import { cosine, fnv, makeEvidence } from "./util";
-import { meteredEmbed, meteredRerank } from "./metrics";
+import { menuVectors, tagVectors } from "./embed-cache";
+import { meteredRerank } from "./metrics";
 import type { MenuPair } from "./memory";
-import type { AgentDeps } from "./ports";
 import { signed, round, storeBrief, type ToolDef } from "./tool-types";
 
 /** The two tools that match menu items and places to the block with embeddings (and the reranker, when it exists). */
-
-const embedCaches = new WeakMap<object, Map<string, number[]>>();
-
-async function embedCached(deps: AgentDeps, texts: string[]) {
-  const cache = embedCaches.get(deps.tf) ?? new Map<string, number[]>();
-  embedCaches.set(deps.tf, cache);
-  const missing = [...new Set(texts.filter((t) => !cache.has(fnv(t))))];
-  let mode: "live" | "replay" | "fixture" | "cache" = "cache";
-  if (missing.length) {
-    const res = await meteredEmbed(deps, missing, "menu_match");
-    mode = res.mode;
-    missing.forEach((t, i) => cache.set(fnv(t), res.vectors[i]));
-  }
-  return { vectors: texts.map((t) => cache.get(fnv(t)) ?? []), mode };
-}
 
 const MATCH_THRESHOLD = 0.5;
 const menuMatchArgs = z.object({ tagNames: z.array(z.string().min(1)).max(8).optional() });
@@ -38,10 +23,12 @@ export const menuMatch: ToolDef<typeof menuMatchArgs> = {
     if (!tags.length) return { summary: "no tags to match: call block_profile first", payload: { error: "No tags available. Call block_profile first or pass tagNames." }, evidenceIds: [] };
     if (!sc.menu.length) return { summary: "the menu is empty", payload: { error: "The chain has no menu items." }, evidenceIds: [] };
 
-    const itemTexts = sc.menu.map((m) => `${m.name}. ${m.category}. ${m.description ?? ""}`.trim());
+    // The menu is embedded once per menu version (saved in the provider cache); only the block's few tags go out per store, in one batch.
     const tagTexts = tags.map((t) => `${t.name} (${t.kind}, e.g. cuisine or specialty dish)`);
-    const { vectors, mode } = await embedCached(deps, [...itemTexts, ...tagTexts]);
-    const itemVecs = vectors.slice(0, sc.menu.length);
+    const [menuV, tagV] = await Promise.all([menuVectors(deps, sc.menu), tagVectors(deps, tagTexts)]);
+    const itemVecs = menuV.vectors;
+    const vectors = [...itemVecs, ...tagV.vectors];
+    const mode = menuV.source === "embedded" ? menuV.mode : tagV.mode;
     const now = deps.now().toISOString();
 
     const raw: { menuIdx: number; tagIdx: number; score: number }[] = [];

@@ -1,5 +1,5 @@
 import type {
-  AgentEvent, AuthResult, CodeRequestResponse, CommsState, GuestResult, MeResponse, OnboardingState, OnboardingUpdate, CodeVerifyInput, SigninInput, SignupInput, ConnectionsResponse, Delivery, ItemAction, RegenerateSuggestion, RouteId, RouteInput, RouteOutput,
+  AgentEvent, AuthResult, CodeRequestResponse, CommsState, GuestResult, MeResponse, OnboardingState, OnboardingUpdate, CodeVerifyInput, SigninInput, SignupInput, ConnectionsResponse, Delivery, ItemAction, RegenerateSuggestion, RouteId, RouteInput, RouteOutput, RunsResponse,
 } from "@/contract";
 import type { z } from "zod";
 import type { SeqEvent } from "./sse-client";
@@ -20,6 +20,11 @@ export type { SeqEvent } from "./sse-client";
 
 export interface StreamOptions {
   signal?: AbortSignal;
+}
+
+export interface ResumeOptions extends StreamOptions {
+  /** Replay this run of the workspace instead of its latest one. */
+  runId?: string;
 }
 
 export interface ApiClient {
@@ -68,7 +73,9 @@ export interface ApiClient {
    * Re-attaches to the workspace's latest build run and replays it after `afterSeq` (Last-Event-ID). Each event carries its `id:`
    * so the caller can resume from the last one it saw. Mock mode has no stored run and yields nothing.
    */
-  resumeBuild(afterSeq: number, opts?: StreamOptions): AsyncIterable<SeqEvent>;
+  resumeBuild(afterSeq: number, opts?: ResumeOptions): AsyncIterable<SeqEvent>;
+  /** The workspace's run log from the server (D1), newest first. Empty in mock mode and wherever builds run in-process. */
+  listRuns(): Promise<RunsResponse>;
   // Accounts and onboarding (src/contract/auth.ts). Cookie routes: the browser holds the session.
   /** Creates the account, its workspace and a session. `keepWorkspace` brings the visitor's sample workspace along. */
   signUp(input: z.input<typeof SignupInput>): Promise<AuthResult>;

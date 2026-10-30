@@ -154,7 +154,7 @@ export function StoreEditionView({ storeId }: { storeId: string }) {
             {block(event, event ? <EventContent item={event} /> : null)}
           </div>
           <aside className="grid min-w-0 content-start gap-3 lg:sticky lg:top-20 lg:self-start">
-            <ReviewNote review={edition.review} storeById={w.storeById} />
+            <ReviewNote review={edition.review} storeById={w.storeById} sample={w.bundle.chain.isSample} />
             <BlockTaste profile={profile.data?.profile} loading={profile.loading} />
             <WhyThisWeek edition={edition} onEvidence={setDrawer} />
             <DeliveryStrip deliveries={deliveries} />

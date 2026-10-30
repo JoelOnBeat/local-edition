@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { RUN_ID_HEADER } from "@/contract";
 import { newId } from "@/lib/ids";
 import { HttpError } from "../http/errors";
 import { limitSpend } from "../handlers/limit";
@@ -15,7 +16,7 @@ const LastEventId = z.coerce.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 /**
  * POST /api/editions/build in production: starts the EditionBuild Workflow and streams its progress by
  * tailing the D1 event log (`: open` at once, a heartbeat every 15 s). Same validation and errors as the
- * in-process route. A request with `Last-Event-ID` re-attaches to the workspace's latest run instead of
+ * in-process route. A request with `Last-Event-ID` re-attaches to the workspace's latest run (or the one `x-le-run-id` names) instead of
  * starting one, so a dropped connection replays what it missed and a refresh never double-builds. A reattach is rate
  * limited like a build, and a workspace holds at most two streams open at once (429 `too_many_streams`).
  */
@@ -28,7 +29,10 @@ export const workflowBuildRoute = wsRoute(buildSpec, async ({ body }, ctx) => {
   const lastEventId = ctx.request.headers.get("last-event-id");
   if (lastEventId !== null) {
     const after = LastEventId.safeParse(lastEventId);
-    const latest = after.success ? await runLog.latestFor(workspaceId) : null;
+    // `x-le-run-id` names the run to replay (the runs page opens any run of the workspace); without it, the newest one.
+    const wanted = ctx.request.headers.get(RUN_ID_HEADER);
+    const latest = !after.success ? null : wanted ? await runLog.get(wanted) : await runLog.latestFor(workspaceId);
+    if (wanted && after.success && latest?.workspaceId !== workspaceId) throw new HttpError(404, "run_not_found", "That run does not exist in this workspace.");
     if (after.success && latest) {
       await limitAttach(ctx);
       const release = await acquireTailSlot(ctx.repo, workspaceId);

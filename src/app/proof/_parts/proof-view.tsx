@@ -6,7 +6,7 @@ import { Icon } from "@/components/app-ui/icons";
 import { StatStrip } from "@/components/app-ui/stat-cells";
 import { SkeletonRows } from "@/components/app-ui/states";
 import { IconTag } from "@/components/app-ui/status";
-import { formatUsd, modelName, pct } from "@/components/lib/format";
+import { formatDate, formatUsd, modelName, pct } from "@/components/lib/format";
 import { useAsync } from "@/components/lib/use-async";
 import { getApi } from "@/lib/api-client";
 import { EvalBlock, JobRuns, ModelSteps } from "./proof-parts";
@@ -68,7 +68,8 @@ export function ProofView() {
         <ModelSteps steps={proof.steps} seen={new Set(proof.seenModels)} />
       </CardBand>
 
-      <CardBand id="review" title={`${modelName("nvidia/Nemotron-3-Ultra-550b-a55b")} reads the whole chain`} icon={<Icon name="layers" />} flush={reviewed.length === 0} className="scroll-mt-24" bodyClassName={reviewed.length ? "p-2" : undefined}>
+      <CardBand id="review" title={`${modelName("nvidia/Nemotron-3-Ultra-550b-a55b")} reads the whole chain`} icon={<Icon name="layers" />} flush={reviewed.length === 0} className="scroll-mt-24" bodyClassName={reviewed.length ? "p-2" : undefined}
+        footer={reviewed.length ? <span data-testid="proof-review-date">{proof.sample ? "The sample chain's review" : "Review"}, read {formatDate(reviewed.map((r) => r.reviewedAt).sort().at(-1)!)}. {proof.sample ? "One real Ultra read of the sample editions, copied into every sample workspace." : ""}</span> : undefined}>
         {reviewed.length === 0 ? (
           <p className="px-6 py-10 text-center text-[14px] leading-5 text-ink-2">No review has run on this week&apos;s editions yet. It runs after every build, reading all stores side by side.</p>
         ) : (

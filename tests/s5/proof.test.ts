@@ -111,7 +111,7 @@ describe("GET /api/proof", () => {
     process.env.NEBIUS_API_KEY = "nb-secret-value";
     const text = await (await get()).text();
     expect(text).not.toContain("secret");
-    expect(Object.keys(JSON.parse(text)).sort()).toEqual(["cachedRatio", "editionCount", "eval", "gitSha", "jobRuns", "reviews", "scriptSha", "seenModels", "spendPerEditionUsd", "steps"]);
+    expect(Object.keys(JSON.parse(text)).sort()).toEqual(["cachedRatio", "editionCount", "eval", "gitSha", "jobRuns", "reviews", "sample", "scriptSha", "seenModels", "spendPerEditionUsd", "steps"]);
   });
 
   it("names the model per step from the server's model table", async () => {

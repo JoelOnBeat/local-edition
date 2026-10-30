@@ -31,6 +31,8 @@ export const ProofReview = z.object({
   reason: z.string().max(600),
   hint: z.string().max(400).nullable(),
   reviewedBy: z.string().max(120),
+  /** When the reviewer read this edition. */
+  reviewedAt: z.iso.datetime({ offset: true }),
 });
 export type ProofReview = z.infer<typeof ProofReview>;
 
@@ -52,6 +54,8 @@ export const ProofResponse = z.object({
   /** Editions the reviewer and the counts below were read from. */
   editionCount: z.number().int().nonnegative(),
   reviews: z.array(ProofReview).max(100),
+  /** True when the editions above belong to the sample chain (the demo workspace or a visitor's sample), whose review is one shared read. */
+  sample: z.boolean(),
 });
 export type ProofResponse = z.infer<typeof ProofResponse>;
 

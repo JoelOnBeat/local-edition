@@ -197,6 +197,7 @@ export function createMockApi(opts: Pick<ApiClientOptions, "mockDelayMs" | "mock
     pollMail: () => run(() => ({ checked: mockComms().connections.filter((c) => c.status === "connected" && c.provider !== "slack").length, newReplies: 0 })),
     // The mock backend keeps no run log: nothing to replay.
     resumeBuild: () => (async function* () { /* no stored run */ })(),
+    listRuns: () => run(() => ({ runs: [] })),
     ...createMockAuth(db, run),
     getPendingJobs: (signature) => run(() => {
       requireSignature(signature);

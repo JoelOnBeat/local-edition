@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import type { AgentEvent } from "@/contract";
-import { getApi } from "@/lib/api-client";
+import { ApiClientError, getApi } from "@/lib/api-client";
 import { clientDataMode } from "@/lib/env";
 import type { SeqEvent } from "@/lib/sse-client";
 import { toShownError, type ShownError } from "../lib/use-async";
@@ -12,7 +12,8 @@ import { toShownError, type ShownError } from "../lib/use-async";
  * view as soon as `run_started` arrives; the run view reads the same state, so nothing is lost in the hand-off.
  * Events are mirrored to sessionStorage, and in app mode a dropped stream re-attaches through `api.resumeBuild`: the first time from
  * the start (the server replays the run from its log, `Last-Event-ID: 0`), after that from the last `id:` it parsed, so a
- * disconnect or a reload resumes where it left off.
+ * disconnect or a reload resumes where it left off. A run this tab never saw (one a past tab or the Monday cron started) opens by
+ * replaying it from the server's run log, the same way (`openFromServer`).
  */
 
 export type RunStatus = "streaming" | "reconnecting" | "done" | "failed" | "detached";
@@ -33,6 +34,8 @@ const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 const KEY = (id: string) => `le-run:${id}`;
 const MAX_RESUMES = 4;
+/** Runs the server said it does not have: not asked for again. */
+const missing = new Set<string>();
 
 function save(s: RunState) {
   try {
@@ -82,7 +85,7 @@ async function pumpResumed(runId: string, stream: AsyncIterable<SeqEvent>, fromS
 }
 
 /** Re-attach to the workspace's latest run (app mode only): a replay from the start first, then from the last event id we saw. */
-async function resume(runId: string) {
+async function resume(runId: string, immediate = false) {
   const cur = runs.get(runId);
   if (!cur || cur.status === "done") return;
   if (clientDataMode() === "mock" || cur.attempts >= MAX_RESUMES) {
@@ -90,11 +93,18 @@ async function resume(runId: string) {
     return;
   }
   set(runId, { status: "reconnecting", attempts: cur.attempts + 1 });
-  await new Promise((r) => setTimeout(r, 600 * 2 ** cur.attempts));
+  if (!immediate) await new Promise((r) => setTimeout(r, 600 * 2 ** cur.attempts));
   try {
     const after = runs.get(runId)?.seq ?? 0;
-    await pumpResumed(runId, getApi().resumeBuild(after), after === 0);
-  } catch {
+    await pumpResumed(runId, getApi().resumeBuild(after, { runId }), after === 0);
+  } catch (e) {
+    // The server has no such run in this workspace: forget it (no retry loop) so the page says so.
+    if (e instanceof ApiClientError && e.status === 404) {
+      runs.delete(runId);
+      missing.add(runId);
+      emit();
+      return;
+    }
     await resume(runId);
   }
 }
@@ -118,12 +128,23 @@ export function startBuild(body: { storeIds?: string[]; force?: boolean } = {}):
   })();
 }
 
+/**
+ * A run this tab never held (a past tab's, or the Monday cron's): it opens as a reconnecting run and replays from the server's log, like a
+ * dropped stream. Not in mock mode (no log), and not again once the server has said it has no such run.
+ */
+function openFromServer(runId: string): RunState | undefined {
+  if (clientDataMode() === "mock" || missing.has(runId)) return undefined;
+  runs.set(runId, { runId, events: [], status: "reconnecting", attempts: 0, seq: 0 });
+  queueMicrotask(() => void resume(runId, true));
+  return runs.get(runId);
+}
+
 function hydrate(runId: string): RunState | undefined {
   if (runs.has(runId)) return runs.get(runId);
   if (typeof window === "undefined") return undefined;
   try {
     const raw = sessionStorage.getItem(KEY(runId));
-    if (!raw) return undefined;
+    if (!raw) return openFromServer(runId);
     const saved = JSON.parse(raw) as { events: AgentEvent[]; status: RunStatus; seq?: number; startedAt?: number };
     const done = saved.events.some(isTerminal);
     runs.set(runId, { runId, events: saved.events, status: done ? "done" : "reconnecting", attempts: 0, seq: saved.seq ?? 0, startedAt: saved.startedAt });
@@ -139,7 +160,7 @@ const subscribe = (l: () => void) => {
   return () => listeners.delete(l);
 };
 
-/** The live state of one run, or undefined when this tab never saw it. */
+/** The live state of one run: this tab's copy, else the server's replay of it. Undefined only while unknown, or when the server has no such run. */
 export function useRun(runId: string): RunState | undefined {
   return useSyncExternalStore(subscribe, () => hydrate(runId), () => undefined);
 }

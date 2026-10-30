@@ -34,6 +34,7 @@ export const getProof = withRoute(routes.getProof, async (_input, ctx): Promise<
   const repo = await getRepo();
   const workspace = await peekWorkspace(ctx.request, repo);
   const stores = workspace ? await repo.listStores(workspace.chainId) : [];
+  const chain = workspace ? await repo.getChain(workspace.chainId) : null;
   const editions = stores.length ? await repo.listEditions({ storeIds: stores.map((s) => s.id), finishedOnly: true }) : [];
   const [jobRuns, evalResult, totals, skips] = await Promise.all([readJobRuns(repo), readEval(repo), readMetricsTotals(repo), readModelSkips(repo)]);
   return {
@@ -47,5 +48,6 @@ export const getProof = withRoute(routes.getProof, async (_input, ctx): Promise<
     seenModels: seenModels(editions),
     editionCount: editions.length,
     reviews: reviewsOf(editions, stores),
+    sample: chain?.isSample ?? true,
   };
 });

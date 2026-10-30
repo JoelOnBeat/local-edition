@@ -29,7 +29,8 @@ describe("step_metrics", () => {
     const byRole = (r: string) => steps.filter((s) => s.role === r);
     expect(byRole("agent")).toHaveLength(h.chat.agentCalls);
     expect(byRole("copy")).toHaveLength(h.chat.copyCalls);
-    expect(byRole("embed").map((s) => s.tool).sort()).toEqual(["menu_match", "partners_rank"]);
+    // menu_match is two calls: the menu once per menu version, then the block's tags in one batch (see embed-cache.ts).
+    expect(byRole("embed").map((s) => s.tool).sort()).toEqual(["menu_match", "menu_match", "partners_rank"]);
     // The agent's turns are named by the tools they called; copy calls by what they wrote.
     expect(byRole("agent")[0].tool).toBe("block_profile");
     expect(byRole("agent")[1].tool).toBe("menu_match+places_near+artists_local+events_this_week");
