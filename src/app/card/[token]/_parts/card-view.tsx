@@ -41,11 +41,11 @@ function Line({ heading, body, color, lead }: { heading: string; body: string; c
   const [title, rest] = splitLead(body);
   const when = kind === "event" ? whenOf(`${heading} ${body}`) : null;
   return (
-    <section className="grid gap-1.5 border-t border-rule py-5 first:border-t-0 first:pt-2">
+    <section data-testid="card-line" data-kind={kind} className="grid gap-1.5 border-t border-rule py-5 first:border-t-0 first:pt-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-[11.5px] font-semibold uppercase tracking-[0.12em]" style={{ color }}>{kind === "other" ? heading : KIND_LABEL[kind]}</h2>
         {when ? (
-          <span className="rounded-full px-2.5 py-0.5 font-mono text-[12px] font-semibold"
+          <span data-testid="card-when" data-tonight={when.tonight} className="rounded-full px-2.5 py-0.5 font-mono text-[12px] font-semibold"
             style={when.tonight ? { background: color, color: "var(--paper)" } : { boxShadow: `inset 0 0 0 1px ${color}`, color }}>
             {when.tonight ? `Tonight, ${when.time}` : `${when.day} ${when.time}`}
           </span>
@@ -78,7 +78,7 @@ export function CardView({ token }: { token: string }) {
   if (q.loading && !q.data) {
     return (
       <Frame>
-        <div className="grid gap-4 p-6" role="status" aria-label="Loading the staff card">
+        <div data-testid="card-loading" className="grid gap-4 p-6" role="status" aria-label="Loading the staff card">
           <Skeleton className="h-3 w-40" /><Skeleton className="h-10 w-56" /><Skeleton className="h-24 w-full" /><Skeleton className="h-24 w-full" />
         </div>
       </Frame>
@@ -88,14 +88,14 @@ export function CardView({ token }: { token: string }) {
     const gone = q.error?.status === 404;
     return (
       <Frame>
-        <div className="grid gap-3 p-6">
+        <div data-testid={gone ? "card-not-live" : "card-error"} className="grid gap-3 p-6">
           <p className="font-display text-[26px] font-extrabold leading-tight">{gone ? "This card is not live" : "The card did not load"}</p>
           <p className="text-[16px] leading-[1.55] text-ink-2">
             {gone
               ? "Head office has not approved this week's card yet, or the link is from an older week. Ask your manager for the current link."
               : q.error?.message ?? "Something went wrong."}
           </p>
-          {gone ? null : <Button onClick={q.reload} className="justify-self-start">Try again</Button>}
+          {gone ? null : <Button data-testid="card-retry" onClick={q.reload} className="justify-self-start">Try again</Button>}
         </div>
       </Frame>
     );
@@ -106,7 +106,7 @@ export function CardView({ token }: { token: string }) {
   const sample = /\(sample chain\)/i.test(chainName);
   return (
     <Frame color={color}>
-      <header className="grid gap-1 px-6 pb-3 pt-5">
+      <header data-testid="card-header" data-store-id={store.id} className="grid gap-1 px-6 pb-3 pt-5">
         <div className="flex items-center justify-between gap-2">
           <p className="truncate font-mono text-[11.5px] uppercase tracking-[0.08em] text-muted">{chainName.replace(/\s*\(sample chain\)/i, "")} · Staff card</p>
           {sample ? <span className="shrink-0 rounded-full border border-rule px-2 py-0.5 text-[11px] font-semibold text-muted">Sample</span> : null}

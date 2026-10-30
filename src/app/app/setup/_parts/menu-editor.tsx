@@ -42,7 +42,7 @@ export function MenuEditor({ items, onChange, onSave, saving, savedAt }: {
       <EmptyState
         title="No menu yet"
         body="Connect Square to bring the menu in, read a photo of your menu board, or add items by hand."
-        action={<Button size="sm" onClick={add}>Add an item</Button>}
+        action={<Button data-testid="menu-add" size="sm" onClick={add}>Add an item</Button>}
       />
     );
   }
@@ -64,15 +64,15 @@ export function MenuEditor({ items, onChange, onSave, saving, savedAt }: {
           const problem = rowProblem(m);
           const amber = m.priceLegible === false || m.seen === false;
           return (
-            <li key={m.id} className={cx("grid gap-2 rounded-[var(--radius)] border p-2.5 lg:grid-cols-[minmax(0,1.3fr)_120px_96px_minmax(0,2fr)_72px_36px] lg:items-center lg:border-transparent lg:p-1", problem ? "border-flag" : "border-rule")}>
+            <li key={m.id} data-testid="menu-row" data-id={m.id} data-source={m.source} className={cx("grid gap-2 rounded-[var(--radius)] border p-2.5 lg:grid-cols-[minmax(0,1.3fr)_120px_96px_minmax(0,2fr)_72px_36px] lg:items-center lg:border-transparent lg:p-1", problem ? "border-flag" : "border-rule")}>
               <label className="grid gap-1">
                 <span className="text-[11px] text-muted lg:sr-only">Item</span>
-                <input className={input} value={m.name} maxLength={80} onChange={(e) => set(m.id, { name: e.target.value })} placeholder="Cortado" aria-invalid={!m.name.trim()} />
+                <input data-testid="menu-name" className={input} value={m.name} maxLength={80} onChange={(e) => set(m.id, { name: e.target.value })} placeholder="Cortado" aria-invalid={!m.name.trim()} />
               </label>
               <div className="grid grid-cols-2 gap-2 lg:contents">
                 <label className="grid gap-1">
                   <span className="text-[11px] text-muted lg:sr-only">Category</span>
-                  <select className={input} value={m.category} onChange={(e) => set(m.id, { category: e.target.value as MenuItem["category"] })}>
+                  <select data-testid="menu-category" className={input} value={m.category} onChange={(e) => set(m.id, { category: e.target.value as MenuItem["category"] })}>
                     {CATEGORIES.map((c) => <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>)}
                   </select>
                 </label>
@@ -80,6 +80,7 @@ export function MenuEditor({ items, onChange, onSave, saving, savedAt }: {
                   <span className="text-[11px] text-muted lg:sr-only">Price (USD)</span>
                   <input
                     key={`${m.id}:${m.price}`}
+                    data-testid="menu-price"
                     className={cx(input, "font-mono", amber && "border-warn bg-[color-mix(in_oklab,var(--warn)_10%,var(--paper))]")}
                     inputMode="decimal" defaultValue={m.price === null ? "" : m.price.toFixed(2)} placeholder={amber ? "Check" : "4.75"}
                     title={amber ? "The photo was hard to read here. Check this price." : undefined}
@@ -95,30 +96,30 @@ export function MenuEditor({ items, onChange, onSave, saving, savedAt }: {
               </div>
               <label className="grid gap-1">
                 <span className="text-[11px] text-muted lg:sr-only">Description</span>
-                <input className={input} value={m.description ?? ""} maxLength={240} placeholder="What a regular would say about it"
+                <input data-testid="menu-description" className={input} value={m.description ?? ""} maxLength={240} placeholder="What a regular would say about it"
                   onChange={(e) => set(m.id, { description: e.target.value || null })} />
               </label>
               <div className="flex items-center justify-between gap-2 lg:contents">
                 <Chip tone={m.source === "square" ? "info" : "neutral"} mono>{SOURCE[m.source]}</Chip>
-                <button type="button" onClick={() => remove(m.id)} aria-label={`Remove ${m.name || "this item"}`}
+                <button data-testid="menu-remove" type="button" onClick={() => remove(m.id)} aria-label={`Remove ${m.name || "this item"}`}
                   className="grid h-9 w-9 place-items-center rounded-[var(--radius)] text-muted hover:bg-paper-2 hover:text-flag">×</button>
               </div>
-              {problem ? <p className="text-[12.5px] text-flag lg:col-span-6">{problem}</p> : null}
+              {problem ? <p data-testid="menu-problem" className="text-[12.5px] text-flag lg:col-span-6">{problem}</p> : null}
             </li>
           );
         })}
       </ul>
       {items.length > 12 ? (
-        <button type="button" onClick={() => setShowAll((s) => !s)} className="justify-self-start text-[13.5px] font-semibold underline underline-offset-4">
+        <button data-testid="menu-show-all" type="button" onClick={() => setShowAll((s) => !s)} className="justify-self-start text-[13.5px] font-semibold underline underline-offset-4">
           {showAll ? "Show fewer" : `Show all ${items.length} items`}
         </button>
       ) : null}
 
       <div className="flex flex-wrap items-center gap-3 border-t border-rule pt-3">
-        <Button size="sm" onClick={add}>Add an item</Button>
-        <Button size="sm" variant="primary" onClick={onSave} loading={saving} disabled={problems > 0}>Save menu</Button>
+        <Button data-testid="menu-add" size="sm" onClick={add}>Add an item</Button>
+        <Button data-testid="menu-save" size="sm" variant="primary" onClick={onSave} loading={saving} disabled={problems > 0}>Save menu</Button>
         {problems ? <span className="text-[13px] text-flag">{problems} {problems === 1 ? "row needs" : "rows need"} a fix before saving.</span> : null}
-        {savedAt && !problems ? <span className="text-[13px] text-ok">Saved {savedAt}.</span> : null}
+        {savedAt && !problems ? <span data-testid="menu-saved" className="text-[13px] text-ok">Saved {savedAt}.</span> : null}
       </div>
       {items.some((m) => m.source === "square") ? (
         <Notice tone="info">Edits here change the edition&apos;s copy of the menu. Square stays the source: a change made in Square syncs back in.</Notice>

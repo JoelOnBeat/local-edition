@@ -56,13 +56,13 @@ export function VoiceStep({ chain, onSaved }: { chain: Chain; onSaved: (c: Chain
     <div className="grid gap-4">
       <label className="grid max-w-md gap-1.5">
         <span className="text-[13px] font-medium text-ink-2">Chain name</span>
-        <input className={`${input} h-10`} value={name} maxLength={80} onChange={(e) => setName(e.target.value)} />
+        <input data-testid="voice-chain-name" className={`${input} h-10`} value={name} maxLength={80} onChange={(e) => setName(e.target.value)} />
       </label>
 
       <div className="grid gap-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-[13px] font-medium text-ink-2">How your chain talks, in up to three lines</span>
-          <Button size="sm" loading={drafting} onClick={draft}>Draft from our website</Button>
+          <Button data-testid="voice-draft" size="sm" loading={drafting} onClick={draft}>Draft from our website</Button>
         </div>
         {lines.map((l, i) => {
           const over = l.trim().length > MAX;
@@ -71,7 +71,7 @@ export function VoiceStep({ chain, onSaved }: { chain: Chain; onSaved: (c: Chain
               <div className="flex items-start gap-2">
                 <span className="mt-2.5 w-5 shrink-0 font-mono text-[12px] text-muted">{i + 1}</span>
                 <textarea
-                  rows={2} value={l} aria-label={`Brand voice line ${i + 1}`} aria-invalid={over}
+                  rows={2} value={l} data-testid={`voice-line-${i}`} aria-label={`Brand voice line ${i + 1}`} aria-invalid={over}
                   placeholder={["Warm and plain-spoken, like the person who knows your order.", "We talk about the block, not about ourselves.", "Short sentences, no hype."][i]}
                   onChange={(e) => setLines(lines.map((x, j) => (j === i ? e.target.value : x)))}
                   className={`${input} min-h-[64px] py-2 ${over ? "border-flag" : ""}`}
@@ -85,11 +85,11 @@ export function VoiceStep({ chain, onSaved }: { chain: Chain; onSaved: (c: Chain
       </div>
 
       {sources.length ? (
-        <div className="flex flex-wrap gap-2">{sources.map((s) => <EvidenceChip key={s.id} evidence={s} />)}</div>
+        <div data-testid="voice-sources" className="flex flex-wrap gap-2">{sources.map((s) => <EvidenceChip key={s.id} evidence={s} />)}</div>
       ) : null}
-      {msg ? <Notice tone={msg.tone}>{msg.text}</Notice> : null}
+      {msg ? <div data-testid="voice-message" data-tone={msg.tone}><Notice tone={msg.tone}>{msg.text}</Notice></div> : null}
       <div>
-        <Button variant="primary" size="sm" loading={saving} disabled={invalid} onClick={save}>Save brand voice</Button>
+        <Button data-testid="voice-save" variant="primary" size="sm" loading={saving} disabled={invalid} onClick={save}>Save brand voice</Button>
         {filled.length === 0 ? <span className="ml-3 text-[13px] text-flag">Write at least one line.</span> : null}
       </div>
     </div>

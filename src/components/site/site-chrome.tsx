@@ -34,6 +34,7 @@ export function SiteHeader() {
           ))}
           <Link
             href="/app"
+            data-testid="site-open-app"
             className="rounded-(--radius) bg-(--accent) px-3 py-2 text-[14px] font-semibold text-(--accent-ink) hover:opacity-90"
           >
             Open the sample chain

@@ -21,7 +21,7 @@ export function SyncLog({ events, stores, live }: { events: SyncEvent[]; stores:
   const failed = sorted.filter((e) => !e.ok).length;
 
   return (
-    <section aria-labelledby="sync-log" className="grid gap-3">
+    <section aria-labelledby="sync-log" className="grid gap-3" data-testid="sync-log" data-count={sorted.length}>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="grid gap-1">
           <h2 id="sync-log" className="font-display text-[22px] font-bold tracking-tight">Sync log</h2>
@@ -36,6 +36,7 @@ export function SyncLog({ events, stores, live }: { events: SyncEvent[]; stores:
             {(["all", ...providers] as const).map((p) => (
               <button
                 key={p}
+                data-testid={`sync-filter-${p}`}
                 type="button"
                 aria-pressed={filter === p}
                 onClick={() => { setFilter(p); setShown(PAGE); }}
@@ -61,7 +62,7 @@ export function SyncLog({ events, stores, live }: { events: SyncEvent[]; stores:
           {rows.slice(0, shown).map((e) => {
             const store = storeOf(e.storeId);
             return (
-              <li key={e.id} className="grid grid-cols-[28px_minmax(0,1fr)] gap-x-3 gap-y-1 px-4 py-3 sm:grid-cols-[28px_120px_minmax(0,1fr)_auto] sm:items-center">
+              <li key={e.id} data-testid="sync-event" data-provider={e.provider} data-direction={e.direction} data-kind={e.kind} data-ok={e.ok} className="grid grid-cols-[28px_minmax(0,1fr)] gap-x-3 gap-y-1 px-4 py-3 sm:grid-cols-[28px_120px_minmax(0,1fr)_auto] sm:items-center">
                 <span
                   aria-label={e.direction === "in" ? "In" : "Out"}
                   title={e.direction === "in" ? "Into Local Edition" : "Out to the tool"}
@@ -99,7 +100,7 @@ export function SyncLog({ events, stores, live }: { events: SyncEvent[]; stores:
         </ol>
       )}
       {rows.length > shown ? (
-        <button type="button" onClick={() => setShown((n) => n + PAGE)} className="justify-self-start text-[13.5px] font-semibold text-ink underline underline-offset-4">
+        <button data-testid="sync-more" type="button" onClick={() => setShown((n) => n + PAGE)} className="justify-self-start text-[13.5px] font-semibold text-ink underline underline-offset-4">
           Show {Math.min(PAGE, rows.length - shown)} older
         </button>
       ) : null}

@@ -62,29 +62,29 @@ export function FallbackImport({ onMenu, onStores }: { onMenu: (items: MenuItem[
           A clear photo of the menu board. Nemotron 3.5 Super VL reads every item and price, then checks its own reading against the
           photo; anything it could not read is marked amber.
         </p>
-        <input ref={photoRef} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" id="menu-photo"
+        <input ref={photoRef} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" id="menu-photo" data-testid="setup-photo-input"
           onChange={(e) => readPhoto(e.target.files?.[0])} />
         <label htmlFor="menu-photo"
           className="flex cursor-pointer items-center justify-center gap-2 rounded-[var(--radius)] border border-dashed border-rule bg-paper-2 px-4 py-6 text-[14px] text-ink-2 hover:border-ink-2">
           {reading ? <><Spinner /> Reading {reading}…</> : "Choose a photo (JPG, PNG or WebP, up to 5 MB)"}
         </label>
-        {photoMsg ? <Notice tone={photoMsg.tone}>{photoMsg.text}</Notice> : null}
+        {photoMsg ? <div data-testid="setup-photo-message" data-tone={photoMsg.tone}><Notice tone={photoMsg.tone}>{photoMsg.text}</Notice></div> : null}
       </div>
 
       <div className="grid content-start gap-3 rounded-[var(--radius)] border border-rule p-4">
         <p className="font-semibold">Store list</p>
         <p className="text-[13.5px] text-muted">One row per store: its neighbourhood, the corner it sits on, and its coordinates.</p>
-        <textarea value={csv} onChange={(e) => setCsv(e.target.value)} rows={4} placeholder={CSV_EXAMPLE} spellCheck={false}
+        <textarea data-testid="setup-csv-input" value={csv} onChange={(e) => setCsv(e.target.value)} rows={4} placeholder={CSV_EXAMPLE} spellCheck={false}
           className="w-full rounded-[var(--radius)] border border-rule bg-paper p-2.5 font-mono text-[12.5px] text-ink placeholder:text-muted" />
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="primary" loading={importing} onClick={() => importCsv(csv)}>Add stores</Button>
+          <Button data-testid="setup-csv-submit" size="sm" variant="primary" loading={importing} onClick={() => importCsv(csv)}>Add stores</Button>
           <label className="inline-flex h-8 cursor-pointer items-center rounded-[var(--radius)] border border-rule px-3 text-[13px] hover:border-ink-2">
             Upload a .csv
-            <input type="file" accept=".csv,text/csv" className="sr-only"
+            <input data-testid="setup-csv-file" type="file" accept=".csv,text/csv" className="sr-only"
               onChange={async (e) => { const f = e.target.files?.[0]; if (f) await importCsv(await f.text()); e.target.value = ""; }} />
           </label>
         </div>
-        {csvMsg ? <Notice tone={csvMsg.tone}>{csvMsg.text}</Notice> : null}
+        {csvMsg ? <div data-testid="setup-csv-message" data-tone={csvMsg.tone}><Notice tone={csvMsg.tone}>{csvMsg.text}</Notice></div> : null}
       </div>
     </div>
   );

@@ -35,7 +35,7 @@ export function ProofView() {
       </div>
     );
   }
-  if (q.error || !q.data) return <ErrorState message={q.error?.message ?? "The proof did not load."} onRetry={q.reload} />;
+  if (q.error || !q.data) return <div data-testid="proof-error"><ErrorState message={q.error?.message ?? "The proof did not load."} onRetry={q.reload} /></div>;
 
   const { proof, ws } = q.data;
   const editions = ws?.latestEditions ?? [];
@@ -48,10 +48,10 @@ export function ProofView() {
   return (
     <div className="grid gap-12">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Model spend per edition" value={proof.spendPerEditionUsd === null ? "n/a" : formatUsd(proof.spendPerEditionUsd)} sub="Token Factory, averaged" />
-        <Stat label="Prompt served from cache" value={proof.cachedRatio === null ? "n/a" : pct(proof.cachedRatio)} sub="Token Factory prefix cache" />
-        <Stat label="Editions reviewed by Ultra" value={`${reviewed.length}/${editions.length}`} sub={`${needs.length} sent back with a change`} />
-        <Stat label="Guardrail catch rate" value={proof.eval ? pct(proof.eval.catchRate) : "n/a"} sub={proof.eval ? `${pct(proof.eval.falsePositiveRate)} false positives` : "no eval yet"} />
+        <Stat testId="proof-spend-per-edition" label="Model spend per edition" value={proof.spendPerEditionUsd === null ? "n/a" : formatUsd(proof.spendPerEditionUsd)} sub="Token Factory, averaged" />
+        <Stat testId="proof-cached-ratio" label="Prompt served from cache" value={proof.cachedRatio === null ? "n/a" : pct(proof.cachedRatio)} sub="Token Factory prefix cache" />
+        <Stat testId="proof-reviewed" label="Editions reviewed by Ultra" value={`${reviewed.length}/${editions.length}`} sub={`${needs.length} sent back with a change`} />
+        <Stat testId="proof-catch-rate" label="Guardrail catch rate" value={proof.eval ? pct(proof.eval.catchRate) : "n/a"} sub={proof.eval ? `${pct(proof.eval.falsePositiveRate)} false positives` : "no eval yet"} />
       </div>
 
       <Section id="models" kicker="Model per step" title="Which model does what" lede="Every model runs on Nebius Token Factory. A green dot means this workspace's latest editions name that model as the one that ran.">
@@ -62,7 +62,7 @@ export function ProofView() {
             </thead>
             <tbody className="divide-y divide-rule">
               {STEPS.map((s) => (
-                <tr key={s.step} className="grid gap-1 px-4 py-3 md:table-row md:p-0">
+                <tr key={s.step} data-testid="proof-model-row" data-seen={seen.has(s.model)} className="grid gap-1 px-4 py-3 md:table-row md:p-0">
                   <td className="font-semibold md:px-4 md:py-3">{s.step}</td>
                   <td className="md:px-4 md:py-3">
                     <span className="inline-flex items-center gap-2 font-mono text-[12.5px]">
@@ -87,7 +87,7 @@ export function ProofView() {
               const store = stores.find((s) => s.id === e.storeId);
               const r = e.review!;
               return (
-                <li key={e.id} className="grid gap-1.5 rounded-[var(--radius)] border border-rule bg-paper p-3.5">
+                <li key={e.id} data-testid="proof-review" data-store-id={e.storeId} data-verdict={r.verdict} className="grid gap-1.5 rounded-[var(--radius)] border border-rule bg-paper p-3.5">
                   <div className="flex items-center justify-between gap-2">
                     <Link href={`/app/stores/${e.storeId}`} className="min-w-0 font-semibold hover:underline">
                       <StoreSwatch colorIndex={store?.colorIndex ?? 1} name={store?.name ?? e.storeId} />

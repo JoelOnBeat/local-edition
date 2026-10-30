@@ -18,7 +18,7 @@ function CopyButton({ text }: { text: string }) {
     setTimeout(() => setState("idle"), 2000);
   };
   return (
-    <button type="button" onClick={copy} className={buttonClass("ghost", "sm")}>
+    <button data-testid="cal-copy" type="button" onClick={copy} className={buttonClass("ghost", "sm")}>
       {state === "copied" ? "Copied" : state === "failed" ? "Copy failed" : "Copy link"}
     </button>
   );
@@ -27,8 +27,8 @@ function CopyButton({ text }: { text: string }) {
 function FeedLinks({ feed }: { feed: CalendarFeed }) {
   return (
     <div className="flex flex-wrap gap-2">
-      <a href={feed.googleUrl} target="_blank" rel="noreferrer" className={buttonClass("primary", "sm")}>Add to Google Calendar</a>
-      <a href={feed.outlookUrl} target="_blank" rel="noreferrer" className={buttonClass("secondary", "sm")}>Add to Outlook</a>
+      <a data-testid="cal-google" href={feed.googleUrl} target="_blank" rel="noreferrer" className={buttonClass("primary", "sm")}>Add to Google Calendar</a>
+      <a data-testid="cal-outlook" href={feed.outlookUrl} target="_blank" rel="noreferrer" className={buttonClass("secondary", "sm")}>Add to Outlook</a>
       <CopyButton text={feed.url} />
     </div>
   );
@@ -40,7 +40,7 @@ export function CalendarCard({ feeds }: { feeds: CalendarFeed[] }) {
   const total = chain?.eventCount ?? stores.reduce((a, f) => a + f.eventCount, 0);
 
   return (
-    <Card className="flex min-w-0 flex-col gap-4 p-5">
+    <Card className="flex min-w-0 flex-col gap-4 p-5" data-testid="conn-card-calendar" data-status={feeds.length ? "connected" : "not_connected"}>
       <div className="grid gap-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <ProviderBadge provider="calendar" label="Google and Outlook Calendar" className="text-[15px] font-semibold text-ink [&>span:first-child]:h-6 [&>span:first-child]:min-w-6 [&>span:first-child]:text-[11px]" />
@@ -58,7 +58,7 @@ export function CalendarCard({ feeds }: { feeds: CalendarFeed[] }) {
           {chain ? (
             <div className="grid gap-2">
               <p className="text-[14px] text-ink">
-                <span className="font-semibold">Every store</span> · {total} {total === 1 ? "event night" : "event nights"} in the feed
+                <span className="font-semibold" data-testid="cal-event-count" data-count={total}>Every store</span> · {total} {total === 1 ? "event night" : "event nights"} in the feed
               </p>
               <FeedLinks feed={chain} />
             </div>

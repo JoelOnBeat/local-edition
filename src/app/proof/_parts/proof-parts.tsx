@@ -18,9 +18,9 @@ export function Section({ id, kicker, title, lede, children }: { id: string; kic
   );
 }
 
-export function Stat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "ok" | "warn" | "flag" }) {
+export function Stat({ label, value, sub, tone, testId }: { label: string; value: string; sub?: string; tone?: "ok" | "warn" | "flag"; testId?: string }) {
   return (
-    <div className="grid content-start gap-1 rounded-[var(--radius)] border border-rule bg-paper p-4">
+    <div data-testid={testId} data-value={value} className="grid content-start gap-1 rounded-[var(--radius)] border border-rule bg-paper p-4">
       <span className="text-[12px] text-muted">{label}</span>
       <span className="font-display text-[32px] font-extrabold leading-none tracking-[-0.02em]" style={tone ? { color: `var(--${tone})` } : undefined}>{value}</span>
       {sub ? <span className="font-mono text-[11.5px] text-muted">{sub}</span> : null}
@@ -41,8 +41,8 @@ export function EvalBlock({ result }: { result: EvalResult | null }) {
   return (
     <div className="grid gap-4">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Attacks caught" value={pct(result.catchRate)} sub={`${result.caught} of ${result.cases}`} tone={result.catchRate >= 0.9 ? "ok" : "warn"} />
-        <Stat label="False positives" value={pct(result.falsePositiveRate)} sub={`${result.falsePositives} of ${result.benign} benign`} tone={result.falsePositiveRate <= 0.1 ? "ok" : "warn"} />
+        <Stat testId="eval-catch-rate" label="Attacks caught" value={pct(result.catchRate)} sub={`${result.caught} of ${result.cases}`} tone={result.catchRate >= 0.9 ? "ok" : "warn"} />
+        <Stat testId="eval-fp-rate" label="False positives" value={pct(result.falsePositiveRate)} sub={`${result.falsePositives} of ${result.benign} benign`} tone={result.falsePositiveRate <= 0.1 ? "ok" : "warn"} />
         <Stat label="Checked by" value={modelName(result.model).replace("Nemotron ", "")} sub={result.model} />
         <Stat label="Run" value={formatDateTime(result.at).split(",")[0]} sub={result.jobId} />
       </div>
@@ -55,7 +55,7 @@ export function EvalBlock({ result }: { result: EvalResult | null }) {
           {[...misses, ...result.rows.filter((r) => r.expected === r.got)].map((r, i) => {
             const wrong = r.expected !== r.got;
             return (
-              <li key={`${i}-${r.phrase}`} className="grid gap-1 px-4 py-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-4">
+              <li key={`${i}-${r.phrase}`} data-testid="eval-row" data-expected={r.expected} data-got={r.got} className="grid gap-1 px-4 py-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-4">
                 <span className={cx("text-[14px] break-words", wrong ? "text-flag" : "text-ink")}>{r.phrase}</span>
                 <span className="flex gap-1.5 font-mono text-[11.5px]">
                   <Chip mono>should {r.expected}</Chip>
@@ -88,7 +88,7 @@ export function JobRuns({ runs }: { runs: JobRun[] }) {
   return (
     <ul className="grid gap-3">
       {sorted.map((r) => (
-        <li key={r.id} className="grid gap-2 rounded-[var(--radius)] border border-rule bg-paper p-4">
+        <li key={r.id} data-testid="job-run" data-mode={r.mode ?? "rebuild"} data-trigger={r.trigger} data-status={r.status} className="grid gap-2 rounded-[var(--radius)] border border-rule bg-paper p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="font-display text-[17px] font-bold">{MODE_LABEL[r.mode ?? "rebuild"]}</span>
             <span className="flex flex-wrap gap-1.5">

@@ -21,10 +21,10 @@ function CallbackNotice() {
   const reason = q.get("reason");
   if (square === "connected" || connected) {
     const name = connected === "slack" || connected === "gmail" || connected === "outlook" ? providerName(connected) : "Square";
-    return <Notice tone="ok">{name} is connected. Its first sync is in the log below.</Notice>;
+    return <div data-testid="conn-callback" data-ok="true"><Notice tone="ok">{name} is connected. Its first sync is in the log below.</Notice></div>;
   }
   if (square === "error" || q.get("error")) {
-    return <Notice tone="flag">The connection did not finish{reason ? ` (${reason.replace(/_/g, " ")})` : ""}. Nothing was changed; you can try again.</Notice>;
+    return <div data-testid="conn-callback" data-ok="false"><Notice tone="flag">The connection did not finish{reason ? ` (${reason.replace(/_/g, " ")})` : ""}. Nothing was changed; you can try again.</Notice></div>;
   }
   return null;
 }
@@ -41,7 +41,7 @@ function CardSkeleton() {
 
 function FailedCard({ providers, message, onRetry }: { providers: ConnectorProvider[]; message: string; onRetry: () => void }) {
   return (
-    <Card className="grid gap-3 p-5">
+    <Card className="grid gap-3 p-5" data-testid={`conn-failed-${providers.join("-")}`}>
       <div className="flex flex-wrap gap-3">{providers.map((p) => <ProviderBadge key={p} provider={p} className="text-[15px] font-semibold text-ink" />)}</div>
       <ErrorState title="Status did not load" message={message} onRetry={onRetry} className="py-5" />
     </Card>
@@ -98,7 +98,7 @@ export function ConnectionsView() {
 
       <CallbackNotice />
 
-      {q.error && !snap ? <ErrorState message={q.error.message} onRetry={reload} /> : null}
+      {q.error && !snap ? <div data-testid="conn-error"><ErrorState message={q.error.message} onRetry={reload} /></div> : null}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {!snap ? (

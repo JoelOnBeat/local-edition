@@ -27,6 +27,7 @@ export function LandingHero() {
             <div className="flex flex-wrap gap-3">
               <Link
                 href="/app"
+                data-testid="landing-open-app"
                 className="rounded-(--radius) bg-(--accent) px-5 py-3 text-[16px] font-semibold text-(--accent-ink) hover:opacity-90"
               >
                 Open the sample chain

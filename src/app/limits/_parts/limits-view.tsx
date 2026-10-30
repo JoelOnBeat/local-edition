@@ -39,11 +39,11 @@ async function load() {
   return { limits, status };
 }
 
-function Meter({ used, cap, label }: { used: number; cap: number; label: string }) {
+function Meter({ used, cap, label, testId }: { used: number; cap: number; label: string; testId?: string }) {
   const share = cap > 0 ? Math.min(1, used / cap) : 0;
   const tone = share >= 0.9 ? "var(--flag)" : share >= 0.7 ? "var(--warn)" : "var(--ok)";
   return (
-    <div className="grid gap-2">
+    <div className="grid gap-2" data-testid={testId} data-used={used} data-cap={cap}>
       <div className="flex items-baseline justify-between gap-3">
         <span className="text-[14px] font-medium">{label}</span>
         <span className="font-mono text-[13px] text-ink-2">{pct(share)} used</span>
@@ -65,7 +65,7 @@ export function LimitsView() {
       </div>
     );
   }
-  if (q.error || !q.data) return <ErrorState message={q.error?.message ?? "The limits did not load."} onRetry={q.reload} />;
+  if (q.error || !q.data) return <div data-testid="limits-error"><ErrorState message={q.error?.message ?? "The limits did not load."} onRetry={q.reload} /></div>;
   const { limits, status } = q.data;
   const { usd, capUsd } = status.spend;
 
@@ -73,13 +73,13 @@ export function LimitsView() {
     <div className="grid gap-12">
       <Section id="spend" kicker="Spend" title="The model budget" lede="Every Token Factory call is metered before it runs. When the cap is reached, calls stop with a plain message and the stored editions stay readable.">
         <div className="grid gap-4 rounded-[var(--radius)] border border-rule bg-paper p-5">
-          <Meter used={usd} cap={capUsd} label="Token Factory spend, all visitors" />
+          <Meter testId="limits-spend" used={usd} cap={capUsd} label="Token Factory spend, all visitors" />
           <p className="font-mono text-[13px] text-ink-2">{formatUsd(usd)} of {formatUsd(capUsd)} cap</p>
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
           {VISITOR_BUDGETS.map((b) => <Stat key={b.label} label={b.label} value={b.value} sub={b.note} />)}
         </div>
-        <Stat label="Average cost of one edition" value={limits.costPerEditionUsd === null ? "n/a" : formatUsd(limits.costPerEditionUsd)} sub="all model calls for one store, one week" />
+        <Stat testId="limits-cost-per-edition" label="Average cost of one edition" value={limits.costPerEditionUsd === null ? "n/a" : formatUsd(limits.costPerEditionUsd)} sub="all model calls for one store, one week" />
       </Section>
 
       <Section id="budgets" kicker="Taste and search" title="Qloo and Tavily budgets" lede="Both keys are shared hackathon keys, so both are spent carefully and both have hard stops.">
@@ -87,7 +87,7 @@ export function LimitsView() {
           <div className="grid content-start gap-3 rounded-[var(--radius)] border border-rule bg-paper p-5">
             <div className="flex items-center justify-between gap-2">
               <span className="font-display text-[19px] font-bold">Qloo</span>
-              <Chip tone={status.qloo === "live" ? "ok" : "warn"} mono>{MODE_TEXT[status.qloo]}</Chip>
+              <Chip data-testid="limits-qloo-mode" data-mode={status.qloo} tone={status.qloo === "live" ? "ok" : "warn"} mono>{MODE_TEXT[status.qloo]}</Chip>
             </div>
             <p className="text-[14px] leading-[1.55] text-ink-2">
               Every Qloo answer is stored and reused, so judges read stored editions and regenerating an item never calls Qloo again.
@@ -97,9 +97,9 @@ export function LimitsView() {
           <div className="grid content-start gap-3 rounded-[var(--radius)] border border-rule bg-paper p-5">
             <div className="flex items-center justify-between gap-2">
               <span className="font-display text-[19px] font-bold">Tavily</span>
-              <Chip tone={status.tavily === "live" ? "ok" : "warn"} mono>{MODE_TEXT[status.tavily]}</Chip>
+              <Chip data-testid="limits-tavily-mode" data-mode={status.tavily} tone={status.tavily === "live" ? "ok" : "warn"} mono>{MODE_TEXT[status.tavily]}</Chip>
             </div>
-            <Meter used={limits.tavilyCreditsUsed} cap={TAVILY_TOTAL} label={`${limits.tavilyCreditsUsed} of ${TAVILY_TOTAL} credits`} />
+            <Meter testId="limits-tavily" used={limits.tavilyCreditsUsed} cap={TAVILY_TOTAL} label={`${limits.tavilyCreditsUsed} of ${TAVILY_TOTAL} credits`} />
             <p className="text-[14px] leading-[1.55] text-ink-2">
               At most {TAVILY_DAILY} credits a day, enough for one full eight-store build. Past that, event nights use this week&apos;s saved listings.
             </p>
@@ -128,9 +128,9 @@ export function LimitsView() {
 
       <Section id="quality" kicker="Where it falls short" title="What the checks caught this week" lede="An item with no evidence behind it is dropped before head office sees it. Here is how often that, and everything else, happened.">
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-          <Stat label="Items dropped for missing evidence" value={String(limits.droppedForEvidence)} />
-          <Stat label="Lines blocked by guardrails" value={String(limits.guardrailBlocks)} />
-          <Stat label="Guardrail false positives" value={limits.falsePositiveRate === null ? "n/a" : pct(limits.falsePositiveRate)} sub="from the last eval" />
+          <Stat testId="limits-dropped" label="Items dropped for missing evidence" value={String(limits.droppedForEvidence)} />
+          <Stat testId="limits-blocked" label="Lines blocked by guardrails" value={String(limits.guardrailBlocks)} />
+          <Stat testId="limits-fp-rate" label="Guardrail false positives" value={limits.falsePositiveRate === null ? "n/a" : pct(limits.falsePositiveRate)} sub="from the last eval" />
         </div>
         <div className="grid gap-2">
           <h3 className="font-display text-[18px] font-bold">Where Qloo&apos;s data runs thin</h3>
@@ -139,7 +139,7 @@ export function LimitsView() {
           ) : (
             <ul className="grid gap-2">
               {limits.qlooCoverageGaps.map((g) => (
-                <li key={g} className="flex gap-3 rounded-[var(--radius)] border border-rule bg-paper px-4 py-3 text-[14.5px] leading-[1.5] text-ink-2">
+                <li key={g} data-testid="limits-gap" className="flex gap-3 rounded-[var(--radius)] border border-rule bg-paper px-4 py-3 text-[14.5px] leading-[1.5] text-ink-2">
                   <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-warn" aria-hidden />
                   <span className="min-w-0 break-words">{g}</span>
                 </li>

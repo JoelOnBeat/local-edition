@@ -13,7 +13,7 @@ import { VoiceStep } from "./voice-step";
 
 function Step({ n, id, title, lede, done, children }: { n: number; id: string; title: string; lede: string; done: boolean; children: ReactNode }) {
   return (
-    <section id={id} aria-labelledby={`${id}-h`} className="scroll-mt-28 grid gap-5 border-t-2 border-ink pt-5 md:grid-cols-[200px_minmax(0,1fr)] md:gap-8">
+    <section id={id} data-testid={`setup-step-${id}`} data-done={done} aria-labelledby={`${id}-h`} className="scroll-mt-28 grid gap-5 border-t-2 border-ink pt-5 md:grid-cols-[200px_minmax(0,1fr)] md:gap-8">
       <div className="grid content-start gap-2">
         <span className={cx("font-display text-[44px] font-extrabold leading-none", done ? "text-ok" : "text-accent")}>{done ? "✓" : n}</span>
         <h2 id={`${id}-h`} className="font-display text-[22px] font-bold leading-tight">{title}</h2>
@@ -76,7 +76,7 @@ export function SetupView() {
       </Step>
 
       <div className="flex flex-wrap items-center gap-3 border-t border-rule pt-5">
-        <Link href="/app" className={buttonClass(ready ? "primary" : "secondary", "md", "h-auto min-h-10 whitespace-normal py-2 text-left")}>
+        <Link data-testid="setup-done" data-ready={ready} href="/app" className={buttonClass(ready ? "primary" : "secondary", "md", "h-auto min-h-10 whitespace-normal py-2 text-left")}>
           {ready ? "Go to the portfolio and build this week's editions" : "Back to the portfolio"}
         </Link>
         {!ready ? <span className="text-[13.5px] text-muted">Finish the steps without a tick first.</span> : null}

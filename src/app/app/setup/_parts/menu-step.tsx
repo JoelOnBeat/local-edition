@@ -78,7 +78,7 @@ export function MenuStep({ menu, stores, onSaved, onStores, reloadWorkspace }: {
 
   return (
     <div className="grid gap-5">
-      <div className="grid gap-3 rounded-[var(--radius)] border border-ink/15 bg-paper-2 p-4 sm:p-5">
+      <div className="grid gap-3 rounded-[var(--radius)] border border-ink/15 bg-paper-2 p-4 sm:p-5" data-testid="setup-square" data-status={sq.data?.connection.status ?? (sq.error ? "error" : "loading")}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <ProviderBadge provider="square" label="Square" className="text-[16px] font-semibold text-ink" />
           {sq.loading && !sq.data ? <Skeleton className="h-6 w-24" /> : connected ? (
@@ -97,7 +97,7 @@ export function MenuStep({ menu, stores, onSaved, onStores, reloadWorkspace }: {
               {sq.data.locations.length} locations come from Square, and stay in sync when the menu changes there.
             </p>
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="primary" loading={busy === "sync"} onClick={doSync}>Sync now</Button>
+              <Button data-testid="setup-square-sync" size="sm" variant="primary" loading={busy === "sync"} onClick={doSync}>Sync now</Button>
               <Link href="/app/connections" className="inline-flex h-8 items-center px-2 text-[13px] font-medium text-ink-2 underline underline-offset-4">See the sync log</Link>
             </div>
           </>
@@ -109,17 +109,17 @@ export function MenuStep({ menu, stores, onSaved, onStores, reloadWorkspace }: {
             </p>
             <div className="flex flex-wrap gap-2">
               {sq.data?.sandboxAvailable !== false ? (
-                <Button variant="primary" loading={busy === "sandbox"} onClick={() => doConnect("sandbox")}>Connect the sample chain&apos;s Square sandbox</Button>
+                <Button data-testid="setup-square-connect" variant="primary" loading={busy === "sandbox"} onClick={() => doConnect("sandbox")}>Connect the sample chain&apos;s Square sandbox</Button>
               ) : null}
-              {sq.data?.oauthAvailable ? <Button loading={busy === "oauth"} onClick={() => doConnect("oauth")}>Connect your own Square</Button> : null}
+              {sq.data?.oauthAvailable ? <Button data-testid="setup-square-connect-oauth" loading={busy === "oauth"} onClick={() => doConnect("oauth")}>Connect your own Square</Button> : null}
             </div>
           </>
         )}
-        {note ? <Notice tone="ok">{note}</Notice> : null}
+        {note ? <div data-testid="setup-square-note"><Notice tone="ok">{note}</Notice></div> : null}
       </div>
 
       <details className="group rounded-[var(--radius)] border border-rule" open={!connected && !sq.loading && menu.length === 0 ? true : undefined}>
-        <summary className="cursor-pointer list-none px-4 py-3 text-[14px] font-medium text-ink-2">
+        <summary data-testid="setup-fallback-toggle" className="cursor-pointer list-none px-4 py-3 text-[14px] font-medium text-ink-2">
           <span className="mr-1.5 inline-block transition-transform group-open:rotate-90" aria-hidden>›</span>
           No Square? Use a photo of the menu board and a store list instead
         </summary>
@@ -128,7 +128,7 @@ export function MenuStep({ menu, stores, onSaved, onStores, reloadWorkspace }: {
         </div>
       </details>
 
-      {error ? <Notice tone="flag">{error}</Notice> : null}
+      {error ? <div data-testid="setup-error"><Notice tone="flag">{error}</Notice></div> : null}
 
       <div className="grid gap-2">
         <h3 className="font-display text-[18px] font-bold">Menu</h3>
@@ -140,7 +140,7 @@ export function MenuStep({ menu, stores, onSaved, onStores, reloadWorkspace }: {
         {stores.length === 0 ? (
           <p className="text-[14px] text-muted">No stores yet. Connect Square or add a store list above.</p>
         ) : (
-          <ul className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3">
+          <ul data-testid="setup-stores" data-count={stores.length} className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3">
             {stores.map((s) => (
               <li key={s.id} className="flex min-w-0 items-baseline gap-2 text-[14px]">
                 <StoreSwatch colorIndex={s.colorIndex} name={s.name} className="font-medium" />
