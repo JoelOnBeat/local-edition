@@ -124,7 +124,7 @@ export function ConnectionsView() {
         lede={
           <>
             The tools your stores already use. The menu comes in from Square; approved specials, staff cards and event nights go out to
-            Square, Slack, email and the calendar.{bundle?.chain.isSample ? " The sample chain is connected to test accounts, labelled Sandbox." : ""}
+            Square, Slack, email and the calendar.{bundle?.chain.isSample && snap?.merged.ok && snap.merged.data.connections.some((c) => c.mode === "sandbox") ? " The sample chain uses test accounts, labelled Sandbox." : ""}
           </>
         }
       />
