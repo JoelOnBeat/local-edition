@@ -66,7 +66,7 @@ export function PortfolioFilters({ stores, editionFor, filter, onFilter, query, 
           value={query}
           onChange={(e) => onQuery(e.target.value)}
           placeholder="Search stores, streets or specials"
-          className="h-10 w-full rounded-lg bg-white pl-9 pr-3 text-[14px] text-ink outline-none shadow-[inset_0_0_0_1px_#E5E5E5] transition-shadow duration-150 placeholder:text-muted hover:shadow-[inset_0_0_0_1px_var(--rule-strong)] focus:shadow-[inset_0_0_0_2px_var(--accent)] [&::-webkit-search-cancel-button]:hidden"
+          className="h-10 w-full rounded-lg bg-white pl-9 pr-3 text-[14px] text-ink outline-none shadow-[inset_0_0_0_1px_#E5E5E5] transition-shadow duration-150 placeholder:text-muted hover:shadow-[inset_0_0_0_1px_var(--rule-strong)] focus:shadow-[inset_0_0_0_1px_var(--rule-strong)] [&::-webkit-search-cancel-button]:hidden"
         />
         {query ? (
           <button type="button" onClick={() => onQuery("")} aria-label="Clear search" className="absolute right-2 flex size-6 items-center justify-center rounded-md text-faint hover:bg-hover-tint hover:text-ink">

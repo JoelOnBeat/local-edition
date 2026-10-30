@@ -11,7 +11,7 @@ import { newId } from "@/lib/ids";
 
 const CATEGORIES = MenuCategory.options;
 const SOURCE: Record<MenuItem["source"], string> = { square: "Square", vl: "Photo", manual: "Typed" };
-const input = "h-9 w-full min-w-0 rounded-lg bg-white px-3 text-[14px] text-ink outline-none placeholder:text-muted shadow-[inset_0_0_0_1px_#E5E5E5] transition-shadow hover:shadow-[inset_0_0_0_1px_var(--rule-strong)] focus:shadow-[inset_0_0_0_2px_var(--accent)] aria-invalid:shadow-[inset_0_0_0_2px_var(--danger-ring)]";
+const input = "h-9 w-full min-w-0 rounded-lg bg-white px-3 text-[14px] text-ink outline-none placeholder:text-muted shadow-[inset_0_0_0_1px_#E5E5E5] transition-shadow hover:shadow-[inset_0_0_0_1px_var(--rule-strong)] focus:shadow-[inset_0_0_0_1px_var(--rule-strong)] aria-invalid:shadow-[inset_0_0_0_2px_var(--danger-ring)]";
 
 export function rowProblem(m: MenuItem): string | null {
   const r = MenuItem.safeParse(m);

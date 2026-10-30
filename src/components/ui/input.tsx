@@ -4,11 +4,11 @@ import { cx } from "./cx";
 const field =
   "w-full rounded-lg bg-white px-3.5 text-[14px] leading-5 text-ink caret-ink outline-none placeholder:text-muted " +
   "shadow-[inset_0_0_0_1px_#E5E5E5] transition-shadow duration-150 ease-quint hover:shadow-[inset_0_0_0_1px_var(--rule-strong)] " +
-  "focus:shadow-[inset_0_0_0_2px_var(--accent)] focus-visible:outline-none " +
+  "focus:shadow-[inset_0_0_0_1px_var(--rule-strong)] focus-visible:outline-none " +
   "disabled:cursor-not-allowed disabled:bg-paper-2 disabled:text-muted " +
   "aria-invalid:shadow-[inset_0_0_0_2px_var(--danger-ring)]";
 
-/** Text input: h-10, 8px radius, inset ring, flame focus ring, red ring when aria-invalid. */
+/** Text input: h-10, 8px radius, inset ring, focus looks like hover (no focus border), red ring when aria-invalid. */
 export function Input({ className, ...rest }: ComponentProps<"input">) {
   return <input className={cx(field, "h-10", className)} {...rest} />;
 }

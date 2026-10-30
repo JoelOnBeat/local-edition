@@ -186,7 +186,7 @@ export function Combobox({
         }}
         className={cx(
           "h-10 w-full rounded-lg bg-white pl-9 pr-3.5 text-[14px] text-ink outline-none placeholder:text-muted shadow-[inset_0_0_0_1px_#E5E5E5]",
-          "transition-shadow duration-150 hover:shadow-[inset_0_0_0_1px_var(--rule-strong)] focus:shadow-[inset_0_0_0_2px_var(--accent)] disabled:cursor-not-allowed disabled:bg-paper-2",
+          "transition-shadow duration-150 hover:shadow-[inset_0_0_0_1px_var(--rule-strong)] focus:shadow-[inset_0_0_0_1px_var(--rule-strong)] disabled:cursor-not-allowed disabled:bg-paper-2",
         )}
       />
       <PopoverList id={listId} open={open} anchor={input} options={shown} value={value} active={active} onPick={pick} onHover={setActive} empty={empty} />

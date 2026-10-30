@@ -40,7 +40,7 @@ export function LandingHero() {
           </p>
 
           <form action="/signin" method="get" className="mt-10 grid w-full max-w-[400px] gap-3">
-            <div className="group/combo rounded-[14px] shadow-raised transition-shadow duration-150 ease-quint focus-within:shadow-[0_0_0_2px_var(--accent)] hover:shadow-[0_0_0_1px_var(--stone-300),0_1px_2px_#00000014]">
+            <div className="group/combo rounded-[14px] shadow-raised transition-shadow duration-150 ease-quint focus-within:shadow-[0_0_0_1px_var(--stone-300),0_1px_2px_#00000014] hover:shadow-[0_0_0_1px_var(--stone-300),0_1px_2px_#00000014]">
               <div className="flex h-12 items-center rounded-[14px] bg-white pr-1">
                 <span className="flex w-11 shrink-0 items-center justify-center text-faint [&_svg]:size-4" aria-hidden>{Icon.mail}</span>
                 <label htmlFor="hero-email" className="sr-only">Work email</label>

@@ -246,10 +246,21 @@ p { text-wrap: pretty; }
   background: rgb(241 90 15 / 0.18);
 }
 
-:focus-visible {
+/* Keyboard focus ring for buttons and links. Text fields never draw a focus border (Gabriel, 30 Oct: a selected field
+   looks exactly like a hovered one). */
+:focus-visible:not(input, textarea, select, [contenteditable]) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: 4px;
+}
+input:focus, textarea:focus, select:focus, [contenteditable]:focus { outline: none; }
+
+/* Browser autofill keeps our white field instead of painting it blue. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--ink);
+  transition: background-color 600000s 0s, color 600000s 0s;
 }
 
 /* Every figure lines up. */
