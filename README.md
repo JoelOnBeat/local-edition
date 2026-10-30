@@ -22,14 +22,16 @@ For each store, once a week, the agent builds an edition from that block's taste
 
 Every item carries evidence (source, endpoint, numbers) and an item without evidence is dropped, never shown. A Nemotron 3 Ultra reviewer checks the whole chain for near-identical stores. Head office approves on a map of all stores; approved editions become a one-page **staff card** (phone first, public link) for each store.
 
-## Connectors, and what is sandbox versus live
+## Connectors, and what is live
 
-| Tool | What it does here | Status |
-|---|---|---|
-| Square | Two ways: imports the menu (locations become stores); approving a special publishes it back; signed webhooks update the app; sales per special are read back. OAuth or a token. | Runs against the **Square sandbox**. |
-| Slack | Head-office digest with **Approve** and **Regenerate** buttons (signed interactions), staff cards to a store channel. | A **test workspace** app. |
-| Gmail / Outlook (via Composio) | The staff card is emailed to the store; replies from managers are classified (sold out, sold well, change request, problem, other) and become suggestions for next week's build. | Needs a consented mailbox; connected to **test accounts** only. |
-| Calendar feed | A private `.ics` link per store with its event night. | Live (it is a file). |
+Each connector is built and tested against the providers' documented API shapes (196 unit tests across the Square, Slack, Gmail/Outlook and calendar code, with provider calls faked). The Composio auth configs for Gmail and Outlook exist. **No live sandbox or test account is connected yet**: there are no Square or Slack credentials on the deployed app and no Gmail consent, so on https://localedition.pages.dev none of the three has run against its real provider.
+
+| Tool | What it does here | Tested against | Live on localedition.pages.dev today |
+|---|---|---|---|
+| Square | Two ways: imports the menu (locations become stores); approving a special publishes it back; signed webhooks update the app; sales per special are read back. OAuth or a token. | Square's documented API shapes; sandbox connection pending. | No |
+| Slack | Head-office digest with **Approve** and **Regenerate** buttons (signed interactions), staff cards to a store channel. | Slack's documented payloads and signing; test-workspace connection pending. | No |
+| Gmail / Outlook (via Composio) | The staff card is emailed to the store; replies from managers are classified (sold out, sold well, change request, problem, other) and become suggestions for next week's build. Needs a consented mailbox. | Composio's documented API shapes; auth configs exist, no mailbox consented yet. | No |
+| Calendar feed | A private `.ics` link per store with its event night. Needs no external account. | Unit tests on the feed. | Yes |
 
 ## Built on
 
@@ -80,7 +82,7 @@ flowchart LR
 ## Honest limitations
 
 - Kettle & Kiln is **sample data**, labelled so in the app. It is not a customer.
-- Connectors run against **sandboxes and test accounts**.
+- Square, Slack and Gmail/Outlook are **not connected** on the live app yet (see the connectors table); only the calendar feed runs without an account.
 - **Qloo**: the code, ledger and tests are in place and used under the hackathon's terms, but as committed `QLOO_MODE` is `replay`, which serves synthetic Qloo-shaped fixtures (`fixtures/qloo/`, invented numbers, badged "Sample data" and counted as a coverage gap on `/limits`) until a Qloo key is set on the Worker. Real Qloo responses are never committed; recordings go to the gitignored `.recordings/`.
 - NeMo Guardrails runs only when someone starts the job from the CLI; the weekly cron does not call Nebius.
 - The first live Tavily prefetch of a week can take longer than the agent's 25 s tool timeout; the work finishes and is cached.

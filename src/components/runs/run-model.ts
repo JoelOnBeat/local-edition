@@ -1,4 +1,4 @@
-import type { AgentEvent, EditionItem, GuardrailResult } from "@/contract";
+import type { AgentEvent, EditionItem, GuardrailResult, MenuItem } from "@/contract";
 import type { Provider } from "../ui";
 
 /** Pure derivation of the run view from the AgentEvent stream. */
@@ -13,7 +13,7 @@ export type TraceEntry =
   | { kind: "review"; key: string; review: Ev<"review"> }
   | { kind: "error"; key: string; code: string; message: string };
 
-export type LaneStatus = "queued" | "working" | "done" | "skipped" | "error";
+export type LaneStatus = "queued" | "working" | "retrying" | "done" | "skipped" | "error";
 export interface Lane {
   storeId: string;
   status: LaneStatus;
@@ -43,6 +43,18 @@ export interface RunModel {
   runErrors: { code: string; message: string }[];
 }
 
+/**
+ * What an error event does to its lane. `store_retrying` says the attempt failed and the Workflow will try again, so the
+ * lane shows Retrying, never Failed. Item-level problems leave the store working (the edition still lands). Anything else
+ * (`store_failed` after the last attempt, `spend_cap`, `no_items`) is final.
+ */
+export function laneStatusAfterError(code: string, current: LaneStatus): LaneStatus | null {
+  if (code === "has_approvals") return "skipped";
+  if (code === "store_retrying") return "retrying";
+  if (code === "item_dropped" || code === "item_failed") return null;
+  return current === "done" ? null : "error";
+}
+
 export function deriveRun(events: AgentEvent[]): RunModel {
   const lanes = new Map<string, Lane>();
   const lane = (id: string) => {
@@ -58,7 +70,7 @@ export function deriveRun(events: AgentEvent[]): RunModel {
     const key = `${i}`;
     switch (e.type) {
       case "run_started": m.runId = e.runId; e.storeIds.forEach(lane); break;
-      case "store_started": lane(e.storeId).status = "working"; break;
+      case "store_started": lane(e.storeId).status = "working"; break;  // a retry attempt starts: Retrying turns back into Working
       case "tool_call": { const l = lane(e.storeId); l.entries.push({ kind: "tool", key, tool: e.tool, args: e.args }); l.toolCalls++; m.toolCalls++; break; }
       case "tool_result": {
         const l = lane(e.storeId);
@@ -90,7 +102,8 @@ export function deriveRun(events: AgentEvent[]): RunModel {
         if (e.storeId) {
           const l = lane(e.storeId);
           l.entries.push({ kind: "error", key, code: e.code, message: e.message });
-          l.status = e.code === "has_approvals" ? "skipped" : "error";
+          const next = laneStatusAfterError(e.code, l.status);
+          if (next) l.status = next;
           if (e.code === "has_approvals") l.skipReason = e.message;
         } else m.runErrors.push({ code: e.code, message: e.message });
         break;
@@ -104,10 +117,11 @@ export function deriveRun(events: AgentEvent[]): RunModel {
 }
 
 /** Which provider a tool call goes to, and the name shown in the trace. */
-export function toolInfo(tool: string): { provider: Provider; label: string } {
+export function toolInfo(tool: string, menuSource?: MenuItem["source"]): { provider: Provider | null; label: string } {
   const t = tool.toLowerCase();
   if (/event|tavily|search_local/.test(t)) return { provider: "tavily", label: `tavily.${tool}` };
-  if (/menu/.test(t)) return { provider: "square", label: `menu.${tool}` };
+  // The Square badge only when the menu was imported from Square; a photo or manual menu has no provider badge.
+  if (/menu/.test(t)) return { provider: menuSource === "square" ? "square" : null, label: `menu.${tool}` };
   if (/self_check|guard/.test(t)) return { provider: "guardrails", label: tool };
   if (/write_|compose|submit|review/.test(t)) return { provider: "nemotron", label: tool };
   return { provider: "qloo", label: `qloo.${tool}` };
@@ -119,4 +133,10 @@ export function formatArgs(args: Record<string, unknown>): string {
     .filter(([k]) => k !== "storeId")
     .map(([k, v]) => `${k} ${typeof v === "object" ? JSON.stringify(v) : String(v)}`)
     .join(" · ");
+}
+
+/** The menu's source for the trace badge: Square only when every item came from the Square import. */
+export function menuSourceOf(menu: readonly MenuItem[] | undefined): MenuItem["source"] | undefined {
+  if (!menu?.length) return undefined;
+  return menu.some((m) => m.source === "square") ? "square" : menu[0].source;
 }

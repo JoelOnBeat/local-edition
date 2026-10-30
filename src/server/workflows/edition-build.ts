@@ -213,6 +213,19 @@ async function buildOne(ports: BuildPorts, params: BuildWorkflowParams, storeId:
     throw new Error(`The workspace lock was lost before store ${storeId} could be built.`);
   }
   if (attempt > 1) await runLog.supersedeBefore(params.runId, by);
+  try {
+    return await buildAttempt(ports, params, storeId, by);
+  } catch (e) {
+    // Tell the live trace a retry is pending, so the lane reads Retrying rather than Failed. The retry supersedes this row.
+    if (attempt <= (STORE_STEP.retries?.limit ?? 0)) {
+      await runLog.append(params.runId, params.workspaceId, { type: "error", storeId, code: "store_retrying", message: "This attempt failed; trying again shortly." }, by).catch(() => undefined);
+    }
+    throw e;
+  }
+}
+
+async function buildAttempt(ports: BuildPorts, params: BuildWorkflowParams, storeId: string, by: EventAttempt): Promise<StoreResult> {
+  const { runLog } = ports;
   let editionId: string | null = null;
   let spendCap = false;
   let fatal: string | null = null;

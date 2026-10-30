@@ -5,7 +5,7 @@ import { ButtonLink, EmptyState, Notice, cx } from "../ui";
 import { formatInt, formatUsd, modelName, pct } from "../lib/format";
 import { useWorkspace } from "../app/workspace-context";
 import { BuildButton } from "../portfolio/build-button";
-import { deriveRun } from "./run-model";
+import { deriveRun, menuSourceOf } from "./run-model";
 import { useRun } from "./run-store";
 import { StoreLane } from "./store-lane";
 
@@ -39,9 +39,10 @@ export function RunView({ runId }: { runId: string }) {
   const ratio = model.total ? model.done / model.total : 0;
   const live = run.status === "streaming" || run.status === "reconnecting";
   const cacheShare = model.promptTokens ? model.cachedTokens / model.promptTokens : 0;
-  const working = model.lanes.some((l) => l.status === "working" && l.entries.length > 0);
+  const menuSource = menuSourceOf(w.bundle?.menu);
+  const working = model.lanes.some((l) => (l.status === "working" || l.status === "retrying") && l.entries.length > 0);
   const lastDone = model.lanes.filter((l) => l.status === "done").at(-1)?.storeId;
-  const isOpen = (id: string, status: string) => toggled[id] ?? (status === "working" || (!working && id === lastDone));
+  const isOpen = (id: string, status: string) => toggled[id] ?? (status === "working" || status === "retrying" || (!working && id === lastDone));
 
   return (
     <div className="space-y-6">
@@ -74,7 +75,7 @@ export function RunView({ runId }: { runId: string }) {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
         <div className="space-y-2.5">
           {model.lanes.map((l) => (
-            <StoreLane key={l.storeId} lane={l} store={w.storeById(l.storeId)} open={isOpen(l.storeId, l.status)}
+            <StoreLane key={l.storeId} lane={l} store={w.storeById(l.storeId)} open={isOpen(l.storeId, l.status)} menuSource={menuSource}
               onToggle={() => setToggled((t) => ({ ...t, [l.storeId]: !isOpen(l.storeId, l.status) }))} />
           ))}
         </div>
