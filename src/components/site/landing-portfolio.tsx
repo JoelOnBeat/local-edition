@@ -11,11 +11,11 @@ const barTone = (r: { approved: number; total: number }): "none" | "ok" | "warn"
 function StoreTable() {
   return (
     <CardBand
-      elevated flush className="min-w-0 flex-1"
+      elevated flush className="min-w-0 flex-1" bodyClassName="flex flex-1 flex-col"
       title={<span className="flex items-center gap-2">This week&apos;s editions <SampleBadge>Sample</SampleBadge></span>}
       actions={<span className="hidden text-[14px] text-muted sm:inline">Week of {WEEK_LABEL}</span>}
     >
-      <div role="table" aria-label="This week's editions, sample chain" className="text-[14px] leading-5">
+      <div role="table" aria-label="This week's editions, sample chain" className="flex flex-1 flex-col text-[14px] leading-5">
         <div role="row" className="hidden grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)_84px_76px] gap-6 border-b border-rule-row bg-paper-2 px-4 py-3 font-medium text-ink-strong md:grid">
           <span role="columnheader">Store</span>
           <span role="columnheader">Special</span>
@@ -25,7 +25,7 @@ function StoreTable() {
         {STORE_ROWS.map((r) => (
           <div
             key={r.id} role="row"
-            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 border-b border-rule-row px-4 py-3.5 transition-colors duration-150 last:border-0 hover:bg-row-hover md:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)_84px_76px] md:gap-6 md:py-4"
+            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 border-b border-rule-row px-4 py-3.5 transition-colors duration-150 last:border-0 hover:bg-row-hover lg:flex-1 md:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)_84px_76px] md:gap-6 md:py-4"
           >
             <span role="cell" className="flex min-w-0 items-center gap-2.5 font-medium text-ink-strong">
               <StoreTile colorIndex={r.colorIndex} name={r.name} />
@@ -67,7 +67,7 @@ function Rail() {
         </ol>
         <span className="sr-only">{top.name} leads with {top.topTag}.</span>
       </CardBand>
-      <CardBand elevated title="One live store build" actions={<span className="text-[13px] text-muted">{MEASURED.date}</span>}>
+      <CardBand elevated className="lg:flex-1" bodyClassName="lg:flex-1" title="One live store build" actions={<span className="text-[13px] text-muted">{MEASURED.date}</span>}>
         <div className="grid grid-cols-2 divide-x divide-rule-subtle">
           <div className="pr-4">
             <p className="text-[14px] text-ink-2">Time</p>
@@ -101,7 +101,7 @@ export function LandingPortfolio() {
             </>
           }
         />
-        <div className="mt-14 flex flex-col gap-3 lg:flex-row lg:items-start">
+        <div className="mt-14 flex flex-col gap-3 lg:flex-row lg:items-stretch">
           <StoreTable />
           <Rail />
         </div>
