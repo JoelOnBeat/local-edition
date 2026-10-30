@@ -8,11 +8,11 @@ import { buildEvidence } from "@/server/qloo/evidence";
 import { artistQuery } from "@/server/qloo/artists";
 import { placeQuery } from "@/server/qloo/places";
 import { pointWkt } from "@/server/qloo/geo";
-import { NOW, noSleep, ok, store } from "./helpers";
+import { NOW, noSleep, ok, store, testGate } from "./helpers";
 
 const KEY = "qk_test_SECRET_0123456789";
 const live = (fetchImpl: typeof fetch, recorder = new MemoryRecorder()) =>
-  new QlooClient({ mode: "live", status: "live", apiKey: KEY, fetchImpl, sleep: noSleep, random: () => 0.5, recorder, retries: 1 });
+  new QlooClient({ mode: "live", status: "live", apiKey: KEY, fetchImpl, sleep: noSleep, random: () => 0.5, recorder, retries: 1, gate: async () => testGate() });
 
 describe("T2 request building", () => {
   it("sends GET to the hackathon host with X-Api-Key in a header and the key nowhere in the URL", async () => {
@@ -111,7 +111,7 @@ describe("T4 error mapping", () => {
 
   it("times out as `timeout`", async () => {
     const hang = vi.fn((_u: string, init: RequestInit) => new Promise<Response>((_r, rej) => init.signal?.addEventListener("abort", () => rej(new Error("aborted")))));
-    const client = new QlooClient({ mode: "live", status: "live", apiKey: KEY, fetchImpl: hang as never, timeoutMs: 10, retries: 0, sleep: noSleep, recorder: new MemoryRecorder() });
+    const client = new QlooClient({ mode: "live", status: "live", apiKey: KEY, fetchImpl: hang as never, timeoutMs: 10, retries: 0, sleep: noSleep, recorder: new MemoryRecorder(), gate: async () => testGate() });
     await expect(client.insights({ "filter.type": "urn:tag" })).rejects.toMatchObject({ code: "timeout" });
   });
 });

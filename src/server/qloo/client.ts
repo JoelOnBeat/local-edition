@@ -4,6 +4,8 @@ import { serverEnv, type ServerEnv } from "@/lib/env";
 import { UpstreamError } from "../http/errors";
 import { fetchJson, type ProviderRunMode } from "../http/fetch-json";
 import type { Recorder } from "../http/recorder";
+import { getRepo } from "../store";
+import { createQlooLedger, QLOO_RESPONSE_TTL_SECONDS, type QlooLedger } from "./ledger";
 import {
   AudiencesEnvelope,
   CompareEnvelope,
@@ -22,9 +24,16 @@ export type Params = Record<string, ParamValue>;
 /** `/v2/insights` always needs a `filter.type`. */
 export type InsightsQuery = Params & { "filter.type": string };
 
+/** What a live call needs: the hard call ledger and a long-lived response cache (KV on Workers). */
+export interface QlooGate {
+  ledger: QlooLedger;
+  cache: { get<T>(key: string): Promise<T | null>; put<T>(key: string, value: T, ttlSeconds: number): Promise<void> };
+}
+
 export interface QlooCall<T> {
   data: T;
-  mode: "live" | "replay" | "fixture";
+  /** `cache` = a saved live response served without a call or a credit. */
+  mode: "live" | "replay" | "fixture" | "cache";
   /** Path only, never a host or key. */
   path: string;
   /** Query params exactly as sent (the key travels in a header, never here). */
@@ -40,6 +49,14 @@ export interface QlooClientConfig {
   recorder?: Recorder;
   timeoutMs?: number;
   retries?: number;
+  /**
+   * Live runs only. Resolved per call (a Worker isolate outlives requests, so the repo is found at use time). Every live call
+   * checks the response cache first, then reserves one call from the ledger BEFORE it goes out. Without a gate a live client
+   * refuses to call (`spend_cap`): there is no way to reach Qloo around the ledger.
+   */
+  gate?: () => Promise<QlooGate | null>;
+  /** Live runs only: answer from saved responses, never call (regenerate and page loads use this). */
+  cacheOnly?: boolean;
   // Test seams.
   fetchImpl?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
@@ -65,6 +82,19 @@ export function normalizeParams(params: Params): Record<string, string> {
   return out;
 }
 
+/** `qloo:resp:v1:<sha256 of path and sorted params>`: the key (header) is never part of it. */
+async function responseKey(path: string, params: Record<string, string>): Promise<string> {
+  const text = `${path}?${Object.entries(params).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([k, v]) => `${k}=${v}`).join("&")}`;
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return `qloo:resp:v1:${[...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 40)}`;
+}
+
+/** The production gate: the global ledger and the app's repo cache (KV on Workers). */
+export const defaultGate = async (): Promise<QlooGate> => {
+  const repo = await getRepo();
+  return { ledger: createQlooLedger(), cache: { get: (k) => repo.cacheGet(k), put: (k, v, ttl) => repo.cachePut(k, v, ttl) } };
+};
+
 const enc = (s: string) => encodeURIComponent(s).replace(/%3A/gi, ":").replace(/%2C/gi, ",");
 
 export function buildUrl(baseUrl: string, path: string, params: Record<string, string>): string {
@@ -87,6 +117,18 @@ export class QlooClient {
   async call<T>(path: string, query: Params, schema: z.ZodType<T>): Promise<QlooCall<T>> {
     const params = normalizeParams(query);
     const url = buildUrl(this.cfg.baseUrl ?? QLOO_HOST, path, params);
+    let gate: QlooGate | null = null;
+    let cacheKey = "";
+    if (this.mode === "live") {
+      gate = (await this.cfg.gate?.().catch(() => null)) ?? null;
+      if (!gate) throw new UpstreamError("spend_cap", QLOO_PROVIDER, "Live Qloo calls are not available right now. Using the saved taste data instead.");
+      cacheKey = await responseKey(path, params);
+      const saved = await gate.cache.get<unknown>(cacheKey).catch(() => null);
+      const parsed = saved === null ? null : schema.safeParse(saved);
+      if (parsed?.success) return { data: parsed.data, mode: "cache", path, params };
+      if (this.cfg.cacheOnly) throw new UpstreamError("spend_cap", QLOO_PROVIDER, "This page uses saved Qloo data and makes no new call.");
+      await gate.ledger.reserve(1); // throws the spend_cap UpstreamError when the total or today's slice is spent
+    }
     try {
       const res = await fetchJson<T>({
         provider: QLOO_PROVIDER,
@@ -100,12 +142,14 @@ export class QlooClient {
           return respond(path, params) as T;
         },
         timeoutMs: this.cfg.timeoutMs ?? 20_000,
-        retries: this.cfg.retries,
+        // A retry is another billed call at Qloo, and the ledger counted one: live calls are not retried.
+        retries: this.mode === "live" ? (this.cfg.retries ?? 0) : this.cfg.retries,
         recorder: this.cfg.recorder,
         fetchImpl: this.cfg.fetchImpl,
         sleep: this.cfg.sleep,
         random: this.cfg.random,
       });
+      if (gate && res.mode === "live") await gate.cache.put(cacheKey, res.data, QLOO_RESPONSE_TTL_SECONDS).catch(() => undefined);
       return { data: res.data, mode: res.mode, path, params };
     } catch (e) {
       if (e instanceof UpstreamError && e.code === "unauthorized" && e.status === 403) {
@@ -148,7 +192,7 @@ export function createQlooClient(overrides: Partial<QlooClientConfig> & { env?: 
   const { mode, status } = resolveQlooMode(env);
   const { env: _env, ...rest } = overrides;
   void _env;
-  return new QlooClient({ mode, status, apiKey: env.QLOO_API_KEY, ...rest });
+  return new QlooClient({ mode, status, apiKey: env.QLOO_API_KEY, gate: defaultGate, ...rest });
 }
 
 let shared: QlooClient | undefined;

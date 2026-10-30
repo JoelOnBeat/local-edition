@@ -64,7 +64,7 @@ interface CachedCompare {
   shared: SharedTag[];
   path: string;
   params: Record<string, string>;
-  mode: "live" | "replay" | "fixture";
+  mode: "live" | "replay" | "fixture" | "cache";
   entityIds: string[];
 }
 
