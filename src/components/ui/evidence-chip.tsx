@@ -2,7 +2,12 @@ import type { Evidence } from "@/contract";
 import { cx } from "./cx";
 import { ProviderTile, type Provider } from "./provider-badge";
 
-const sourceProvider = (s: Evidence["source"]): Provider => (s === "tokenfactory" ? "nemotron" : s);
+/**
+ * Which tile a piece of evidence shows. Token Factory evidence is only "Nemotron" when a chat model made it; embedding and
+ * rerank calls (Qwen) show as Token Factory, so the badge never credits Nemotron with work it did not do.
+ */
+const sourceProvider = (s: Evidence["source"], endpoint = ""): Provider =>
+  s === "tokenfactory" ? (/embed|rerank/i.test(endpoint) ? "tokenfactory" : "nemotron") : s;
 
 /** The single most telling number on a piece of evidence, as plain words. */
 export function headlineMetric(e: Evidence): string | null {
@@ -20,7 +25,7 @@ export function EvidenceChip({ evidence, onClick, className }: { evidence: Evide
   const metric = headlineMetric(evidence);
   const body = (
     <>
-      <ProviderTile provider={sourceProvider(evidence.source)} size={18} />
+      <ProviderTile provider={sourceProvider(evidence.source, evidence.endpoint)} size={18} />
       <span className="truncate font-mono text-[12px] text-ink-2">{evidence.endpoint}</span>
       {metric ? <span className="shrink-0 text-[13px] font-medium text-ink-strong tnum">{metric}</span> : null}
     </>
