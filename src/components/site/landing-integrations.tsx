@@ -1,112 +1,59 @@
-import Link from "next/link";
-import { SectionHead } from "./landing-loop";
+import { BRAND_MARKS, cx } from "@/components/ui";
+import { INTEGRATIONS, type Integration } from "./landing-data";
 
-/** "Connects to what you already use" and "Built on": what each tool does, in one line, and where it shows. */
-
-const CONNECTS = [
-  {
-    name: "Square",
-    mark: "Sq",
-    what: "Menu and locations in. The approved special out, as a new item on each store's menu. Menu changes sync back as they happen.",
-  },
-  {
-    name: "Slack",
-    mark: "Sl",
-    what: "Each staff card is posted to the store's channel. Head office gets Approve and Edit buttons right in the thread.",
-  },
-  {
-    name: "Gmail",
-    mark: "Gm",
-    what: "Staff cards are emailed from head office's own mailbox. When a store replies, the reply shows up on that store's edition.",
-  },
-  {
-    name: "Outlook",
-    mark: "Ol",
-    what: "The same delivery and replies for chains on Microsoft 365, from the head-office address stores already know.",
-  },
-  {
-    name: "Google and Outlook Calendar",
-    mark: "Ca",
-    what: "A calendar feed of every store's event nights. Subscribe once and next week's events appear on their own.",
-  },
-];
-
-const BUILT_ON = [
-  {
-    name: "Qloo Taste AI",
-    what: "What each store's block likes compared with the city: flavours, artists, places nearby. The reason behind every item.",
-  },
-  {
-    name: "NVIDIA Nemotron on Nebius Token Factory",
-    what: "Nemotron 3.5 Super VL runs the agent and reads menu photos, Lightning writes the copy and Nemotron 3 Ultra reviews the chain.",
-  },
-  {
-    name: "NeMo Guardrails",
-    what: "Checks every line for health claims and brand voice. Changes are shown to head office, never hidden.",
-  },
-  {
-    name: "Tavily",
-    what: "Finds what is on near each store that week, so an event night can tie in with the neighbourhood.",
-  },
-  {
-    name: "Cloudflare",
-    what: "Hosts the app, keeps each workspace's data, caches every Qloo answer and runs the weekly build step by step.",
-  },
-];
-
-export function LandingIntegrations() {
+/** A brand's mark: white by default, its own colour on hover (multi-colour brands cross-fade to their official file). */
+function Mark({ brand }: { brand: Integration["brand"] }) {
+  const m = BRAND_MARKS[brand];
+  const mono = m.paths.length > 0;
   return (
-    <>
-      <section id="connects" className="scroll-mt-16 border-b border-(--rule)">
-        <div className="mx-auto max-w-[1180px] px-4 py-14 sm:px-6">
-          <SectionHead
-            kicker="Connects to what you already use"
-            title="No spreadsheets to move. The edition goes where your stores already look."
-          />
-          <ul className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {CONNECTS.map((c) => (
-              <li key={c.name} className="flex gap-4 rounded-(--radius) border border-(--rule) bg-(--paper) p-4">
-                <span
-                  aria-hidden
-                  className="grid size-10 shrink-0 place-items-center rounded-[8px] bg-(--paper-2) font-(family-name:--font-mono) text-[13px] font-semibold text-(--ink-2) ring-1 ring-(--rule)"
-                >
-                  {c.mark}
-                </span>
-                <div className="grid gap-1">
-                  <h3 className="text-[16px] font-semibold">{c.name}</h3>
-                  <p className="text-[14.5px] leading-[1.5] text-(--ink-2)">{c.what}</p>
-                </div>
-              </li>
-            ))}
-            <li className="flex flex-col justify-center gap-2 rounded-(--radius) border border-dashed border-(--rule) p-4 text-[14.5px] text-(--muted)">
-              <p>Every move between Local Edition and these tools is logged, in or out, with the store it touched.</p>
-              <Link href="/app/connections" className="font-semibold text-(--ink) underline underline-offset-4">
-                See the sample chain&apos;s sync log
-              </Link>
-            </li>
-          </ul>
-        </div>
-      </section>
+    <span className="relative flex size-8 items-center justify-center" style={{ ["--brand" as string]: m.darkHex }}>
+      {mono ? (
+        <svg
+          viewBox={m.viewBox} fill="currentColor" aria-hidden
+          className={cx(
+            "size-8 text-white/60 transition-[color,opacity] duration-200 ease-quint group-hover/logo:text-[var(--brand)]",
+            m.colorSrc && "group-hover/logo:opacity-0",
+          )}
+        >
+          {m.paths.map((d, i) => <path key={i} d={d} fillRule={m.evenOdd ? "evenodd" : undefined} clipRule={m.evenOdd ? "evenodd" : undefined} />)}
+        </svg>
+      ) : null}
+      {m.colorSrc ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={m.colorSrc} alt="" aria-hidden draggable={false}
+          className={cx(
+            "size-8 transition-[opacity,filter] duration-200 ease-quint",
+            mono ? "absolute inset-0 opacity-0 group-hover/logo:opacity-100" : "opacity-55 grayscale brightness-[2.2] contrast-[.9] group-hover/logo:opacity-100 group-hover/logo:grayscale-0 group-hover/logo:brightness-100 group-hover/logo:contrast-100",
+          )}
+        />
+      ) : null}
+    </span>
+  );
+}
 
-      <section id="built-on" className="scroll-mt-16 border-b border-(--rule)">
-        <div className="mx-auto max-w-[1180px] px-4 py-14 sm:px-6">
-          <SectionHead kicker="Built on" title="Each part does real work you can trace." />
-          <dl className="mt-8 grid border-t border-(--ink)">
-            {BUILT_ON.map((b) => (
-              <div key={b.name} className="grid gap-1 border-b border-(--rule) py-4 md:grid-cols-[minmax(0,22rem)_1fr] md:gap-8">
-                <dt className="font-(family-name:--font-display) text-[19px] font-bold leading-snug">{b.name}</dt>
-                <dd className="text-[15.5px] leading-[1.55] text-(--ink-2)">{b.what}</dd>
-              </div>
-            ))}
-          </dl>
-          <p className="mt-5 text-[14.5px] text-(--muted)">
-            Which model did which step, the guardrail test results and the latest Nebius job runs are on{" "}
-            <Link href="/proof" className="font-semibold text-(--ink) underline underline-offset-4">the proof page</Link>. What it
-            cannot do yet is on{" "}
-            <Link href="/limits" className="font-semibold text-(--ink) underline underline-offset-4">the limits page</Link>.
-          </p>
-        </div>
-      </section>
-    </>
+/** The integrations logo wall: ten official marks in a hairline grid, each with its role and the job it does here. */
+export function LogoWall({ className }: { className?: string }) {
+  return (
+    <ul className={cx("grid grid-cols-2 overflow-hidden rounded-2xl bg-white/[.02] shadow-[inset_0_0_0_1px_rgb(255_255_255/.06)] sm:grid-cols-3 lg:grid-cols-5", className)}>
+      {INTEGRATIONS.map((it) => {
+        const m = BRAND_MARKS[it.brand];
+        return (
+          <li
+            key={it.brand}
+            className="group/logo relative -mb-px -mr-px flex min-h-[176px] flex-col border-b border-r border-white/[.06] p-5 transition-colors duration-200 hover:bg-white/[.03] sm:p-6"
+          >
+            <Mark brand={it.brand} />
+            <div className="pt-7">
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="text-[15px] font-medium leading-5 text-band-ink">{m.name}</span>
+                <span className="rounded-full bg-white/[.06] px-2 py-0.5 text-[12px] font-medium leading-4 text-band-ink-2">{it.role}</span>
+              </p>
+              <p className="mt-2 text-[13px] leading-[18px] text-band-ink-3 transition-colors duration-200 group-hover/logo:text-band-ink-2">{it.what}</p>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
   );
 }

@@ -1,9 +1,10 @@
-import { SampleChainLink } from "@/components/account/session-links";
 import type { Metadata } from "next";
+import { LandingBand } from "@/components/site/landing-band";
 import { LandingEdition } from "@/components/site/landing-edition";
-import { HackathonNote, LandingHero } from "@/components/site/landing-hero";
-import { LandingIntegrations } from "@/components/site/landing-integrations";
-import { LandingLoop } from "@/components/site/landing-loop";
+import { LandingEvidence } from "@/components/site/landing-evidence";
+import { LandingFaq } from "@/components/site/landing-faq";
+import { BuiltOnStrip, LandingHero } from "@/components/site/landing-hero";
+import { LandingPortfolio } from "@/components/site/landing-portfolio";
 import { SiteShell } from "@/components/site/site-chrome";
 
 export const metadata: Metadata = {
@@ -16,29 +17,14 @@ export default function Home() {
   return (
     <SiteShell>
       <LandingHero />
-      <LandingLoop />
+      <BuiltOnStrip />
+      <LandingPortfolio />
+      <LandingEvidence />
+      <div className="h-12" aria-hidden />
+      <LandingBand />
+      <div className="h-12" aria-hidden />
       <LandingEdition />
-      <LandingIntegrations />
-      <section>
-        <div className="mx-auto grid max-w-[1180px] gap-6 px-4 py-16 sm:px-6 md:grid-cols-[1.3fr_1fr] md:items-center">
-          <div className="grid gap-3">
-            <h2 className="font-(family-name:--font-display) text-[clamp(30px,4vw,46px)] font-extrabold leading-[1.02] tracking-[-0.02em] text-balance">
-              Open the sample chain and approve an edition.
-            </h2>
-            <p className="max-w-[56ch] text-[16px] leading-[1.55] text-(--ink-2)">
-              Eight Kettle &amp; Kiln stores, this week&apos;s editions, the evidence drawer and the staff cards. Each visitor gets a
-              private copy, so nothing you approve changes what anyone else sees.
-            </p>
-          </div>
-          <div className="grid gap-4">
-            <SampleChainLink
-              className="justify-self-start rounded-(--radius) bg-(--accent) px-5 py-3 text-[16px] font-semibold text-(--accent-ink) hover:opacity-90"
-              signedOutLabel="Try the sample chain"
-            />
-            <HackathonNote />
-          </div>
-        </div>
-      </section>
+      <LandingFaq />
     </SiteShell>
   );
 }

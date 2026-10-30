@@ -1,5 +1,5 @@
 export { Button, ButtonLink, Chevron, IconButton, Spinner, buttonClass } from "./button";
-export { BRAND_MARKS, BrandGlyph, type Brand, type BrandMark } from "./brand-glyphs";
+export { BRAND_MARKS, BrandGlyph, QLOO_WORDMARK, type Brand, type BrandMark } from "./brand-glyphs";
 export { Card, CardBand, Frame, Kicker, NoteBox } from "./card";
 export { Chip, GuardrailChip, Pill, SampleBadge, StatusChip, TagChip, statusTone } from "./chip";
 export { cx } from "./cx";

@@ -1,13 +1,15 @@
 import { cx } from "./cx";
 
+/* bg-ok bg-warn bg-flag bg-rule */
 /** Threshold colour for a 0–100 value: ≥70 ok, 40–69 warn, <40 flag. */
 export const levelClass = (v: number): string => (v >= 70 ? "bg-ok" : v >= 40 ? "bg-warn" : "bg-flag");
 
 /** A 4×14 status bar followed by its value (ByDefault's visibility bar). */
-export function StatusBar({ value, label, className }: { value: number; label?: string; className?: string }) {
+export function StatusBar({ value, label, tone, className }: { value: number; label?: string; tone?: "ok" | "warn" | "flag" | "none"; className?: string }) {
+  const bar = tone === "none" ? "bg-rule" : tone ? `bg-${tone}` : levelClass(value);
   return (
     <span className={cx("inline-flex items-center gap-1.5 text-[14px] font-medium leading-5 text-ink-strong tnum", className)}>
-      <span className={cx("h-3.5 w-1 shrink-0 rounded-full", levelClass(value))} aria-hidden />
+      <span className={cx("h-3.5 w-1 shrink-0 rounded-full", bar)} aria-hidden />
       {label ?? `${Math.round(value)}%`}
     </span>
   );

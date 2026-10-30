@@ -117,3 +117,13 @@
   .le-slide { animation: le-fade 120ms linear both; }
   .le-skeleton, .le-live-dot { animation: none; }
 }
+
+/* Write-on reveal driven by <Reveal>: items stay clipped until the root is seen. JS off or reduced motion: shown. */
+.le-reveal-root .le-reveal { clip-path: inset(0 0 100% 0); }
+.le-reveal-root[data-seen] .le-reveal { animation: le-write-on 700ms var(--ease-out-quint) both; animation-delay: calc(var(--i, 0) * 60ms); }
+@media (prefers-reduced-motion: reduce) {
+  .le-reveal-root .le-reveal { clip-path: none; animation: none; }
+}
+@media (scripting: none) {
+  .le-reveal-root .le-reveal { clip-path: none; }
+}

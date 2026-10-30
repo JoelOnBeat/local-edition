@@ -59,8 +59,10 @@ export function Kicker({ className, ...rest }: ComponentProps<"p">) {
  */
 export function Frame({ className, innerClassName, children, ...rest }: ComponentProps<"section"> & { innerClassName?: string }) {
   return (
-    <section className={cx("relative border-y border-rule p-2 sm:p-3", className)} {...rest}>
-      <div className={cx("ring-after relative mx-auto max-w-[1190px] rounded-xl bg-white", innerClassName)}>{children}</div>
+    <section className={cx("relative border-y border-rule", className)} {...rest}>
+      <div className="mx-auto max-w-[1190px] p-2 sm:p-3">
+        <div className={cx("ring-after relative rounded-xl bg-white", innerClassName)}>{children}</div>
+      </div>
     </section>
   );
 }

@@ -1,133 +1,118 @@
-import type { Edition, EditionItem, Evidence } from "@/contract";
-import { mockEditions, tagsFor } from "@/mocks";
-import { SAMPLE_MENU, SAMPLE_STORES } from "@/server/sample/chain";
-import { SectionHead } from "./landing-loop";
+import type { ReactNode } from "react";
+import { BrandGlyph, Chip, SampleBadge, StoreTile, TagChip, type Brand } from "@/components/ui";
+import { GUARDRAIL_DIFF, WEEK_LABEL, WILLIAMSBURG } from "./landing-data";
+import { LandingCards } from "./landing-cards";
+import { Reveal } from "./reveal";
+import { Container, Icon, SectionHeader } from "./section";
 
-/** A real edition from the sample chain, set as the small front page head office sees. */
-
-const STORE_ID = "store_williamsburg";
-
-const SOURCE_LABEL: Record<Evidence["source"], string> = { qloo: "Qloo", tavily: "Tavily", tokenfactory: "Nemotron" };
-
-function evidenceLine(edition: Edition, item: EditionItem): string {
-  const ev = edition.evidence.find((e) => item.evidenceIds.includes(e.id) && e.source !== "tokenfactory") ?? edition.evidence[0];
-  const m = ev.metrics;
-  const metric =
-    m.lift !== undefined ? `lift +${m.lift.toFixed(2)}` :
-    m.distanceM !== undefined ? `${m.distanceM} m away` :
-    m.affinity !== undefined ? `affinity ${m.affinity.toFixed(2)}` :
-    m.relevance !== undefined ? `relevance ${m.relevance.toFixed(2)}` : "";
-  return `${SOURCE_LABEL[ev.source]} ${ev.endpoint}${metric ? ` · ${metric}` : ""}`;
-}
-
-function Kicker({ children }: { children: React.ReactNode }) {
-  return <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-(--store-1)">{children}</span>;
-}
-
-function Proof({ text }: { text: string }) {
+function Badge({ n }: { n: number }) {
   return (
-    <p className="mt-auto border-t border-dotted border-(--rule) pt-2 font-(family-name:--font-mono) text-[11.5px] text-(--muted)">
-      {text}
-    </p>
+    <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-ink-2 ring-1 ring-rule tnum" aria-hidden>
+      {n}
+    </span>
   );
 }
 
-export function LandingEdition() {
-  const edition = mockEditions.find((e) => e.storeId === STORE_ID);
-  const store = SAMPLE_STORES.find((s) => s.id === STORE_ID);
-  if (!edition || !store) return null;
-  const pick = <K extends EditionItem["kind"]>(k: K) => edition.items.find((i): i is Extract<EditionItem, { kind: K }> => i.kind === k);
-  const special = pick("special");
-  const sound = pick("sound");
-  const partner = pick("partner");
-  const event = pick("event");
-  if (!special || !sound || !partner || !event) return null;
-  const base = SAMPLE_MENU.find((m) => m.id === special.baseMenuItemId);
-  const tags = tagsFor(STORE_ID).slice(0, 5);
-
+function Item({ n, label, title, children, i }: { n: number; label: string; title: string; children: ReactNode; i: number }) {
   return (
-    <section className="border-b border-(--rule) bg-(--paper-2)">
-      <div className="mx-auto max-w-[1180px] px-4 py-14 sm:px-6">
-        <SectionHead
-          kicker="A real edition from the sample chain"
-          title="Williamsburg, issue 43."
-          lede="This is what head office reads for one store. Every line carries the call that justified it, and a line with no evidence is dropped before anyone sees it."
-        />
-
-        <article className="mt-8 overflow-hidden rounded-(--radius) border border-(--rule) bg-(--paper) shadow-(--shadow)">
-          <header className="border-b-4 border-(--store-1) px-5 pb-3 pt-5 sm:px-7">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="font-(family-name:--font-mono) text-[11.5px] uppercase tracking-[0.08em] text-(--muted)">
-                Kettle &amp; Kiln (sample chain)
-              </span>
-              <span className="rounded-full border border-(--rule) px-2 py-0.5 text-[11.5px] font-semibold text-(--muted)">Sample data</span>
-            </div>
-            <h3 className="mt-1 font-(family-name:--font-display) text-[clamp(34px,5vw,54px)] font-extrabold leading-none tracking-[-0.03em]">
-              The Williamsburg Edition
-            </h3>
-            <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 border-t border-(--ink) pt-2 font-(family-name:--font-mono) text-[12px] text-(--ink-2)">
-              <span>No. {edition.issueNo}</span>
-              <span>Week of Mon 26 Oct 2026</span>
-              <span>{store.addressLabel}</span>
-            </p>
-          </header>
-
-          <div className="grid gap-px bg-(--rule) lg:grid-cols-[1.35fr_1fr]">
-            <div className="flex flex-col gap-3 bg-(--paper) p-5 sm:p-7">
-              <Kicker>This week&apos;s special · from the {base?.name ?? "menu"}</Kicker>
-              <h4 className="font-(family-name:--font-display) text-[clamp(28px,3.4vw,38px)] font-extrabold leading-[1.02] tracking-[-0.02em]">
-                {special.name}
-              </h4>
-              <p className="text-[17px] leading-[1.55] text-(--ink-2)">{special.description}</p>
-              <ul className="flex flex-wrap gap-1.5">
-                {special.flavourTags.map((t) => (
-                  <li key={t} className="rounded-full border border-(--rule) px-2 py-0.5 text-[12.5px]">{t}</li>
-                ))}
-              </ul>
-              <blockquote className="border-l-2 border-(--store-1) pl-3 text-[15px] italic text-(--ink-2)">
-                Staff line: {special.staffLine}
-              </blockquote>
-              <div className="mt-2 grid gap-1.5">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-(--muted)">The block, against New York</span>
-                <ul className="grid gap-1">
-                  {tags.map((t) => (
-                    <li key={t.tagId} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 text-[13.5px]">
-                      <span className="flex items-center gap-2">
-                        <span className="h-1.5 rounded-full bg-(--store-1)" style={{ width: `${Math.round(t.lift * 160)}px` }} aria-hidden />
-                        <span className="truncate">{t.name}</span>
-                      </span>
-                      <span className="font-(family-name:--font-mono) text-[12px] text-(--muted)">+{t.lift.toFixed(2)}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <Proof text={evidenceLine(edition, special)} />
-            </div>
-
-            <div className="grid gap-px bg-(--rule)">
-              <div className="flex flex-col gap-2 bg-(--paper) p-5">
-                <Kicker>On the speakers</Kicker>
-                <p className="font-(family-name:--font-display) text-[19px] font-bold leading-snug">{sound.mood}</p>
-                <p className="text-[14.5px] leading-[1.5] text-(--ink-2)">{sound.brief}</p>
-                <p className="text-[13.5px] text-(--muted)">{sound.artists.slice(0, 5).map((a) => a.name).join(" · ")}</p>
-                <Proof text={evidenceLine(edition, sound)} />
-              </div>
-              <div className="flex flex-col gap-2 bg-(--paper) p-5">
-                <Kicker>Next door · {partner.place.distanceM} m</Kicker>
-                <p className="font-(family-name:--font-display) text-[19px] font-bold leading-snug">{partner.place.name}</p>
-                <p className="text-[14.5px] leading-[1.5] text-(--ink-2)">{partner.offerIdea}</p>
-                <Proof text={evidenceLine(edition, partner)} />
-              </div>
-              <div className="flex flex-col gap-2 bg-(--paper) p-5">
-                <Kicker>{event.day} {event.time}</Kicker>
-                <p className="font-(family-name:--font-display) text-[19px] font-bold leading-snug">{event.title}</p>
-                <p className="text-[14.5px] leading-[1.5] text-(--ink-2)">{event.description}</p>
-                <Proof text={evidenceLine(edition, event)} />
-              </div>
-            </div>
-          </div>
-        </article>
+    <div className="le-reveal relative border-t border-rule-subtle py-6 first:border-t-0 first:pt-2" style={{ ["--i" as string]: i }}>
+      <div className="flex items-center gap-2.5">
+        <Badge n={n} />
+        <span className="text-[14px] font-medium text-ink-2">{label}</span>
       </div>
+      <p className="mt-3 text-[19px] font-medium leading-7 tracking-[-0.02em] text-ink">{title}</p>
+      <div className="mt-1.5 text-[15px] leading-[26px] text-ink-2">{children}</div>
+    </div>
+  );
+}
+
+function Note({ n, title, body, chips, extra }: { n: number; title: string; body: string; chips: ReactNode; extra?: ReactNode }) {
+  return (
+    <div className="relative pl-9">
+      <span className="absolute left-0 top-0.5"><Badge n={n} /></span>
+      <p className="text-[16px] font-medium leading-6 text-ink">{title}</p>
+      <p className="mt-1 text-[14px] leading-[22px] text-ink-2">{body}</p>
+      {extra}
+      <div className="mt-3 flex flex-wrap gap-1.5">{chips}</div>
+    </div>
+  );
+}
+
+const glyph = (b: Brand) => <BrandGlyph brand={b} className="size-3.5" />;
+
+/** The edition feature frame: a white document of one store's week beside an annotation rail. */
+export function LandingEdition() {
+  const top = WILLIAMSBURG.tags[0]!;
+  return (
+    <section id="edition" className="relative scroll-mt-16 border-y border-rule" aria-labelledby="edition-title">
+      <div className="mx-auto max-w-[1190px] p-2 sm:p-3"><div className="ring-after relative rounded-xl bg-white">
+        <Container className="px-4 pb-14 pt-16 sm:px-6 md:pb-20 md:pt-24 lg:px-10">
+          <SectionHeader
+            id="edition-title" pill="The edition" pillIcon={Icon.doc} pillBadge={<SampleBadge>Sample</SampleBadge>}
+            title="One front page per store, with the proof attached."
+            lede="Four items, each from the store's own menu and its own block. Nothing reaches a store until head office approves it."
+          />
+          <Reveal className="mt-14 rounded-xl bg-paper-2 p-3 shadow-[inset_0_0_0_1px_var(--rule)] sm:p-6 lg:p-10">
+            <div className="grid gap-x-10 gap-y-10 lg:grid-cols-[minmax(0,640px)_minmax(0,334px)] lg:justify-center">
+              <article className="overflow-hidden rounded-xl bg-white shadow-ring-xs">
+                <header className="flex h-[52px] items-center justify-between gap-3 border-b border-rule-subtle px-5">
+                  <span className="flex min-w-0 items-center gap-2 text-[14px] text-ink-2">
+                    <StoreTile colorIndex={WILLIAMSBURG.colorIndex} name={WILLIAMSBURG.name} size="sm" />
+                    <span className="font-medium text-ink">Williamsburg</span>
+                    <span className="text-faint">›</span>
+                    <span className="truncate">Week of {WEEK_LABEL}</span>
+                  </span>
+                  <Chip>Draft</Chip>
+                </header>
+                <div className="px-5 pb-4 pt-5 sm:px-8">
+                  <Item i={0} n={1} label="The special" title="Orange Peel Cortado">
+                    Our cortado with a twist of fresh orange peel and a pinch of dark chocolate. Bright up front, round at the finish.
+                    <span className="mt-3 flex flex-wrap items-center gap-1.5 text-[13px] text-muted">
+                      Evidence
+                      <span className="inline-flex h-6 items-center gap-1.5 rounded-md bg-mark px-2 font-medium text-ink">{glyph("qloo")}{top.name} +{top.lift.toFixed(2)}</span>
+                      <span className="inline-flex h-6 items-center rounded-md border border-rule px-2 text-ink-2">{WILLIAMSBURG.tags[1]?.name} +{WILLIAMSBURG.tags[1]?.lift.toFixed(2)}</span>
+                    </span>
+                  </Item>
+                  <Item i={1} n={2} label="On the speakers" title="Jangly, unhurried, a little scuffed">
+                    Big Thief, Yo La Tengo, Parquet Courts. Keep it low until noon, then let it climb.
+                  </Item>
+                  <Item i={2} n={3} label="Partner nearby" title="Tern & Tallow Vintage">
+                    A dollar off any cortado with a Tern &amp; Tallow receipt; they pin our card by their register.
+                  </Item>
+                  <Item i={3} n={4} label="Event night" title="Vinyl and Cortado Night · Thu 19:00">
+                    Neighbours bring one record to play. We keep the volume where people can still talk.
+                  </Item>
+                </div>
+              </article>
+              <aside className="relative grid content-start gap-10 lg:pt-16">
+                <span aria-hidden className="absolute bottom-2 left-[9.5px] top-2 hidden w-px bg-rule lg:block lg:top-[72px]" />
+                <Note
+                  n={1} title="Picked from the block's taste"
+                  body={`Qloo puts ${top.name} at ${top.affinity.toFixed(2)} affinity here, ${top.lift.toFixed(2)} above the city. The special and the music follow it.`}
+                  chips={<><TagChip icon={glyph("qloo")}>/v2/insights</TagChip><TagChip>lift +{top.lift.toFixed(2)}</TagChip></>}
+                />
+                <Note
+                  n={2} title="Checked before anyone sees it"
+                  body={`In ${GUARDRAIL_DIFF.store} the first draft claimed the drink gives you energy. The health-claim rail caught it and the line was rewritten.`}
+                  extra={
+                    <div className="mt-3 grid gap-1 text-[13px] leading-5">
+                      <p className="rounded-r-md border-l-2 border-diff-del-rule bg-diff-del-bg px-3 py-2 text-diff-del-ink line-through decoration-diff-del-ink/40">{GUARDRAIL_DIFF.before}</p>
+                      <p className="rounded-r-md border-l-2 border-diff-add-rule bg-diff-add-bg px-3 py-2 text-diff-add-ink">{GUARDRAIL_DIFF.after}</p>
+                    </div>
+                  }
+                  chips={<><TagChip icon={glyph("nvidia")}>NeMo Guardrails</TagChip><Chip tone="flag">Health claim removed</Chip></>}
+                />
+                <Note
+                  n={3} title="Sent where staff already look"
+                  body="Approved editions go to the store's Slack channel and inbox, and the staff card opens on any phone."
+                  chips={<><TagChip icon={glyph("slack")}>Slack</TagChip><TagChip icon={glyph("gmail")}>Email</TagChip><TagChip icon={glyph("gcal")}>Calendar</TagChip></>}
+                />
+              </aside>
+            </div>
+          </Reveal>
+          <LandingCards />
+        </Container>
+      </div></div>
     </section>
   );
 }

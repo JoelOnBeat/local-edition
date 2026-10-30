@@ -36,7 +36,7 @@ export function ProviderTile({ provider, size = 24, className }: { provider: Pro
   return (
     <span
       className={cx("inline-flex shrink-0 items-center justify-center bg-white text-ink shadow-ring-xs", className)}
-      style={{ width: size, height: size, borderRadius: size >= 24 ? 6 : 5, color: mark && !mark.color ? mark.hex : undefined }}
+      style={{ width: size, height: size, borderRadius: size >= 24 ? 6 : 5, color: mark && !mark.colorSrc ? mark.hex : undefined }}
       title={m.name}
       aria-hidden
     >
